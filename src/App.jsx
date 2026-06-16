@@ -227,6 +227,10 @@ function App() {
 
       // Initialize peer with our room code
       const peer = new Peer(code, {
+        host: '0.peerjs.com',
+        port: 443,
+        path: '/',
+        secure: true,
         debug: 1
       });
 
@@ -378,6 +382,10 @@ function App() {
     setTargetPeerId(code);
 
     const peer = new Peer({
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
       debug: 1
     });
 
