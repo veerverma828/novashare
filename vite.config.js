@@ -17,12 +17,15 @@ function getLocalIP() {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    host: true, // Listen on all network interfaces to expose to local network
-  },
-  define: {
-    'import.meta.env.VITE_LOCAL_IP': JSON.stringify(getLocalIP()),
+export default defineConfig(({ command }) => {
+  return {
+    plugins: [react()],
+    base: command === 'build' ? '/novashare/' : '/',
+    server: {
+      host: true, // Listen on all network interfaces to expose to local network
+    },
+    define: {
+      'import.meta.env.VITE_LOCAL_IP': JSON.stringify(getLocalIP()),
+    }
   }
 })
