@@ -1,20 +1,13 @@
 .app-container {
   max-width: 1200px;
   width: 100%;
-  height: 100dvh;
-  max-height: 100dvh;
+  min-height: 100dvh;
   margin: 0 auto;
   padding: 1.25rem 1.25rem 2rem 1.25rem; /* Clean layout boundary with bottom breathing room */
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 0.75rem;
-  overflow-y: auto;
-  scrollbar-width: none; /* Hide scrollbar for clean app layout */
-}
-
-.app-container::-webkit-scrollbar {
-  display: none; /* Hide scrollbar for Chrome/Safari/Brave */
 }
 
 /* Header Styles */
