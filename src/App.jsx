@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Peer from 'peerjs';
 import { QRCodeSVG } from 'qrcode.react';
 import jsQR from 'jsqr';
@@ -28,6 +29,8 @@ import {
   Pause,
   Play
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 import './App.css';
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for P2P WebRTC
@@ -66,6 +69,7 @@ function App() {
   // QR Scanner State
   const [showScanner, setShowScanner] = useState(false);
   const [scannerError, setScannerError] = useState('');
+  const [showQrZoom, setShowQrZoom] = useState(false);
 
   // Refs for background processes
   const peerRef = useRef(null);
@@ -541,13 +545,7 @@ function App() {
             receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, url, size: fileSize }];
             setCompletedFiles(receivedFilesRef.current);
 
-            // Trigger direct download
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            saveReceivedFile(blob, fileName, url);
           }
         } else if (data.type === 'batch-complete') {
           setTransferState('complete');
@@ -581,6 +579,43 @@ function App() {
       setTransferState('error');
       setErrorMsg('सिग्नलिंग सर्वर से कनेक्ट करने में विफल (Signaling server connection failed). Check code or try again.');
     });
+  };
+
+  // Save a received file to actual device storage.
+  // In a real browser, <a download> already writes to the Downloads folder.
+  // Inside the Capacitor WebView that click is a no-op, so write bytes via Filesystem instead.
+  const saveReceivedFile = async (blob, fileName, blobUrl) => {
+    if (!Capacitor.isNativePlatform()) {
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    try {
+      await Filesystem.requestPermissions();
+
+      const base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      await Filesystem.writeFile({
+        path: `Download/${fileName}`,
+        data: base64Data,
+        directory: Directory.ExternalStorage,
+        recursive: true
+      });
+
+      showToast(`${fileName} saved to Downloads`, 'success');
+    } catch (err) {
+      showToast(`Could not save ${fileName} to Downloads: ${err.message}`, 'error');
+    }
   };
 
   const copyToClipboard = (text, message = 'Copied to clipboard!') => {
@@ -850,6 +885,7 @@ function App() {
                   </div>
                 </div>
               )}
+
             </div>
           )}
 
@@ -907,7 +943,7 @@ function App() {
                     </div>
 
                     <div className="signal-qr-row">
-                      <div className="signal-qr">
+                      <div className="signal-qr" onClick={() => setShowQrZoom(true)} role="button" tabIndex={0} title="Tap to enlarge">
                         <QRCodeSVG
                           value={getSharingUrl()}
                           size={72}
@@ -919,7 +955,7 @@ function App() {
                       </div>
                       <div className="signal-qr-note">
                         <b>Scan to connect</b>
-                        Keep this tab open &mdash; the file streams directly, peer to peer.
+                        Keep this tab open &mdash; the file streams directly, peer to peer. Tap the QR code to enlarge.
                       </div>
                     </div>
                   </div>
@@ -1142,6 +1178,38 @@ function App() {
 
         </div>
       </main>
+
+      {/* QR ZOOM MODAL */}
+      {showQrZoom && createPortal(
+        <div className="qr-zoom-overlay" onClick={() => setShowQrZoom(false)}>
+          <div className="qr-zoom-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="qr-zoom-header">
+              <span>Scan to Connect</span>
+              <button className="qr-zoom-close" onClick={() => setShowQrZoom(false)} title="Close">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="qr-zoom-code">
+              <QRCodeSVG
+                value={getSharingUrl()}
+                size={240}
+                bgColor={"#ffffff"}
+                fgColor={"#0b0e1c"}
+                level={"H"}
+                includeMargin={false}
+              />
+            </div>
+            <div className="qr-zoom-roomcode">
+              {roomCode.split('').map((ch, i) => <span key={i}>{ch}</span>)}
+            </div>
+            <button className="qr-zoom-link" onClick={() => copyToClipboard(getSharingUrl(), 'Share link copied!')} title="Copy link">
+              <span>{getSharingUrl()}</span>
+              <Copy size={14} />
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
