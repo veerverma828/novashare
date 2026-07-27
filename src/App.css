@@ -3,7 +3,9 @@
   width: 100%;
   min-height: 100dvh;
   margin: 0 auto;
-  padding: 1.25rem; /* Symmetric top/bottom so content centers evenly */
+  padding: 1.25rem;
+  padding-top: max(1.25rem, env(safe-area-inset-top));
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   justify-content: space-between;
