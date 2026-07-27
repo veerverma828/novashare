@@ -897,6 +897,14 @@ button:disabled {
   object-fit: cover;
 }
 
+.qr-scanner-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .qr-scanner-frame {
   position: absolute;
   inset: 12%;
@@ -1126,6 +1134,19 @@ button:disabled {
 }
 
 /* Shimmer skeleton — receiver "resolving room code" state */
+.connecting-spinner-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 0 1.5rem;
+}
+
+.connecting-spinner {
+  color: var(--accent-purple);
+  filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.5));
+  animation: spin 1.1s linear infinite;
+}
+
 .skel-file-card {
   display: flex;
   align-items: center;
@@ -1149,6 +1170,11 @@ button:disabled {
   inset: 0;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.09), transparent);
   animation: shimmerSweep 1.4s ease-in-out infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 @keyframes shimmerSweep {

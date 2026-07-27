@@ -222,6 +222,7 @@ function App() {
   // QR Scanner State
   const [showScanner, setShowScanner] = useState(false);
   const [scannerError, setScannerError] = useState('');
+  const [cameraReady, setCameraReady] = useState(false);
   const [showQrZoom, setShowQrZoom] = useState(false);
 
   // Refs for background processes
@@ -298,6 +299,13 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  // Auto-close the zoomed QR modal once a peer successfully connects
+  useEffect(() => {
+    if (showQrZoom && (transferState === 'transferring' || transferState === 'complete')) {
+      setShowQrZoom(false);
+    }
+  }, [transferState, showQrZoom]);
 
   // Read URL Search Parameters on Load (Routing Fallback)
   useEffect(() => {
@@ -476,15 +484,21 @@ function App() {
         });
 
         conn.on('close', () => {
-          showToast('Receiver closed the connection.', 'error');
-          setTransferState('error');
-          setErrorMsg('The receiver disconnected before the transfer finished.');
+          setTransferState((prev) => {
+            if (prev === 'complete') return 'complete';
+            showToast('Receiver closed the connection.', 'error');
+            setErrorMsg('The receiver disconnected before the transfer finished.');
+            return 'error';
+          });
         });
 
         conn.on('error', (err) => {
-          showToast('Transfer error: ' + err.message, 'error');
-          setTransferState('error');
-          setErrorMsg(err.message);
+          setTransferState((prev) => {
+            if (prev === 'complete') return 'complete';
+            showToast('Transfer error: ' + err.message, 'error');
+            setErrorMsg(err.message);
+            return 'error';
+          });
         });
       });
 
@@ -493,9 +507,12 @@ function App() {
           peer.destroy();
           attemptConnection(retryCount + 1);
         } else {
-          showToast('P2P Error: ' + err.message, 'error');
-          setTransferState('error');
-          setErrorMsg(err.message || 'Error connecting to peer network.');
+          setTransferState((prev) => {
+            if (prev === 'complete') return 'complete';
+            showToast('P2P Error: ' + err.message, 'error');
+            setErrorMsg(err.message || 'Error connecting to peer network.');
+            return 'error';
+          });
         }
       });
     };
@@ -728,9 +745,12 @@ function App() {
     });
 
     peer.on('error', (err) => {
-      showToast('Could not reach signaling server.', 'error');
-      setTransferState('error');
-      setErrorMsg('सिग्नलिंग सर्वर से कनेक्ट करने में विफल (Signaling server connection failed). Check code or try again.');
+      setTransferState((prev) => {
+        if (prev === 'complete') return 'complete';
+        showToast('Could not reach signaling server.', 'error');
+        setErrorMsg('Signaling server connection failed. Check the code or try again.');
+        return 'error';
+      });
     });
   };
 
@@ -811,11 +831,13 @@ function App() {
       scanStreamRef.current = null;
     }
     setShowScanner(false);
+    setCameraReady(false);
   };
 
   // Open camera and start scanning frames for a QR code
   const openScanner = async () => {
     setScannerError('');
+    setCameraReady(false);
     setShowScanner(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -825,6 +847,7 @@ function App() {
       if (scanVideoRef.current) {
         scanVideoRef.current.srcObject = stream;
         await scanVideoRef.current.play();
+        setCameraReady(true);
       }
 
       const canvas = scanCanvasRef.current;
@@ -1036,8 +1059,19 @@ function App() {
                       </div>
                     ) : (
                       <div className="qr-scanner-video-wrapper">
-                        <video ref={scanVideoRef} className="qr-scanner-video" playsInline muted />
-                        <div className="qr-scanner-frame" />
+                        {!cameraReady && (
+                          <div className="qr-scanner-loading">
+                            <RefreshCw size={32} className="connecting-spinner" />
+                          </div>
+                        )}
+                        <video
+                          ref={scanVideoRef}
+                          className="qr-scanner-video"
+                          style={{ visibility: cameraReady ? 'visible' : 'hidden' }}
+                          playsInline
+                          muted
+                        />
+                        {cameraReady && <div className="qr-scanner-frame" />}
                       </div>
                     )}
                     <canvas ref={scanCanvasRef} style={{ display: 'none' }} />
@@ -1216,12 +1250,8 @@ function App() {
                   <p className="hero-subtitle" style={{ margin: '0 0 1rem', fontWeight: 500, textAlign: 'center' }}>
                     Connecting to sender room <strong style={{ color: 'var(--accent-cyan)' }}>{targetPeerId}</strong>&hellip;
                   </p>
-                  <div className="skel-file-card">
-                    <div className="skel skel-icon" />
-                    <div className="skel-file-lines">
-                      <div className="skel skel-line" style={{ width: '70%' }} />
-                      <div className="skel skel-line" style={{ width: '40%' }} />
-                    </div>
+                  <div className="connecting-spinner-wrap">
+                    <RefreshCw size={40} className="connecting-spinner" />
                   </div>
                   <p className="dropzone-subtitle" style={{ maxWidth: '280px', textAlign: 'center', margin: '0.75rem auto 0' }}>
                     Establishing WebRTC data tunnel. Ensure the sender has the page active.

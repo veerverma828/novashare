@@ -16,6 +16,7 @@ export function initNative() {
 
   StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
   StatusBar.setBackgroundColor({ color: '#080c14' }).catch(() => {});
+  StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
 
   CapApp.addListener('backButton', ({ canGoBack }) => {
     if (canGoBack) {
