@@ -1110,11 +1110,7 @@ function App() {
                 <>
                   <div className="hs-visual" role="img" aria-label="Waiting for a peer to connect">
                     <div className="hs-node hs-node-you"><Zap size={18} /></div>
-                    <div className="hs-track">
-                      <span className="hs-packet hs-packet-1" />
-                      <span className="hs-packet hs-packet-2" />
-                      <span className="hs-packet hs-packet-3 hs-packet-rev" />
-                    </div>
+                    <div className="hs-track" />
                     <div className="hs-node hs-node-peer"><Laptop size={18} /></div>
                   </div>
                   <p className="hs-caption">Waiting for a peer to scan or enter your code&hellip;</p>
