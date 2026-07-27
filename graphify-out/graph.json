@@ -95,7 +95,7 @@
       "label": "MainActivity",
       "file_type": "code",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.java",
-      "source_location": "L5",
+      "source_location": "L6",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
       "community": 8,
@@ -112,6 +112,116 @@
       "community": 8,
       "community_name": "MainActivity.java",
       "norm_label": "bridgeactivity"
+    },
+    {
+      "label": ".onCreate()",
+      "file_type": "code",
+      "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.java",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_oncreate",
+      "community": 8,
+      "community_name": "MainActivity.java",
+      "norm_label": ".oncreate()"
+    },
+    {
+      "label": "Bundle",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "bundle",
+      "community": 8,
+      "community_name": "MainActivity.java",
+      "norm_label": "bundle"
+    },
+    {
+      "label": "Override",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "override",
+      "community": 8,
+      "community_name": "MainActivity.java",
+      "norm_label": "override"
+    },
+    {
+      "label": "NotifyDownloadPlugin.java",
+      "file_type": "code",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin",
+      "community": 9,
+      "community_name": "NotifyDownloadPlugin.java",
+      "norm_label": "notifydownloadplugin.java"
+    },
+    {
+      "label": "NotifyDownloadPlugin",
+      "file_type": "code",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L28",
+      "_origin": "ast",
+      "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin",
+      "community": 9,
+      "community_name": "NotifyDownloadPlugin.java",
+      "norm_label": "notifydownloadplugin"
+    },
+    {
+      "label": "Plugin",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "plugin",
+      "community": 9,
+      "community_name": "NotifyDownloadPlugin.java",
+      "norm_label": "plugin"
+    },
+    {
+      "label": "CapacitorPlugin",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "capacitorplugin",
+      "community": 9,
+      "community_name": "NotifyDownloadPlugin.java",
+      "norm_label": "capacitorplugin"
+    },
+    {
+      "label": ".saveToDownloads()",
+      "file_type": "code",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L31",
+      "_origin": "ast",
+      "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_savetodownloads",
+      "community": 9,
+      "community_name": "NotifyDownloadPlugin.java",
+      "norm_label": ".savetodownloads()"
+    },
+    {
+      "label": "PluginCall",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "plugincall",
+      "community": 9,
+      "community_name": "NotifyDownloadPlugin.java",
+      "norm_label": "plugincall"
+    },
+    {
+      "label": "PluginMethod",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "pluginmethod",
+      "community": 9,
+      "community_name": "NotifyDownloadPlugin.java",
+      "norm_label": "pluginmethod"
     },
     {
       "label": "ExampleUnitTest.java",
@@ -411,8 +521,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "package_dependencies_capacitor_android",
-      "community": 9,
-      "community_name": "@capacitor/android",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/android"
     },
     {
@@ -422,8 +532,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "capacitor_android",
-      "community": 9,
-      "community_name": "@capacitor/android",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/android"
     },
     {
@@ -433,8 +543,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "package_dependencies_capacitor_app",
-      "community": 10,
-      "community_name": "@capacitor/app",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/app"
     },
     {
@@ -444,8 +554,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "capacitor_app",
-      "community": 10,
-      "community_name": "@capacitor/app",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/app"
     },
     {
@@ -455,8 +565,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "package_dependencies_capacitor_cli",
-      "community": 11,
-      "community_name": "@capacitor/cli",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/cli"
     },
     {
@@ -466,8 +576,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "capacitor_cli",
-      "community": 11,
-      "community_name": "@capacitor/cli",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/cli"
     },
     {
@@ -477,8 +587,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "package_dependencies_capacitor_core",
-      "community": 4,
-      "community_name": "@capacitor/core",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/core"
     },
     {
@@ -488,8 +598,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "capacitor_core",
-      "community": 4,
-      "community_name": "@capacitor/core",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/core"
     },
     {
@@ -499,8 +609,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "package_dependencies_capacitor_filesystem",
-      "community": 32,
-      "community_name": "@capacitor/filesystem",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/filesystem"
     },
     {
@@ -510,8 +620,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "capacitor_filesystem",
-      "community": 32,
-      "community_name": "@capacitor/filesystem",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/filesystem"
     },
     {
@@ -543,8 +653,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "package_dependencies_capacitor_splash_screen",
-      "community": 13,
-      "community_name": "@capacitor/splash-screen",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/splash-screen"
     },
     {
@@ -554,8 +664,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "capacitor_splash_screen",
-      "community": 13,
-      "community_name": "@capacitor/splash-screen",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/splash-screen"
     },
     {
@@ -565,8 +675,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "package_dependencies_capacitor_status_bar",
-      "community": 14,
-      "community_name": "@capacitor/status-bar",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/status-bar"
     },
     {
@@ -576,8 +686,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "capacitor_status_bar",
-      "community": 14,
-      "community_name": "@capacitor/status-bar",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "@capacitor/status-bar"
     },
     {
@@ -609,8 +719,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "package_dependencies_jsqr",
-      "community": 15,
-      "community_name": "jsqr",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "jsqr"
     },
     {
@@ -620,8 +730,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "jsqr",
-      "community": 15,
-      "community_name": "jsqr",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "jsqr"
     },
     {
@@ -631,8 +741,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "package_dependencies_lucide_react",
-      "community": 16,
-      "community_name": "lucide-react",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "lucide-react"
     },
     {
@@ -642,8 +752,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "lucide_react",
-      "community": 16,
-      "community_name": "lucide-react",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "lucide-react"
     },
     {
@@ -653,8 +763,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "package_dependencies_peerjs",
-      "community": 17,
-      "community_name": "peerjs",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "peerjs"
     },
     {
@@ -664,8 +774,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "peerjs",
-      "community": 17,
-      "community_name": "peerjs",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "peerjs"
     },
     {
@@ -675,8 +785,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "package_dependencies_qrcode_react",
-      "community": 18,
-      "community_name": "qrcode.react",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "qrcode.react"
     },
     {
@@ -686,8 +796,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "qrcode_react",
-      "community": 18,
-      "community_name": "qrcode.react",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "qrcode.react"
     },
     {
@@ -697,8 +807,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "package_dependencies_react",
-      "community": 19,
-      "community_name": "react",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "react"
     },
     {
@@ -708,8 +818,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "react",
-      "community": 19,
-      "community_name": "react",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "react"
     },
     {
@@ -719,8 +829,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "package_dependencies_react_dom",
-      "community": 20,
-      "community_name": "react-dom",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "react-dom"
     },
     {
@@ -730,8 +840,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "react_dom",
-      "community": 20,
-      "community_name": "react-dom",
+      "community": 12,
+      "community_name": "dependencies",
       "norm_label": "react-dom"
     },
     {
@@ -1065,10 +1175,21 @@
       "norm_label": "app.jsx"
     },
     {
+      "label": "NotifyDownload",
+      "file_type": "code",
+      "source_file": "src/App.jsx",
+      "source_location": "L34",
+      "_origin": "ast",
+      "id": "src_app_notifydownload",
+      "community": 5,
+      "community_name": "App.jsx",
+      "norm_label": "notifydownload"
+    },
+    {
       "label": "rippleTap()",
       "file_type": "code",
       "source_file": "src/App.jsx",
-      "source_location": "L43",
+      "source_location": "L44",
       "_origin": "ast",
       "id": "src_app_rippletap",
       "community": 5,
@@ -1079,7 +1200,7 @@
       "label": "RoomCodeFlap()",
       "file_type": "code",
       "source_file": "src/App.jsx",
-      "source_location": "L62",
+      "source_location": "L63",
       "_origin": "ast",
       "id": "src_app_roomcodeflap",
       "community": 5,
@@ -1090,7 +1211,7 @@
       "label": "SwipeableFileRow()",
       "file_type": "code",
       "source_file": "src/App.jsx",
-      "source_location": "L97",
+      "source_location": "L98",
       "_origin": "ast",
       "id": "src_app_swipeablefilerow",
       "community": 5,
@@ -1101,7 +1222,7 @@
       "label": "TransferRing()",
       "file_type": "code",
       "source_file": "src/App.jsx",
-      "source_location": "L161",
+      "source_location": "L162",
       "_origin": "ast",
       "id": "src_app_transferring",
       "community": 5,
@@ -1112,7 +1233,7 @@
       "label": "App()",
       "file_type": "code",
       "source_file": "src/App.jsx",
-      "source_location": "L190",
+      "source_location": "L191",
       "_origin": "ast",
       "id": "src_app_app",
       "community": 5,
@@ -1252,6 +1373,105 @@
       "norm_label": "graphify"
     },
     {
+      "label": "PRIVACY_POLICY.md",
+      "file_type": "document",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "privacy_policy",
+      "community": 4,
+      "community_name": "Privacy Policy for NovaShare",
+      "norm_label": "privacy_policy.md"
+    },
+    {
+      "label": "Privacy Policy for NovaShare",
+      "file_type": "document",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "privacy_policy_privacy_policy_for_novashare",
+      "community": 4,
+      "community_name": "Privacy Policy for NovaShare",
+      "norm_label": "privacy policy for novashare"
+    },
+    {
+      "label": "What We Do NOT Do",
+      "file_type": "document",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "privacy_policy_what_we_do_not_do",
+      "community": 4,
+      "community_name": "Privacy Policy for NovaShare",
+      "norm_label": "what we do not do"
+    },
+    {
+      "label": "What the App Accesses (and Why)",
+      "file_type": "document",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L12",
+      "_origin": "ast",
+      "id": "privacy_policy_what_the_app_accesses_and_why",
+      "community": 4,
+      "community_name": "Privacy Policy for NovaShare",
+      "norm_label": "what the app accesses (and why)"
+    },
+    {
+      "label": "Third-Party Services",
+      "file_type": "document",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L26",
+      "_origin": "ast",
+      "id": "privacy_policy_third_party_services",
+      "community": 4,
+      "community_name": "Privacy Policy for NovaShare",
+      "norm_label": "third-party services"
+    },
+    {
+      "label": "Data Retention",
+      "file_type": "document",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L29",
+      "_origin": "ast",
+      "id": "privacy_policy_data_retention",
+      "community": 4,
+      "community_name": "Privacy Policy for NovaShare",
+      "norm_label": "data retention"
+    },
+    {
+      "label": "Children's Privacy",
+      "file_type": "document",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L32",
+      "_origin": "ast",
+      "id": "privacy_policy_children_s_privacy",
+      "community": 4,
+      "community_name": "Privacy Policy for NovaShare",
+      "norm_label": "children's privacy"
+    },
+    {
+      "label": "Changes to This Policy",
+      "file_type": "document",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L35",
+      "_origin": "ast",
+      "id": "privacy_policy_changes_to_this_policy",
+      "community": 4,
+      "community_name": "Privacy Policy for NovaShare",
+      "norm_label": "changes to this policy"
+    },
+    {
+      "label": "Contact",
+      "file_type": "document",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L38",
+      "_origin": "ast",
+      "id": "privacy_policy_contact",
+      "community": 4,
+      "community_name": "Privacy Policy for NovaShare",
+      "norm_label": "contact"
+    },
+    {
       "label": "README.md",
       "file_type": "document",
       "source_file": "README.md",
@@ -1371,7 +1591,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.java",
-      "source_location": "L5",
+      "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity",
@@ -1383,7 +1603,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.java",
-      "source_location": "L3",
+      "source_location": "L4",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity",
@@ -1391,14 +1611,178 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.java",
+      "source_location": "L3",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_mainactivity",
+      "target": "bundle",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.java",
+      "source_location": "L7",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
+      "target": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_oncreate",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "inherits",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.java",
-      "source_location": "L5",
+      "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
       "target": "bridgeactivity",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.java",
+      "source_location": "L7",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_oncreate",
+      "target": "bundle",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.java",
+      "source_location": "L7",
+      "weight": 1.0,
+      "context": "attribute",
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_oncreate",
+      "target": "override",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L28",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin",
+      "target": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L18",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin",
+      "target": "capacitorplugin",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L15",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin",
+      "target": "plugin",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L16",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin",
+      "target": "plugincall",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L17",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin",
+      "target": "pluginmethod",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L31",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin",
+      "target": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_savetodownloads",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L28",
+      "weight": 1.0,
+      "context": "attribute",
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin",
+      "target": "capacitorplugin",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L28",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin",
+      "target": "plugin",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L31",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_savetodownloads",
+      "target": "plugincall",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.java",
+      "source_location": "L31",
+      "weight": 1.0,
+      "context": "attribute",
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_savetodownloads",
+      "target": "pluginmethod",
       "confidence_score": 1.0
     },
     {
@@ -2305,7 +2689,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L190",
+      "source_location": "L191",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app",
@@ -2316,7 +2700,18 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L43",
+      "source_location": "L34",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_app",
+      "target": "src_app_notifydownload",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/App.jsx",
+      "source_location": "L44",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app",
@@ -2327,7 +2722,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L62",
+      "source_location": "L63",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app",
@@ -2338,7 +2733,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L97",
+      "source_location": "L98",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app",
@@ -2349,7 +2744,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L161",
+      "source_location": "L162",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app",
@@ -2361,7 +2756,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L34",
+      "source_location": "L35",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app",
@@ -2373,7 +2768,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L34",
+      "source_location": "L35",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app",
@@ -2393,11 +2788,23 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "references",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/App.jsx",
+      "source_location": "L782",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_app_app",
+      "target": "src_app_notifydownload"
+    },
+    {
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L892",
+      "source_location": "L912",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_app",
@@ -2409,7 +2816,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L56",
+      "source_location": "L57",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rippletap",
@@ -2421,7 +2828,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/App.jsx",
-      "source_location": "L146",
+      "source_location": "L147",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_swipeablefilerow",
@@ -2533,6 +2940,94 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "privacy_policy",
+      "target": "privacy_policy_privacy_policy_for_novashare",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L35",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "privacy_policy_privacy_policy_for_novashare",
+      "target": "privacy_policy_changes_to_this_policy",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L32",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "privacy_policy_privacy_policy_for_novashare",
+      "target": "privacy_policy_children_s_privacy",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L38",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "privacy_policy_privacy_policy_for_novashare",
+      "target": "privacy_policy_contact",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L29",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "privacy_policy_privacy_policy_for_novashare",
+      "target": "privacy_policy_data_retention",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L26",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "privacy_policy_privacy_policy_for_novashare",
+      "target": "privacy_policy_third_party_services",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L12",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "privacy_policy_privacy_policy_for_novashare",
+      "target": "privacy_policy_what_the_app_accesses_and_why",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "PRIVACY_POLICY.md",
+      "source_location": "L7",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "privacy_policy_privacy_policy_for_novashare",
+      "target": "privacy_policy_what_we_do_not_do",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "README.md",
       "source_location": "L1",
       "weight": 1.0,
@@ -2565,5 +3060,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "e1b0d78c3ccddd061b64fb54c46027905de86c75"
+  "built_at_commit": "b01362bb21ed4a383ca01783178b3ee9b0cc3353"
 }
