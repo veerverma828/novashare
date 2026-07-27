@@ -20,7 +20,7 @@ function getLocalIP() {
 export default defineConfig(({ command }) => {
   return {
     plugins: [react()],
-    base: command === 'build' ? '/novashare/' : '/',
+    base: process.env.BUILD_TARGET === 'capacitor' ? './' : command === 'build' ? '/novashare/' : '/',
     server: {
       host: true, // Listen on all network interfaces to expose to local network
     },

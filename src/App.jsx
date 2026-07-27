@@ -1,28 +1,32 @@
 import { useState, useEffect, useRef } from 'react';
 import Peer from 'peerjs';
 import { QRCodeSVG } from 'qrcode.react';
+import jsQR from 'jsqr';
 import confetti from 'canvas-confetti';
-import { 
-  Share2, 
-  Download, 
-  UploadCloud, 
-  ShieldCheck, 
-  Copy, 
-  RefreshCw, 
-  FileText, 
-  FileImage, 
-  FileVideo, 
-  FileAudio, 
-  FileArchive, 
-  FileCode, 
-  File, 
-  X, 
-  ArrowLeft, 
-  AlertCircle, 
-  Zap, 
-  Laptop, 
+import {
+  Share2,
+  Download,
+  UploadCloud,
+  ShieldCheck,
+  Copy,
+  RefreshCw,
+  FileText,
+  FileImage,
+  FileVideo,
+  FileAudio,
+  FileArchive,
+  FileCode,
+  File,
+  X,
+  ArrowLeft,
+  AlertCircle,
+  Zap,
+  Laptop,
   Info,
-  ExternalLink
+  QrCode,
+  Camera,
+  Pause,
+  Play
 } from 'lucide-react';
 import './App.css';
 
@@ -33,9 +37,9 @@ function App() {
   const [mode, setMode] = useState('home'); // 'home' | 'p2p-send' | 'p2p-receive'
   
   // File States
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [incomingFile, setIncomingFile] = useState(null); // { name, size, type }
-  
+
   // Connection States
   const [roomCode, setRoomCode] = useState('');
   const [targetPeerId, setTargetPeerId] = useState('');
@@ -44,12 +48,24 @@ function App() {
   const [transferSpeed, setTransferSpeed] = useState('');
   const [timeRemaining, setTimeRemaining] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  
-  // Link States
-  const [downloadUrl, setDownloadUrl] = useState('');
+
+  // Multi-file queue state
+  const [sendFileIndex, setSendFileIndex] = useState(0);
+  const [sendFileCount, setSendFileCount] = useState(1);
+  const [receiveFileIndex, setReceiveFileIndex] = useState(0);
+  const [receiveFileCount, setReceiveFileCount] = useState(1);
+  const [completedFiles, setCompletedFiles] = useState([]); // receiver-side: [{ name, url, size }]
+
+  // Pause/Resume state
+  const [isPaused, setIsPaused] = useState(false);
+  const [isPeerPaused, setIsPeerPaused] = useState(false);
   
   // Toast Notification
   const [toast, setToast] = useState(null);
+
+  // QR Scanner State
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerError, setScannerError] = useState('');
 
   // Refs for background processes
   const peerRef = useRef(null);
@@ -59,6 +75,19 @@ function App() {
   const receivedBytes = useRef(0);
   const incomingFileRef = useRef(null);
   const fileInputRef = useRef(null);
+  const scanVideoRef = useRef(null);
+  const scanCanvasRef = useRef(null);
+  const scanStreamRef = useRef(null);
+  const scanRafRef = useRef(null);
+
+  // Multi-file send queue refs
+  const sendQueueRef = useRef([]);
+  const sendQueueIndexRef = useRef(0);
+  // Receiver-side collected downloads for this batch
+  const receivedFilesRef = useRef([]);
+  // Pause/resume refs (avoid stale closures inside the send loop)
+  const isPausedRef = useRef(false);
+  const pendingSendNextRef = useRef(null);
 
   // Format Helper: Bytes -> Human Readable
   const formatBytes = (bytes) => {
@@ -144,6 +173,11 @@ function App() {
     receivedBytes.current = 0;
     transferStartTime.current = null;
     incomingFileRef.current = null;
+    sendQueueRef.current = [];
+    sendQueueIndexRef.current = 0;
+    receivedFilesRef.current = [];
+    isPausedRef.current = false;
+    pendingSendNextRef.current = null;
   };
 
   // Reset UI back to Home State
@@ -151,7 +185,7 @@ function App() {
     cleanup();
     setMode('home');
     setTransferState('idle');
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setIncomingFile(null);
     setRoomCode('');
     setTargetPeerId('');
@@ -159,16 +193,37 @@ function App() {
     setTransferSpeed('');
     setTimeRemaining('');
     setErrorMsg('');
-    setDownloadUrl('');
-    
+    setCompletedFiles([]);
+    setSendFileIndex(0);
+    setSendFileCount(1);
+    setReceiveFileIndex(0);
+    setReceiveFileCount(1);
+    setIsPaused(false);
+    setIsPeerPaused(false);
+
     // Clear URL search params without page reload
     window.history.pushState({}, document.title, window.location.pathname);
+  };
+
+  // Toggle pause/resume of an in-progress send (sender-side control)
+  const togglePauseTransfer = () => {
+    const next = !isPausedRef.current;
+    isPausedRef.current = next;
+    setIsPaused(next);
+    if (connRef.current) {
+      try { connRef.current.send({ type: 'control', action: next ? 'pause' : 'resume' }); } catch (e) {}
+    }
+    if (!next && pendingSendNextRef.current) {
+      const fn = pendingSendNextRef.current;
+      pendingSendNextRef.current = null;
+      fn();
+    }
   };
 
   // Generate a random 6-character room code
   const generateRoomCode = () => {
     const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    let code = 'NS-';
+    let code = '';
     for (let i = 0; i < 6; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
@@ -191,14 +246,14 @@ function App() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setSelectedFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setSelectedFiles(Array.from(e.dataTransfer.files));
     }
   };
 
   const handleFileSelect = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFiles(Array.from(e.target.files));
     }
   };
 
@@ -210,10 +265,16 @@ function App() {
   // SENDER P2P WORKFLOW
   // ----------------------------------------------------
   const startP2PSend = () => {
-    if (!selectedFile) return;
+    if (!selectedFiles || selectedFiles.length === 0) return;
     cleanup();
     setTransferState('preparing');
     setMode('p2p-send');
+    setIsPaused(false);
+    isPausedRef.current = false;
+    sendQueueRef.current = selectedFiles;
+    sendQueueIndexRef.current = 0;
+    setSendFileCount(selectedFiles.length);
+    setSendFileIndex(0);
 
     const attemptConnection = (retryCount = 0) => {
       if (retryCount > 5) {
@@ -253,16 +314,8 @@ function App() {
         showToast('Receiver connected! Starting stream...', 'info');
 
         conn.on('open', () => {
-          // Send metadata packet
-          conn.send({
-            type: 'metadata',
-            name: selectedFile.name,
-            size: selectedFile.size,
-            mime: selectedFile.type || 'application/octet-stream'
-          });
-
-          // Begin chunk streaming
-          streamChunks(conn, selectedFile);
+          conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length });
+          sendNextQueuedFile(conn);
         });
 
         conn.on('close', () => {
@@ -293,6 +346,36 @@ function App() {
     attemptConnection(0);
   };
 
+  const sendNextQueuedFile = (conn) => {
+    const idx = sendQueueIndexRef.current;
+    const files = sendQueueRef.current;
+
+    if (idx >= files.length) {
+      conn.send({ type: 'batch-complete' });
+      setTransferState('complete');
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+      showToast('Transfer completed!', 'success');
+      return;
+    }
+
+    const file = files[idx];
+    setSendFileIndex(idx);
+    conn.send({
+      type: 'metadata',
+      name: file.name,
+      size: file.size,
+      mime: file.type || 'application/octet-stream',
+      fileIndex: idx,
+      totalFiles: files.length
+    });
+
+    streamChunks(conn, file);
+  };
+
   const streamChunks = (conn, file) => {
     let offset = 0;
     const startTime = Date.now();
@@ -302,16 +385,17 @@ function App() {
       // Check if connection was killed
       if (!connRef.current || connRef.current !== conn) return;
 
-      // Completed!
+      // Paused: stash this continuation, togglePauseTransfer resumes it
+      if (isPausedRef.current) {
+        pendingSendNextRef.current = sendNext;
+        return;
+      }
+
+      // This file done — advance to the next one in the queue
       if (offset >= file.size) {
         setTransferProgress(100);
-        setTransferState('complete');
-        confetti({
-          particleCount: 80,
-          spread: 60,
-          origin: { y: 0.6 }
-        });
-        showToast('Transfer completed!', 'success');
+        sendQueueIndexRef.current += 1;
+        sendNextQueuedFile(conn);
         return;
       }
 
@@ -403,22 +487,31 @@ function App() {
         transferStartTime.current = Date.now();
         receivedChunks.current = [];
         receivedBytes.current = 0;
+        receivedFilesRef.current = [];
+        setCompletedFiles([]);
       });
 
       conn.on('data', (data) => {
-        if (data.type === 'metadata') {
+        if (data.type === 'batch-start') {
+          receivedFilesRef.current = [];
+          setCompletedFiles([]);
+        } else if (data.type === 'metadata') {
           incomingFileRef.current = {
             name: data.name,
             size: data.size,
             type: data.mime
           };
           setIncomingFile(incomingFileRef.current);
+          setReceiveFileIndex(data.fileIndex || 0);
+          setReceiveFileCount(data.totalFiles || 1);
           setTransferProgress(0);
           setTransferSpeed('0 B/s');
           setTimeRemaining('--');
           receivedChunks.current = [];
           receivedBytes.current = 0;
           transferStartTime.current = Date.now();
+        } else if (data.type === 'control') {
+          setIsPeerPaused(data.action === 'pause');
         } else if (data.type === 'chunk') {
           receivedChunks.current.push(data.chunk);
           receivedBytes.current += data.chunk.byteLength;
@@ -442,19 +535,13 @@ function App() {
             const mimeType = incomingFileRef.current ? incomingFileRef.current.type : 'application/octet-stream';
             const blob = new Blob(receivedChunks.current, { type: mimeType });
             const url = URL.createObjectURL(blob);
-            setDownloadUrl(url);
-            setTransferState('complete');
+            const fileName = incomingFileRef.current ? incomingFileRef.current.name : 'downloaded-file';
+            const fileSize = incomingFileRef.current ? incomingFileRef.current.size : receivedBytes.current;
 
-            confetti({
-              particleCount: 80,
-              spread: 60,
-              origin: { y: 0.6 }
-            });
-
-            showToast('Transfer completed!', 'success');
+            receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, url, size: fileSize }];
+            setCompletedFiles(receivedFilesRef.current);
 
             // Trigger direct download
-            const fileName = incomingFileRef.current ? incomingFileRef.current.name : 'downloaded-file';
             const a = document.createElement('a');
             a.href = url;
             a.download = fileName;
@@ -462,6 +549,14 @@ function App() {
             a.click();
             document.body.removeChild(a);
           }
+        } else if (data.type === 'batch-complete') {
+          setTransferState('complete');
+          confetti({
+            particleCount: 80,
+            spread: 60,
+            origin: { y: 0.6 }
+          });
+          showToast('Transfer completed!', 'success');
         }
       });
 
@@ -504,6 +599,77 @@ function App() {
     }
     return `${origin}${window.location.pathname}?room=${roomCode}`;
   };
+
+  // Extract a room code from raw scanned QR text (full share URL or bare code)
+  const extractRoomCode = (text) => {
+    try {
+      const url = new URL(text);
+      const room = url.searchParams.get('room');
+      if (room) return room.toUpperCase();
+    } catch {
+      // Not a URL, fall through to treat as a bare code
+    }
+    return text.trim().toUpperCase();
+  };
+
+  // Stop camera stream and scan loop
+  const stopScanner = () => {
+    if (scanRafRef.current) {
+      cancelAnimationFrame(scanRafRef.current);
+      scanRafRef.current = null;
+    }
+    if (scanStreamRef.current) {
+      scanStreamRef.current.getTracks().forEach((track) => track.stop());
+      scanStreamRef.current = null;
+    }
+    setShowScanner(false);
+  };
+
+  // Open camera and start scanning frames for a QR code
+  const openScanner = async () => {
+    setScannerError('');
+    setShowScanner(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      scanStreamRef.current = stream;
+      if (scanVideoRef.current) {
+        scanVideoRef.current.srcObject = stream;
+        await scanVideoRef.current.play();
+      }
+
+      const canvas = scanCanvasRef.current;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      const tick = () => {
+        const video = scanVideoRef.current;
+        if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code && code.data) {
+            const roomFromScan = extractRoomCode(code.data);
+            stopScanner();
+            setTargetPeerId(roomFromScan);
+            startP2PReceive(roomFromScan);
+            return;
+          }
+        }
+        scanRafRef.current = requestAnimationFrame(tick);
+      };
+      scanRafRef.current = requestAnimationFrame(tick);
+    } catch (err) {
+      setScannerError('Camera access denied or unavailable.');
+    }
+  };
+
+  // Clean up camera on unmount
+  useEffect(() => {
+    return () => stopScanner();
+  }, []);
 
   // Helper file icon component inside local scope
   const renderFileIconComponent = (fileName) => {
@@ -562,9 +728,9 @@ function App() {
                 <p className="hero-subtitle">Transfer files directly browser-to-browser. Encrypted, private, with zero size limits.</p>
               </div>
 
-              {/* FILE DROP ZONE (IF NO FILE SELECTED) */}
-              {!selectedFile ? (
-                <div 
+              {/* FILE DROP ZONE (IF NO FILES SELECTED) */}
+              {selectedFiles.length === 0 ? (
+                <div
                   className={`dropzone ${dragActive ? 'drag-active' : ''}`}
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
@@ -572,18 +738,19 @@ function App() {
                   onDrop={handleDrop}
                   onClick={triggerFileInput}
                 >
-                  <input 
-                    type="file" 
-                    className="file-input" 
-                    ref={fileInputRef} 
-                    onChange={handleFileSelect} 
+                  <input
+                    type="file"
+                    className="file-input"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    multiple
                   />
                   <div className="dropzone-content">
                     <div className="upload-icon-wrapper">
                       <UploadCloud size={32} />
                     </div>
                     <div>
-                      <h3 className="dropzone-title">Drag & drop your file here</h3>
+                      <h3 className="dropzone-title">Drag & drop your files here</h3>
                       <p className="dropzone-subtitle">or click to browse files from your device</p>
                     </div>
                     <span className="badge" style={{color: 'var(--accent-purple)', borderColor: 'rgba(139, 92, 246, 0.3)'}}>
@@ -592,24 +759,37 @@ function App() {
                   </div>
                 </div>
               ) : (
-                /* FILE SELECTED STATE CARD */
+                /* FILES SELECTED STATE CARD */
                 <div>
-                  <div className="file-card">
-                    {renderFileIconComponent(selectedFile.name)}
-                    <div className="file-details">
-                      <h4 className="file-name">{selectedFile.name}</h4>
-                      <p className="file-size">{formatBytes(selectedFile.size)}</p>
+                  {selectedFiles.length === 1 ? (
+                    <div className="file-card">
+                      {renderFileIconComponent(selectedFiles[0].name)}
+                      <div className="file-details">
+                        <h4 className="file-name">{selectedFiles[0].name}</h4>
+                        <p className="file-size">{formatBytes(selectedFiles[0].size)}</p>
+                      </div>
+                      <button className="remove-file-btn" onClick={() => setSelectedFiles([])}>
+                        <X size={18} />
+                      </button>
                     </div>
-                    <button className="remove-file-btn" onClick={() => setSelectedFile(null)}>
-                      <X size={18} />
-                    </button>
-                  </div>
+                  ) : (
+                    <div className="file-card">
+                      <File size={24} />
+                      <div className="file-details">
+                        <h4 className="file-name">{selectedFiles.length} files selected</h4>
+                        <p className="file-size">{formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))} total</p>
+                      </div>
+                      <button className="remove-file-btn" onClick={() => setSelectedFiles([])}>
+                        <X size={18} />
+                      </button>
+                    </div>
+                  )}
 
                   <div className="action-buttons">
                     <button className="btn-primary" onClick={startP2PSend}>
                       <Zap size={18} /> Start P2P Sharing Room
                     </button>
-                    <button className="btn-secondary" onClick={() => setSelectedFile(null)}>
+                    <button className="btn-secondary" onClick={() => setSelectedFiles([])}>
                       Cancel Selection
                     </button>
                   </div>
@@ -617,7 +797,7 @@ function App() {
               )}
 
               {/* RECEIVE AREA (ONLY SHOW IF NO FILE CURRENTLY BEING SENT) */}
-              {!selectedFile && (
+              {selectedFiles.length === 0 && (
                 <div>
                   <div className="or-divider">or receive a file</div>
                   <div className="receive-block">
@@ -625,18 +805,48 @@ function App() {
                       <div className="input-icon-wrapper">
                         <Download size={20} />
                       </div>
-                      <input 
-                        type="text" 
-                        placeholder="Enter Room Code (e.g. NS-4D8G2X)" 
+                      <input
+                        type="text"
+                        placeholder="Enter Room Code (e.g. 4D8G2X)"
                         className="code-input"
                         value={targetPeerId}
                         onChange={(e) => setTargetPeerId(e.target.value.toUpperCase())}
                         onKeyDown={(e) => e.key === 'Enter' && startP2PReceive()}
                       />
+                      <button className="btn-icon-copy" onClick={openScanner} title="Scan QR Code">
+                        <QrCode size={20} />
+                      </button>
                     </div>
                     <button className="btn-secondary" onClick={() => startP2PReceive()} style={{justifyContent: 'center'}}>
                       Connect & Download
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* QR SCANNER MODAL */}
+              {showScanner && (
+                <div className="qr-scanner-overlay" onClick={stopScanner}>
+                  <div className="qr-scanner-panel" onClick={(e) => e.stopPropagation()}>
+                    <div className="qr-scanner-header">
+                      <span style={{display: 'flex', alignItems: 'center', gap: '0.4rem'}}>
+                        <Camera size={16} /> Scan Room QR Code
+                      </span>
+                      <button className="btn-icon-copy" onClick={stopScanner} title="Close">
+                        <X size={18} />
+                      </button>
+                    </div>
+                    {scannerError ? (
+                      <div className="qr-scanner-error">
+                        <AlertCircle size={18} /> {scannerError}
+                      </div>
+                    ) : (
+                      <div className="qr-scanner-video-wrapper">
+                        <video ref={scanVideoRef} className="qr-scanner-video" playsInline muted />
+                        <div className="qr-scanner-frame" />
+                      </div>
+                    )}
+                    <canvas ref={scanCanvasRef} style={{ display: 'none' }} />
                   </div>
                 </div>
               )}
@@ -652,7 +862,7 @@ function App() {
                 <button className="btn-secondary" onClick={resetToHome} style={{padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', gap: '0.25rem'}}>
                   <ArrowLeft size={14} /> Back
                 </button>
-                <h3 className="gradient-text" style={{fontSize: '1.25rem', fontFamily: 'var(--font-heading)', margin: 0}}>
+                <h3 className="signal-title">
                   Direct P2P Sharing
                 </h3>
               </div>
@@ -660,71 +870,74 @@ function App() {
               {/* File Info Inline Pill */}
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', background: 'rgba(255,255,255,0.03)', padding: '0.35rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', maxWidth: '100%', width: 'fit-content' }}>
                 <span style={{ fontWeight: 600, color: 'var(--accent-cyan)' }}>Sharing:</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{selectedFile?.name}</span>
-                <span style={{ color: 'var(--text-muted)' }}>({formatBytes(selectedFile?.size || 0)})</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                  {selectedFiles.length > 1 ? `${selectedFiles.length} files` : selectedFiles[0]?.name}
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>({formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))})</span>
               </div>
 
               {/* Waiting for connection */}
               {transferState === 'waiting' && (
                 <>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', margin: '0.4rem 0 0.5rem 0' }}>
-                    <RefreshCw size={14} className="radar-center-icon" style={{ animation: 'spin 2s linear infinite', color: 'var(--accent-purple)' }} />
-                    <p className="hero-subtitle" style={{ fontWeight: 500, margin: 0, fontSize: '0.9rem' }}>
-                      Waiting for receiver to connect...
-                    </p>
+                  <div className="signal-radar-wrap">
+                    <div className="signal-radar">
+                      <div className="orbit-track"></div>
+                      <div className="orbit-track orbit-track-2"></div>
+                      <div className="orbit-core"></div>
+                      <div className="orbit-sat"></div>
+                      <div className="orbit-sat orbit-sat-2"></div>
+                    </div>
                   </div>
 
-                  <div className="connection-details">
-                    <div className="connection-info-left">
-                      <div>
-                        <div className="stat-label" style={{textAlign: 'left', marginBottom: '0.25rem'}}>Room Code</div>
-                        <div className="code-display">
-                          <span>{roomCode}</span>
-                          <button className="btn-icon-copy" onClick={() => copyToClipboard(roomCode, 'Room code copied!')} title="Copy Code">
-                            <Copy size={18} />
-                          </button>
-                        </div>
+                  <div className="signal-fields">
+                    <div className="signal-code-row">
+                      <div className="signal-code-digits">
+                        {roomCode.split('').map((ch, i) => <span key={i}>{ch}</span>)}
                       </div>
-
-                      <div>
-                        <div className="stat-label" style={{textAlign: 'left', marginBottom: '0.25rem'}}>Share Link</div>
-                        <div className="link-value-container">
-                          <div className="link-value">
-                            {getSharingUrl()}
-                          </div>
-                          <button className="btn-icon-copy" onClick={() => copyToClipboard(getSharingUrl(), 'Share link copied!')} title="Copy Link">
-                            <Copy size={16} />
-                          </button>
-                        </div>
-                      </div>
+                      <button className="btn-icon-copy" onClick={() => copyToClipboard(roomCode, 'Room code copied!')} title="Copy Code">
+                        <Copy size={16} />
+                      </button>
                     </div>
 
-                    <div className="connection-qr-right">
-                      <div className="qr-container">
-                        <QRCodeSVG 
-                          value={getSharingUrl()} 
-                          size={96}
-                          bgColor={"#0f172a"}
-                          fgColor={"#f8fafc"}
+                    <div className="signal-link-row">
+                      <span>{getSharingUrl()}</span>
+                      <button className="btn-icon-copy" onClick={() => copyToClipboard(getSharingUrl(), 'Share link copied!')} title="Copy Link">
+                        <Copy size={14} />
+                      </button>
+                    </div>
+
+                    <div className="signal-qr-row">
+                      <div className="signal-qr">
+                        <QRCodeSVG
+                          value={getSharingUrl()}
+                          size={72}
+                          bgColor={"#ffffff"}
+                          fgColor={"#0b0e1c"}
                           level={"H"}
                           includeMargin={false}
                         />
                       </div>
+                      <div className="signal-qr-note">
+                        <b>Scan to connect</b>
+                        Keep this tab open &mdash; the file streams directly, peer to peer.
+                      </div>
                     </div>
                   </div>
-
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0', textAlign: 'center', display: 'flex', alignItems: 'center', gap: '0.35rem', justifyContent: 'center' }}>
-                    <Info size={14} style={{ color: 'var(--accent-cyan)' }} /> Keep this tab open to stream files directly.
-                  </p>
                 </>
               )}
 
               {/* Transferring State */}
               {transferState === 'transferring' && (
                 <div className="transfer-status-container" style={{width: '100%'}}>
+                  {sendFileCount > 1 && (
+                    <div className="status-badge" style={{background: 'rgba(139, 92, 246, 0.08)'}}>
+                      File {sendFileIndex + 1} of {sendFileCount}: {selectedFiles[sendFileIndex]?.name}
+                    </div>
+                  )}
+
                   <div className="status-badge uploading">
-                    <RefreshCw size={14} className="radar-center-icon" style={{animation: 'spin 2s linear infinite'}} />
-                    Streaming File...
+                    <RefreshCw size={14} className="radar-center-icon" style={{animation: isPaused ? 'none' : 'spin 2s linear infinite'}} />
+                    {isPaused ? 'Paused' : 'Streaming File...'}
                   </div>
 
                   <div className="progress-container">
@@ -740,13 +953,17 @@ function App() {
                   <div className="stats-grid">
                     <div className="stat-box">
                       <div className="stat-label">Speed</div>
-                      <div className="stat-value">{transferSpeed || 'Connecting...'}</div>
+                      <div className="stat-value">{isPaused ? 'Paused' : (transferSpeed || 'Connecting...')}</div>
                     </div>
                     <div className="stat-box">
                       <div className="stat-label">Estimated Time</div>
-                      <div className="stat-value">{timeRemaining || '--'}</div>
+                      <div className="stat-value">{isPaused ? '--' : (timeRemaining || '--')}</div>
                     </div>
                   </div>
+
+                  <button className="btn-secondary" onClick={togglePauseTransfer} style={{width: '100%', justifyContent: 'center'}}>
+                    {isPaused ? <><Play size={16} /> Resume</> : <><Pause size={16} /> Pause</>}
+                  </button>
                 </div>
               )}
 
@@ -758,7 +975,9 @@ function App() {
                   </div>
                   <div>
                     <h3 className="hero-title" style={{fontSize: '1.75rem', marginBottom: '0.25rem'}}>Transfer Complete!</h3>
-                    <p className="hero-subtitle">Your file was shared directly and securely.</p>
+                    <p className="hero-subtitle">
+                      {sendFileCount > 1 ? `Your ${sendFileCount} files were shared directly and securely.` : 'Your file was shared directly and securely.'}
+                    </p>
                   </div>
                   <button className="btn-primary" onClick={resetToHome} style={{width: '100%'}}>
                     Share Another File
@@ -821,6 +1040,12 @@ function App() {
               {/* Transferring State */}
               {transferState === 'transferring' && (
                 <div className="transfer-status-container" style={{width: '100%'}}>
+                  {receiveFileCount > 1 && (
+                    <div className="status-badge" style={{background: 'rgba(139, 92, 246, 0.08)'}}>
+                      File {receiveFileIndex + 1} of {receiveFileCount}
+                    </div>
+                  )}
+
                   {incomingFile && (
                     <div className="file-card" style={{textAlign: 'left', width: '100%'}}>
                       {renderFileIconComponent(incomingFile.name)}
@@ -832,8 +1057,8 @@ function App() {
                   )}
 
                   <div className="status-badge">
-                    <RefreshCw size={14} className="radar-center-icon" style={{animation: 'spin 2s linear infinite'}} />
-                    Receiving File...
+                    <RefreshCw size={14} className="radar-center-icon" style={{animation: isPeerPaused ? 'none' : 'spin 2s linear infinite'}} />
+                    {isPeerPaused ? 'Paused by sender' : 'Receiving File...'}
                   </div>
 
                   <div className="progress-container">
@@ -866,16 +1091,24 @@ function App() {
                     <ShieldCheck size={36} />
                   </div>
                   <div>
-                    <h3 className="hero-title" style={{fontSize: '1.75rem', marginBottom: '0.25rem'}}>File Received!</h3>
+                    <h3 className="hero-title" style={{fontSize: '1.75rem', marginBottom: '0.25rem'}}>
+                      {completedFiles.length > 1 ? `${completedFiles.length} Files Received!` : 'File Received!'}
+                    </h3>
                     <p className="hero-subtitle">
-                      {incomingFile?.name || 'Shared file'} was successfully downloaded to your device.
+                      {completedFiles.length > 1
+                        ? 'All files were downloaded to your device.'
+                        : `${completedFiles[0]?.name || incomingFile?.name || 'Shared file'} was successfully downloaded to your device.`}
                     </p>
                   </div>
 
-                  {downloadUrl && (
-                    <a href={downloadUrl} download={incomingFile?.name || 'shared-file'} className="btn-download-glow">
-                      <Download size={20} /> Download File Again
-                    </a>
+                  {completedFiles.length > 0 && (
+                    <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%'}}>
+                      {completedFiles.map((f, i) => (
+                        <a key={i} href={f.url} download={f.name} className="btn-download-glow" style={{fontSize: '0.85rem'}}>
+                          <Download size={16} /> {f.name}
+                        </a>
+                      ))}
+                    </div>
                   )}
 
                   <button className="btn-secondary" onClick={resetToHome} style={{width: '100%', marginTop: '0.5rem'}}>
@@ -909,19 +1142,6 @@ function App() {
 
         </div>
       </main>
-
-      {/* FOOTER */}
-      <footer className="app-footer">
-        <div className="footer-links">
-          <span className="footer-link" style={{display: 'inline-flex', alignItems: 'center', gap: '0.25rem'}}>
-            <ShieldCheck size={14} /> 100% Serverless, Private & Direct
-          </span>
-          <a href="https://peerjs.com/" target="_blank" rel="noopener noreferrer" className="footer-link" style={{display: 'inline-flex', alignItems: 'center', gap: '0.25rem'}}>
-            PeerJS Network <ExternalLink size={12} />
-          </a>
-        </div>
-        <p>&copy; {new Date().getFullYear()} NovaShare. Developed in React.js without database requirement.</p>
-      </footer>
     </div>
   );
 }
