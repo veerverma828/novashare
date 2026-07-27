@@ -29,11 +29,164 @@ import {
   Pause,
   Play
 } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const NotifyDownload = registerPlugin('NotifyDownload');
+import { triggerHaptic } from './native';
 import './App.css';
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for P2P WebRTC
+const FLAP_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+// Spawns a ripple span inside whatever element was tapped, and gives it a
+// light haptic tick on-device. Purely a feedback layer; never blocks the
+// actual click handler.
+function rippleTap(e, handler) {
+  const el = e.currentTarget;
+  const rect = el.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height) * 1.6;
+  const span = document.createElement('span');
+  span.className = 'ripple';
+  span.style.width = span.style.height = `${size}px`;
+  const x = (e.clientX ?? rect.left + rect.width / 2) - rect.left - size / 2;
+  const y = (e.clientY ?? rect.top + rect.height / 2) - rect.top - size / 2;
+  span.style.left = `${x}px`;
+  span.style.top = `${y}px`;
+  el.appendChild(span);
+  span.addEventListener('animationend', () => span.remove());
+  triggerHaptic();
+  if (handler) handler(e);
+}
+
+// Split-flap style reveal for the freshly generated room code: each
+// character scrambles briefly before settling, staggered left to right.
+function RoomCodeFlap({ code }) {
+  const [display, setDisplay] = useState(code.split(''));
+
+  useEffect(() => {
+    const target = code.split('');
+    const timers = [];
+    target.forEach((ch, i) => {
+      let ticks = 0;
+      const maxTicks = 5 + i * 2;
+      const iv = setInterval(() => {
+        ticks += 1;
+        setDisplay((prev) => {
+          const next = [...prev];
+          next[i] = ticks >= maxTicks ? ch : FLAP_CHARS[Math.floor(Math.random() * FLAP_CHARS.length)];
+          return next;
+        });
+        if (ticks >= maxTicks) clearInterval(iv);
+      }, 45);
+      timers.push(iv);
+    });
+    return () => timers.forEach(clearInterval);
+  }, [code]);
+
+  return (
+    <div className="signal-code-digits">
+      {display.map((ch, i) => (
+        <span key={i} className="flap-digit">{ch}</span>
+      ))}
+    </div>
+  );
+}
+
+// One row in the multi-file send queue: drag/swipe left (or tap the X) to
+// drop a file before the transfer starts. Pointer Events cover mouse,
+// touch, and pen with one handler set.
+function SwipeableFileRow({ file, sizeLabel, onRemove }) {
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startXRef = useRef(0);
+  const removedRef = useRef(false);
+
+  const REMOVE_THRESHOLD = -72;
+
+  const onPointerDown = (e) => {
+    startXRef.current = e.clientX;
+    setDragging(true);
+  };
+
+  const onPointerMove = (e) => {
+    if (!dragging) return;
+    const delta = Math.min(0, e.clientX - startXRef.current);
+    setDragX(delta);
+  };
+
+  const finishDrag = () => {
+    setDragging(false);
+    if (dragX < REMOVE_THRESHOLD && !removedRef.current) {
+      removedRef.current = true;
+      onRemove();
+    } else {
+      setDragX(0);
+    }
+  };
+
+  return (
+    <div
+      className="qitem"
+      style={{
+        transform: `translateX(${dragX}px)`,
+        opacity: dragX < REMOVE_THRESHOLD ? 0.5 : 1,
+        transition: dragging ? 'none' : 'transform 0.25s ease, opacity 0.25s ease'
+      }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={finishDrag}
+      onPointerLeave={() => dragging && finishDrag()}
+    >
+      <span className="qitem-remove-hint">Remove</span>
+      <span className="dot" />
+      <span className="qname">{file.name}</span>
+      <span className="qsize">{sizeLabel}</span>
+      <button
+        type="button"
+        className="qx"
+        onClick={(e) => { e.stopPropagation(); rippleTap(e, onRemove); }}
+        aria-label={`Remove ${file.name}`}
+      >
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
+
+// Circular transfer progress — reads the same speed/ETA lines the linear
+// bar used to, just given a shape that matches the round dropzone/radar
+// motifs already in the app.
+const RING_RADIUS = 52;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function TransferRing({ progress, gradientId = 'ringGrad' }) {
+  const offset = RING_CIRCUMFERENCE - (Math.min(100, Math.max(0, progress)) / 100) * RING_CIRCUMFERENCE;
+  return (
+    <svg className="ring" viewBox="0 0 120 120" role="img" aria-label={`Transfer ${Math.round(progress)}% complete`}>
+      <circle cx="60" cy="60" r={RING_RADIUS} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
+      <circle
+        cx="60"
+        cy="60"
+        r={RING_RADIUS}
+        fill="none"
+        stroke={`url(#${gradientId})`}
+        strokeWidth="8"
+        strokeLinecap="round"
+        strokeDasharray={RING_CIRCUMFERENCE}
+        strokeDashoffset={offset}
+        transform="rotate(-90 60 60)"
+        className="ring-fill"
+      />
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="var(--accent-purple)" />
+          <stop offset="100%" stopColor="var(--accent-cyan)" />
+        </linearGradient>
+      </defs>
+      <text x="60" y="66" textAnchor="middle" className="ring-pct">{Math.round(progress)}%</text>
+    </svg>
+  );
+}
 
 function App() {
   // Navigation & Mode States
@@ -596,8 +749,6 @@ function App() {
     }
 
     try {
-      await Filesystem.requestPermissions();
-
       const base64Data = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result.split(',')[1]);
@@ -605,16 +756,18 @@ function App() {
         reader.readAsDataURL(blob);
       });
 
-      await Filesystem.writeFile({
-        path: `Download/${fileName}`,
+      // Writes into the real system Downloads folder via MediaStore and
+      // registers the file with DownloadManager, so it shows the standard
+      // "Download complete" notification and appears in the system Downloads app.
+      await NotifyDownload.saveToDownloads({
+        fileName,
         data: base64Data,
-        directory: Directory.ExternalStorage,
-        recursive: true
+        mimeType: blob.type || 'application/octet-stream'
       });
 
       showToast(`${fileName} saved to Downloads`, 'success');
     } catch (err) {
-      showToast(`Could not save ${fileName} to Downloads: ${err.message}`, 'error');
+      showToast(`Could not save ${fileName}: ${err.message}`, 'error');
     }
   };
 
@@ -733,7 +886,7 @@ function App() {
           </span>
         </div>
         <div>
-          <button className="btn-secondary" onClick={resetToHome} style={{padding: '0.5rem 1rem', borderRadius: '10px', fontSize: '0.85rem'}}>
+          <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)} style={{padding: '0.5rem 1rem', borderRadius: '10px', fontSize: '0.85rem'}}>
             Reset
           </button>
         </div>
@@ -808,23 +961,29 @@ function App() {
                       </button>
                     </div>
                   ) : (
-                    <div className="file-card">
-                      <File size={24} />
-                      <div className="file-details">
-                        <h4 className="file-name">{selectedFiles.length} files selected</h4>
-                        <p className="file-size">{formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))} total</p>
+                    <div>
+                      <div className="queue-header">
+                        <span>{selectedFiles.length} files selected &middot; {formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))} total</span>
+                        <span className="queue-hint">swipe or tap &times; to drop a file</span>
                       </div>
-                      <button className="remove-file-btn" onClick={() => setSelectedFiles([])}>
-                        <X size={18} />
-                      </button>
+                      <div className="queue">
+                        {selectedFiles.map((f, i) => (
+                          <SwipeableFileRow
+                            key={`${f.name}-${f.size}-${i}`}
+                            file={f}
+                            sizeLabel={formatBytes(f.size)}
+                            onRemove={() => setSelectedFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                          />
+                        ))}
+                      </div>
                     </div>
                   )}
 
                   <div className="action-buttons">
-                    <button className="btn-primary" onClick={startP2PSend}>
+                    <button className="btn-primary" onClick={(e) => rippleTap(e, startP2PSend)}>
                       <Zap size={18} /> Start P2P Sharing Room
                     </button>
-                    <button className="btn-secondary" onClick={() => setSelectedFiles([])}>
+                    <button className="btn-secondary" onClick={(e) => rippleTap(e, () => setSelectedFiles([]))}>
                       Cancel Selection
                     </button>
                   </div>
@@ -848,11 +1007,11 @@ function App() {
                         onChange={(e) => setTargetPeerId(e.target.value.toUpperCase())}
                         onKeyDown={(e) => e.key === 'Enter' && startP2PReceive()}
                       />
-                      <button className="btn-icon-copy" onClick={openScanner} title="Scan QR Code">
+                      <button className="btn-icon-copy" onClick={(e) => rippleTap(e, openScanner)} title="Scan QR Code">
                         <QrCode size={20} />
                       </button>
                     </div>
-                    <button className="btn-secondary" onClick={() => startP2PReceive()} style={{justifyContent: 'center'}}>
+                    <button className="btn-secondary" onClick={(e) => rippleTap(e, () => startP2PReceive())} style={{justifyContent: 'center'}}>
                       Connect & Download
                     </button>
                   </div>
@@ -861,13 +1020,13 @@ function App() {
 
               {/* QR SCANNER MODAL */}
               {showScanner && (
-                <div className="qr-scanner-overlay" onClick={stopScanner}>
+                <div className="qr-scanner-overlay" onClick={(e) => rippleTap(e, stopScanner)}>
                   <div className="qr-scanner-panel" onClick={(e) => e.stopPropagation()}>
                     <div className="qr-scanner-header">
                       <span style={{display: 'flex', alignItems: 'center', gap: '0.4rem'}}>
                         <Camera size={16} /> Scan Room QR Code
                       </span>
-                      <button className="btn-icon-copy" onClick={stopScanner} title="Close">
+                      <button className="btn-icon-copy" onClick={(e) => rippleTap(e, stopScanner)} title="Close">
                         <X size={18} />
                       </button>
                     </div>
@@ -894,8 +1053,8 @@ function App() {
           {/* ==================================================== */}
           {mode === 'p2p-send' && (
             <div className="p2p-setup-container">
-              <div style={{width: '100%', display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem'}}>
-                <button className="btn-secondary" onClick={resetToHome} style={{padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', gap: '0.25rem'}}>
+              <div className="view-header-row">
+                <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)} style={{padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', gap: '0.25rem'}}>
                   <ArrowLeft size={14} /> Back
                 </button>
                 <h3 className="signal-title">
@@ -904,40 +1063,39 @@ function App() {
               </div>
 
               {/* File Info Inline Pill */}
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', background: 'rgba(255,255,255,0.03)', padding: '0.35rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', maxWidth: '100%', width: 'fit-content' }}>
-                <span style={{ fontWeight: 600, color: 'var(--accent-cyan)' }}>Sharing:</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+              <div className="share-info-pill">
+                <span style={{ fontWeight: 600, color: 'var(--accent-cyan)', flexShrink: 0 }}>Sharing:</span>
+                <span className="share-info-pill-name">
                   {selectedFiles.length > 1 ? `${selectedFiles.length} files` : selectedFiles[0]?.name}
                 </span>
-                <span style={{ color: 'var(--text-muted)' }}>({formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))})</span>
+                <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>({formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))})</span>
               </div>
 
               {/* Waiting for connection */}
               {transferState === 'waiting' && (
                 <>
-                  <div className="signal-radar-wrap">
-                    <div className="signal-radar">
-                      <div className="orbit-track"></div>
-                      <div className="orbit-track orbit-track-2"></div>
-                      <div className="orbit-core"></div>
-                      <div className="orbit-sat"></div>
-                      <div className="orbit-sat orbit-sat-2"></div>
+                  <div className="hs-visual" role="img" aria-label="Waiting for a peer to connect">
+                    <div className="hs-node hs-node-you"><Zap size={18} /></div>
+                    <div className="hs-track">
+                      <span className="hs-packet hs-packet-1" />
+                      <span className="hs-packet hs-packet-2" />
+                      <span className="hs-packet hs-packet-3 hs-packet-rev" />
                     </div>
+                    <div className="hs-node hs-node-peer"><Laptop size={18} /></div>
                   </div>
+                  <p className="hs-caption">Waiting for a peer to scan or enter your code&hellip;</p>
 
                   <div className="signal-fields">
                     <div className="signal-code-row">
-                      <div className="signal-code-digits">
-                        {roomCode.split('').map((ch, i) => <span key={i}>{ch}</span>)}
-                      </div>
-                      <button className="btn-icon-copy" onClick={() => copyToClipboard(roomCode, 'Room code copied!')} title="Copy Code">
+                      <RoomCodeFlap code={roomCode} />
+                      <button className="btn-icon-copy" onClick={(e) => rippleTap(e, () => copyToClipboard(roomCode, 'Room code copied!'))} title="Copy Code">
                         <Copy size={16} />
                       </button>
                     </div>
 
                     <div className="signal-link-row">
                       <span>{getSharingUrl()}</span>
-                      <button className="btn-icon-copy" onClick={() => copyToClipboard(getSharingUrl(), 'Share link copied!')} title="Copy Link">
+                      <button className="btn-icon-copy" onClick={(e) => rippleTap(e, () => copyToClipboard(getSharingUrl(), 'Share link copied!'))} title="Copy Link">
                         <Copy size={14} />
                       </button>
                     </div>
@@ -976,14 +1134,8 @@ function App() {
                     {isPaused ? 'Paused' : 'Streaming File...'}
                   </div>
 
-                  <div className="progress-container">
-                    <div className="progress-header">
-                      <span>Progress</span>
-                      <span>{Math.round(transferProgress)}%</span>
-                    </div>
-                    <div className="progress-bar-bg">
-                      <div className="progress-bar-fill striped" style={{width: `${transferProgress}%`}}></div>
-                    </div>
+                  <div className="ring-wrap">
+                    <TransferRing progress={transferProgress} gradientId="ringGradSend" />
                   </div>
 
                   <div className="stats-grid">
@@ -997,7 +1149,7 @@ function App() {
                     </div>
                   </div>
 
-                  <button className="btn-secondary" onClick={togglePauseTransfer} style={{width: '100%', justifyContent: 'center'}}>
+                  <button className="btn-secondary" onClick={(e) => rippleTap(e, togglePauseTransfer)} style={{width: '100%', justifyContent: 'center'}}>
                     {isPaused ? <><Play size={16} /> Resume</> : <><Pause size={16} /> Pause</>}
                   </button>
                 </div>
@@ -1015,7 +1167,7 @@ function App() {
                       {sendFileCount > 1 ? `Your ${sendFileCount} files were shared directly and securely.` : 'Your file was shared directly and securely.'}
                     </p>
                   </div>
-                  <button className="btn-primary" onClick={resetToHome} style={{width: '100%'}}>
+                  <button className="btn-primary" onClick={(e) => rippleTap(e, resetToHome)} style={{width: '100%'}}>
                     Share Another File
                   </button>
                 </div>
@@ -1032,10 +1184,10 @@ function App() {
                     <p className="hero-subtitle" style={{color: 'var(--accent-pink)', fontSize: '0.9rem'}}>{errorMsg}</p>
                   </div>
                   <div className="action-buttons" style={{width: '100%'}}>
-                    <button className="btn-primary" onClick={startP2PSend}>
+                    <button className="btn-primary" onClick={(e) => rippleTap(e, startP2PSend)}>
                       Retry Transfer
                     </button>
-                    <button className="btn-secondary" onClick={resetToHome}>
+                    <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)}>
                       Return Home
                     </button>
                   </div>
@@ -1049,8 +1201,8 @@ function App() {
           {/* ==================================================== */}
           {mode === 'p2p-receive' && (
             <div className="p2p-setup-container">
-              <div style={{width: '100%', display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem'}}>
-                <button className="btn-secondary" onClick={resetToHome} style={{padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', gap: '0.25rem'}}>
+              <div className="view-header-row">
+                <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)} style={{padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', gap: '0.25rem'}}>
                   <ArrowLeft size={14} /> Leave
                 </button>
                 <h3 className="gradient-text" style={{fontSize: '1.25rem', fontFamily: 'var(--font-heading)', margin: 0}}>
@@ -1061,13 +1213,17 @@ function App() {
               {/* Connecting/Resolving */}
               {transferState === 'preparing' && (
                 <>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', margin: '1rem 0' }}>
-                    <RefreshCw size={24} style={{ animation: 'spin 2s linear infinite', color: 'var(--accent-cyan)' }} />
-                    <p className="hero-subtitle" style={{ margin: 0, fontWeight: 500 }}>
-                      Connecting to sender room <strong style={{ color: 'var(--accent-cyan)' }}>{targetPeerId}</strong>...
-                    </p>
+                  <p className="hero-subtitle" style={{ margin: '0 0 1rem', fontWeight: 500, textAlign: 'center' }}>
+                    Connecting to sender room <strong style={{ color: 'var(--accent-cyan)' }}>{targetPeerId}</strong>&hellip;
+                  </p>
+                  <div className="skel-file-card">
+                    <div className="skel skel-icon" />
+                    <div className="skel-file-lines">
+                      <div className="skel skel-line" style={{ width: '70%' }} />
+                      <div className="skel skel-line" style={{ width: '40%' }} />
+                    </div>
                   </div>
-                  <p className="dropzone-subtitle" style={{ maxWidth: '280px', textAlign: 'center', margin: '0 auto' }}>
+                  <p className="dropzone-subtitle" style={{ maxWidth: '280px', textAlign: 'center', margin: '0.75rem auto 0' }}>
                     Establishing WebRTC data tunnel. Ensure the sender has the page active.
                   </p>
                 </>
@@ -1097,14 +1253,8 @@ function App() {
                     {isPeerPaused ? 'Paused by sender' : 'Receiving File...'}
                   </div>
 
-                  <div className="progress-container">
-                    <div className="progress-header">
-                      <span>Progress</span>
-                      <span>{Math.round(transferProgress)}%</span>
-                    </div>
-                    <div className="progress-bar-bg">
-                      <div className="progress-bar-fill striped" style={{width: `${transferProgress}%`}}></div>
-                    </div>
+                  <div className="ring-wrap">
+                    <TransferRing progress={transferProgress} gradientId="ringGradRecv" />
                   </div>
 
                   <div className="stats-grid">
@@ -1147,7 +1297,7 @@ function App() {
                     </div>
                   )}
 
-                  <button className="btn-secondary" onClick={resetToHome} style={{width: '100%', marginTop: '0.5rem'}}>
+                  <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)} style={{width: '100%', marginTop: '0.5rem'}}>
                     Close & Return
                   </button>
                 </div>
@@ -1164,10 +1314,10 @@ function App() {
                     <p className="hero-subtitle" style={{color: 'var(--accent-pink)', fontSize: '0.9rem'}}>{errorMsg}</p>
                   </div>
                   <div className="action-buttons" style={{width: '100%'}}>
-                    <button className="btn-primary" onClick={() => startP2PReceive()}>
+                    <button className="btn-primary" onClick={(e) => rippleTap(e, () => startP2PReceive())}>
                       Try Reconnecting
                     </button>
-                    <button className="btn-secondary" onClick={resetToHome}>
+                    <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)}>
                       Return Home
                     </button>
                   </div>
@@ -1202,7 +1352,7 @@ function App() {
             <div className="qr-zoom-roomcode">
               {roomCode.split('').map((ch, i) => <span key={i}>{ch}</span>)}
             </div>
-            <button className="qr-zoom-link" onClick={() => copyToClipboard(getSharingUrl(), 'Share link copied!')} title="Copy link">
+            <button className="qr-zoom-link" onClick={(e) => rippleTap(e, () => copyToClipboard(getSharingUrl(), 'Share link copied!'))} title="Copy link">
               <span>{getSharingUrl()}</span>
               <Copy size={14} />
             </button>

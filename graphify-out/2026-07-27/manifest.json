@@ -1,0 +1,102 @@
+{
+  ".claude/launch.json": {
+    "mtime": 1785148689.862416,
+    "ast_hash": "3db392fc8787b616882b7ac171dd6b25",
+    "semantic_hash": "3db392fc8787b616882b7ac171dd6b25"
+  },
+  ".claude/settings.json": {
+    "mtime": 1785158603.259412,
+    "ast_hash": "085ab5be4ee69ae4ef8d44aa6e90552c",
+    "semantic_hash": "085ab5be4ee69ae4ef8d44aa6e90552c"
+  },
+  "android/app/build.gradle": {
+    "mtime": 1785146791.2542543,
+    "ast_hash": "818b0194b59d6af18047927202b384be",
+    "semantic_hash": "818b0194b59d6af18047927202b384be"
+  },
+  "android/app/capacitor.build.gradle": {
+    "mtime": 1785157532.0298152,
+    "ast_hash": "7775bf25b991a5b736a5ef7f4ebce9a9",
+    "semantic_hash": "7775bf25b991a5b736a5ef7f4ebce9a9"
+  },
+  "android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java": {
+    "mtime": 1784050294.0,
+    "ast_hash": "fbaf7cc870c663eb52dcf218531c439d",
+    "semantic_hash": "fbaf7cc870c663eb52dcf218531c439d"
+  },
+  "android/app/src/main/java/com/veer/novashare/MainActivity.java": {
+    "mtime": 1785146791.252256,
+    "ast_hash": "6d3e90600538763d014d25708d1b99cc",
+    "semantic_hash": "6d3e90600538763d014d25708d1b99cc"
+  },
+  "android/app/src/test/java/com/getcapacitor/myapp/ExampleUnitTest.java": {
+    "mtime": 1784050294.0,
+    "ast_hash": "e91b4501c14da821682fa5c26a16d616",
+    "semantic_hash": "e91b4501c14da821682fa5c26a16d616"
+  },
+  "android/build.gradle": {
+    "mtime": 1784050294.0,
+    "ast_hash": "682315a426653617c6a74fc12bef55b6",
+    "semantic_hash": "682315a426653617c6a74fc12bef55b6"
+  },
+  "android/capacitor.settings.gradle": {
+    "mtime": 1785157532.015815,
+    "ast_hash": "4059689d49e7f8b6eec4a28a3913f7f1",
+    "semantic_hash": "4059689d49e7f8b6eec4a28a3913f7f1"
+  },
+  "android/gradlew": {
+    "mtime": 1784050294.0,
+    "ast_hash": "794669d78aef1dd5c7d889ef618b311a",
+    "semantic_hash": "794669d78aef1dd5c7d889ef618b311a"
+  },
+  "android/settings.gradle": {
+    "mtime": 1784050294.0,
+    "ast_hash": "f6cd925b3f859e23c3d819fe2459e0e4",
+    "semantic_hash": "f6cd925b3f859e23c3d819fe2459e0e4"
+  },
+  "android/variables.gradle": {
+    "mtime": 1784050294.0,
+    "ast_hash": "4b3fce8ea2a515a9d2e47e74757172ec",
+    "semantic_hash": "4b3fce8ea2a515a9d2e47e74757172ec"
+  },
+  "capacitor.config.json": {
+    "mtime": 1785146751.1249433,
+    "ast_hash": "0fd0e93f707fcabd1fee5c6222e69027",
+    "semantic_hash": "0fd0e93f707fcabd1fee5c6222e69027"
+  },
+  "eslint.config.js": {
+    "mtime": 1785145568.2471788,
+    "ast_hash": "fa91453358b56681481f75f81d1bfccd",
+    "semantic_hash": "fa91453358b56681481f75f81d1bfccd"
+  },
+  "package.json": {
+    "mtime": 1785155140.323803,
+    "ast_hash": "3fe2ee6f51b42dd415ca76b4f7e15419",
+    "semantic_hash": "3fe2ee6f51b42dd415ca76b4f7e15419"
+  },
+  "scripts/gen-icons.mjs": {
+    "mtime": 1785148354.4185977,
+    "ast_hash": "68f3b40a49a7b6f3258a647ed54ac319",
+    "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
+  },
+  "src/App.jsx": {
+    "mtime": 1785157415.5200143,
+    "ast_hash": "bc99176253c15626e944fd08341ff2f7",
+    "semantic_hash": "bc99176253c15626e944fd08341ff2f7"
+  },
+  "src/main.jsx": {
+    "mtime": 1785146896.269688,
+    "ast_hash": "8e9934c2dc4c3d2fa5eea8e774b4a8bd",
+    "semantic_hash": "8e9934c2dc4c3d2fa5eea8e774b4a8bd"
+  },
+  "src/native.js": {
+    "mtime": 1785147535.2360046,
+    "ast_hash": "6554881f642b91c57c9338b88922ceb7",
+    "semantic_hash": "6554881f642b91c57c9338b88922ceb7"
+  },
+  "vite.config.js": {
+    "mtime": 1785146726.3061233,
+    "ast_hash": "74e36f563bb0162dd7b5c11e318c4e36",
+    "semantic_hash": "74e36f563bb0162dd7b5c11e318c4e36"
+  }
+}

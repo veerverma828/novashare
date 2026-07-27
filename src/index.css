@@ -69,6 +69,7 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100dvh;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
@@ -163,11 +164,6 @@ h1, h2, h3, h4, h5, h6 {
   100% { background-position: 0% 50%; }
 }
 
-@keyframes progressStripe {
-  0% { background-position: 0 0; }
-  100% { background-position: 40px 0; }
-}
-
 /* Global utility classes */
 .glow-text {
   background: linear-gradient(135deg, #fff 0%, var(--text-secondary) 100%);
@@ -179,6 +175,14 @@ h1, h2, h3, h4, h5, h6 {
   background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* Glassmorphism panel */
