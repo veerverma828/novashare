@@ -15,7 +15,7 @@
     "semantic_hash": ""
   },
   "android/app/capacitor.build.gradle": {
-    "mtime": 1785247018.8657312,
+    "mtime": 1785252274.2286403,
     "ast_hash": "5b7212fd295a0d57d21afc4da01ab520",
     "semantic_hash": ""
   },
@@ -35,7 +35,7 @@
     "semantic_hash": ""
   },
   "android/capacitor.settings.gradle": {
-    "mtime": 1785247018.8647313,
+    "mtime": 1785252274.227641,
     "ast_hash": "0e91352e1143222262d0644b5006e02c",
     "semantic_hash": ""
   },
@@ -75,8 +75,8 @@
     "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
   },
   "src/App.jsx": {
-    "mtime": 1785246746.0986488,
-    "ast_hash": "70e44c8dcfd1764f1799faca0031932c",
+    "mtime": 1785251202.1845152,
+    "ast_hash": "b00c6514284cc988802a4b8a893eaaff",
     "semantic_hash": ""
   },
   "src/main.jsx": {
@@ -85,8 +85,8 @@
     "semantic_hash": "8e9934c2dc4c3d2fa5eea8e774b4a8bd"
   },
   "src/native.js": {
-    "mtime": 1785246042.2269433,
-    "ast_hash": "0a4c4ed6741d566ec12d16dd11b20d4d",
+    "mtime": 1785251130.1143982,
+    "ast_hash": "8a90a2404d1244240504966d5da5636f",
     "semantic_hash": ""
   },
   "vite.config.js": {
@@ -295,13 +295,28 @@
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/MainActivity.kt": {
-    "mtime": 1785244721.5224853,
-    "ast_hash": "1d9b98584cff95828d6d48bd23aed5f3",
+    "mtime": 1785251089.3207786,
+    "ast_hash": "f0f8e748b77944ce34698f2aac2c1602",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.kt": {
     "mtime": 1785244740.6937284,
     "ast_hash": "19bfde61cf881c3b577668dabb7ffcf6",
+    "semantic_hash": ""
+  },
+  "android/app/src/main/java/com/veer/novashare/IncomingSharePlugin.kt": {
+    "mtime": 1785249099.2029493,
+    "ast_hash": "425b0fed88bee5afededf79098436ec4",
+    "semantic_hash": ""
+  },
+  "android/app/src/main/java/com/veer/novashare/TransferForegroundService.kt": {
+    "mtime": 1785251072.2395785,
+    "ast_hash": "158cec1f02a7442ec6c85b2a625d7ebd",
+    "semantic_hash": ""
+  },
+  "android/app/src/main/java/com/veer/novashare/TransferNotificationPlugin.kt": {
+    "mtime": 1785251083.8348155,
+    "ast_hash": "bf7fce63c53f6f75a82d2c6c9d67a584",
     "semantic_hash": ""
   }
 }

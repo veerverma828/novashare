@@ -4,6 +4,8 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
 const InstalledApps = registerPlugin('InstalledApps');
+const IncomingShare = registerPlugin('IncomingShare');
+const TransferNotification = registerPlugin('TransferNotification');
 
 // Fires a light haptic tick on real devices; no-op on web.
 export function triggerHaptic(style = ImpactStyle.Light) {
@@ -47,6 +49,47 @@ export async function getAppApkFile(packageName, appName, versionName) {
 export async function clearApkCache() {
   if (!Capacitor.isNativePlatform()) return;
   await InstalledApps.clearApkCache().catch(() => {});
+}
+
+// Drains any share-sheet files MainActivity staged into cache before the
+// webview was ready (cold start into NovaShare via another app's Share menu).
+export async function getPendingSharedFiles() {
+  if (!Capacitor.isNativePlatform()) return [];
+  const { files } = await IncomingShare.getPendingFiles();
+  return files;
+}
+
+// Fires for share-sheet files that arrive while the app is already running
+// (Android onNewIntent). Returns an unsubscribe function.
+export function onSharedFilesReceived(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  IncomingShare.addListener('sharedFilesReceived', (data) => callback(data.files || [])).then((h) => { handle = h; });
+  return () => handle?.remove();
+}
+
+// Turns a native cache-copied share entry ({path, name, size, mimeType}) into
+// a browser File via the same convertFileSrc()+fetch() trick used for shared
+// APKs, so it drops straight into the existing selectedFiles send queue.
+export async function sharedEntryToFile(entry) {
+  const response = await fetch(Capacitor.convertFileSrc(entry.path));
+  const blob = await response.blob();
+  return new File([blob], entry.name, { type: entry.mimeType || blob.type || 'application/octet-stream' });
+}
+
+// Pushes/updates the persistent "transfer in progress" notification via a
+// foreground Service, so Android doesn't throttle or kill the background
+// WebView (and the WebRTC data channels riding on it) once the app is
+// minimized mid-transfer. First call also starts the service; later calls
+// just update its notification content in place.
+export async function pushTransferNotification(title, text, progress, indeterminate = false) {
+  if (!Capacitor.isNativePlatform()) return;
+  await TransferNotification.update({ title, text, progress: Math.round(progress), indeterminate }).catch(() => {});
+}
+
+export async function stopTransferNotification() {
+  if (!Capacitor.isNativePlatform()) return;
+  await TransferNotification.stop().catch(() => {});
 }
 
 export function initNative() {

@@ -9,7 +9,7 @@
   "7": "gradlew",
   "8": "MainActivity",
   "9": "NotifyDownloadPlugin",
-  "10": "InstalledAppsPlugin",
+  "10": "IncomingSharePlugin",
   "12": "dependencies",
   "21": "vite.config.js",
   "22": "app/build.gradle",

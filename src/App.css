@@ -796,14 +796,6 @@ button:disabled {
     width: 96px;
     height: 96px;
   }
-  .signal-qr-row {
-    flex-wrap: wrap;
-    justify-content: center;
-    text-align: center;
-  }
-  .signal-qr-note {
-    align-items: center;
-  }
   .stats-grid {
     gap: 0.6rem;
   }
@@ -1057,6 +1049,9 @@ button:disabled {
   flex-direction: column;
   gap: 0.6rem;
   margin-bottom: 1.5rem;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 0.15rem;
 }
 
 .qitem {
@@ -1346,12 +1341,15 @@ button:disabled {
 }
 
 .signal-qr-note {
+  flex: 1;
+  min-width: 0;
   font-size: 0.72rem;
   color: var(--text-secondary);
   line-height: 1.5;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  text-align: left;
 }
 
 .signal-qr-note b {

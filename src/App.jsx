@@ -30,12 +30,24 @@ import {
   Play,
   Smartphone,
   Search,
-  Check
+  Check,
+  Users
 } from 'lucide-react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const NotifyDownload = registerPlugin('NotifyDownload');
-import { triggerHaptic, listInstalledApps, getAppIcon, getAppApkFile, clearApkCache } from './native';
+import {
+  triggerHaptic,
+  listInstalledApps,
+  getAppIcon,
+  getAppApkFile,
+  clearApkCache,
+  getPendingSharedFiles,
+  onSharedFilesReceived,
+  sharedEntryToFile,
+  pushTransferNotification,
+  stopTransferNotification
+} from './native';
 import './App.css';
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for P2P WebRTC
@@ -421,6 +433,9 @@ function App() {
   const [receiveFileCount, setReceiveFileCount] = useState(1);
   const [completedFiles, setCompletedFiles] = useState([]); // receiver-side: [{ name, url, size }]
 
+  // Sender-side: how many receivers are currently connected to this room (broadcast)
+  const [connectedCount, setConnectedCount] = useState(0);
+
   // Pause/Resume state
   const [isPaused, setIsPaused] = useState(false);
   const [isPeerPaused, setIsPeerPaused] = useState(false);
@@ -450,11 +465,22 @@ function App() {
   // Multi-file send queue refs
   const sendQueueRef = useRef([]);
   const sendQueueIndexRef = useRef(0);
+  const totalQueueBytesRef = useRef(0);
+  // Sender-side: one entry per connected receiver, so a room can broadcast
+  // to several peers at once, each progressing through the queue at its own
+  // pace ({ conn, id, queueIndex, fileOffset, totalBytesSent, pendingSendNext }).
+  const connsRef = useRef([]);
   // Receiver-side collected downloads for this batch
   const receivedFilesRef = useRef([]);
+  // Receiver-side resume tracking: which queued file we're on, and how many
+  // reconnect attempts we've burned after an unexpected mid-transfer drop
+  const currentFileIndexRef = useRef(0);
+  const reconnectAttemptRef = useRef(0);
+  // Throttles the background transfer notification to a few updates/sec
+  // instead of firing on every 64KB chunk
+  const notifyThrottleRef = useRef(0);
   // Pause/resume refs (avoid stale closures inside the send loop)
   const isPausedRef = useRef(false);
-  const pendingSendNextRef = useRef(null);
 
   // Format Helper: Bytes -> Human Readable
   const formatBytes = (bytes) => {
@@ -501,6 +527,23 @@ function App() {
     setToast({ message, type });
   };
 
+  // Pushes the background transfer notification, throttled so a chunk
+  // arriving every few ms doesn't hammer the native bridge — only actually
+  // sends once every ~700ms (always lets the final 100% through).
+  const notifyTransfer = (title, text, progress) => {
+    const now = Date.now();
+    if (progress < 100 && now - notifyThrottleRef.current < 700) return;
+    notifyThrottleRef.current = now;
+    pushTransferNotification(title, text, progress);
+  };
+
+  // Stop the background notification once a transfer is no longer actively running
+  useEffect(() => {
+    if (transferState === 'complete' || transferState === 'error' || transferState === 'idle') {
+      stopTransferNotification();
+    }
+  }, [transferState]);
+
   // Clear Toast after delay
   useEffect(() => {
     if (toast) {
@@ -533,12 +576,46 @@ function App() {
     return () => cleanup();
   }, []);
 
+  // Pick up files shared into NovaShare from another app's "Share" menu:
+  // once for whatever was queued before the webview existed (cold start),
+  // then live for any that arrive while already running.
+  useEffect(() => {
+    let cancelled = false;
+
+    const handleSharedEntries = async (entries) => {
+      if (!entries || entries.length === 0) return;
+      try {
+        const files = await Promise.all(entries.map(sharedEntryToFile));
+        if (cancelled) return;
+        setSelectedFiles((prev) => [...prev, ...files]);
+        setMode('home');
+        setHomeTab('home');
+        showToast(
+          files.length > 1 ? `${files.length} shared files ready to send` : `${files[0].name} ready to send`,
+          'success'
+        );
+      } catch (err) {
+        if (!cancelled) showToast('Could not load a shared file.', 'error');
+      }
+    };
+
+    getPendingSharedFiles().then(handleSharedEntries);
+    const unsubscribe = onSharedFilesReceived(handleSharedEntries);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
   // Cleanup active peer/connections
   const cleanup = () => {
     if (connRef.current) {
       try { connRef.current.close(); } catch(e){}
       connRef.current = null;
     }
+    connsRef.current.forEach((p) => { try { p.conn.close(); } catch (e) {} });
+    connsRef.current = [];
     if (peerRef.current) {
       try { peerRef.current.destroy(); } catch(e){}
       peerRef.current = null;
@@ -549,9 +626,10 @@ function App() {
     incomingFileRef.current = null;
     sendQueueRef.current = [];
     sendQueueIndexRef.current = 0;
+    totalQueueBytesRef.current = 0;
     receivedFilesRef.current = [];
     isPausedRef.current = false;
-    pendingSendNextRef.current = null;
+    notifyThrottleRef.current = 0;
   };
 
   // Reset UI back to Home State
@@ -575,23 +653,29 @@ function App() {
     setReceiveFileCount(1);
     setIsPaused(false);
     setIsPeerPaused(false);
+    setConnectedCount(0);
 
     // Clear URL search params without page reload
     window.history.pushState({}, document.title, window.location.pathname);
   };
 
-  // Toggle pause/resume of an in-progress send (sender-side control)
+  // Toggle pause/resume of an in-progress send (sender-side control) —
+  // broadcasts to every connected receiver, not just one.
   const togglePauseTransfer = () => {
     const next = !isPausedRef.current;
     isPausedRef.current = next;
     setIsPaused(next);
-    if (connRef.current) {
-      try { connRef.current.send({ type: 'control', action: next ? 'pause' : 'resume' }); } catch (e) {}
-    }
-    if (!next && pendingSendNextRef.current) {
-      const fn = pendingSendNextRef.current;
-      pendingSendNextRef.current = null;
-      fn();
+    connsRef.current.forEach((p) => {
+      try { p.conn.send({ type: 'control', action: next ? 'pause' : 'resume' }); } catch (e) {}
+    });
+    if (!next) {
+      connsRef.current.forEach((p) => {
+        if (p.pendingSendNext) {
+          const fn = p.pendingSendNext;
+          p.pendingSendNext = null;
+          fn();
+        }
+      });
     }
   };
 
@@ -637,8 +721,10 @@ function App() {
   };
 
   // ----------------------------------------------------
-  // SENDER P2P WORKFLOW
+  // SENDER P2P WORKFLOW (broadcast: one room, several receivers)
   // ----------------------------------------------------
+  const MAX_RECEIVERS = 8;
+
   const startP2PSend = () => {
     if (!selectedFiles || selectedFiles.length === 0) return;
     cleanup();
@@ -648,8 +734,11 @@ function App() {
     isPausedRef.current = false;
     sendQueueRef.current = selectedFiles;
     sendQueueIndexRef.current = 0;
+    totalQueueBytesRef.current = selectedFiles.reduce((sum, f) => sum + f.size, 0);
     setSendFileCount(selectedFiles.length);
     setSendFileIndex(0);
+    setConnectedCount(0);
+    transferStartTime.current = Date.now();
 
     const attemptConnection = (retryCount = 0) => {
       if (retryCount > 5) {
@@ -678,37 +767,83 @@ function App() {
       });
 
       peer.on('connection', (conn) => {
-        // Only accept one connection for direct P2P transfer
-        if (connRef.current) {
+        // Broadcast mode: the room stays open to more receivers up to a cap,
+        // rather than rejecting everyone after the first connects.
+        if (connsRef.current.length >= MAX_RECEIVERS) {
+          try { conn.send({ type: 'room-full' }); } catch (e) {}
           conn.close();
           return;
         }
 
-        connRef.current = conn;
+        const peerState = {
+          conn,
+          id: conn.peer,
+          queueIndex: 0,
+          fileOffset: 0,
+          totalBytesSent: 0,
+          pendingSendNext: null,
+          resumed: false,
+          openTimer: null
+        };
+        connsRef.current = [...connsRef.current, peerState];
+        setConnectedCount(connsRef.current.length);
         setTransferState('transferring');
-        showToast('Receiver connected! Starting stream...', 'info');
+        showToast(
+          connsRef.current.length > 1
+            ? `Receiver connected! (${connsRef.current.length} total)`
+            : 'Receiver connected! Starting stream...',
+          'info'
+        );
 
         conn.on('open', () => {
-          conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length });
-          sendNextQueuedFile(conn);
+          // Give a reconnecting receiver a brief window to send a 'resume'
+          // message before defaulting to a fresh batch-start — a plain new
+          // connection just falls through once the timer fires.
+          peerState.openTimer = setTimeout(() => {
+            if (peerState.resumed) return;
+            conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length });
+            sendNextQueuedFileForPeer(peerState);
+          }, 150);
         });
 
+        conn.on('data', (data) => {
+          if (data.type !== 'resume') return;
+          if (peerState.openTimer) {
+            clearTimeout(peerState.openTimer);
+            peerState.openTimer = null;
+          }
+          peerState.resumed = true;
+
+          const files = sendQueueRef.current;
+          const fileIndex = Math.min(data.fileIndex || 0, Math.max(0, files.length - 1));
+          const bytesBeforeThisFile = files.slice(0, fileIndex).reduce((sum, f) => sum + f.size, 0);
+
+          peerState.queueIndex = fileIndex;
+          peerState.totalBytesSent = bytesBeforeThisFile + (data.offset || 0);
+          streamChunksForPeer(peerState, files[fileIndex], data.offset || 0);
+        });
+
+        const dropPeer = () => {
+          connsRef.current = connsRef.current.filter((p) => p !== peerState);
+          setConnectedCount(connsRef.current.length);
+          // Room stays alive for more receivers unless the batch is done —
+          // no peers left mid-transfer just means back to waiting for one.
+          if (connsRef.current.length === 0) {
+            setTransferState((prev) => (prev === 'complete' ? 'complete' : 'waiting'));
+          }
+        };
+
         conn.on('close', () => {
-          setTransferState((prev) => {
-            if (prev === 'complete') return 'complete';
-            showToast('Receiver closed the connection.', 'error');
-            setErrorMsg('The receiver disconnected before the transfer finished.');
-            return 'error';
-          });
+          const finishedQueue = peerState.queueIndex >= sendQueueRef.current.length;
+          if (!finishedQueue) {
+            showToast('A receiver disconnected before finishing.', 'error');
+          }
+          dropPeer();
         });
 
         conn.on('error', (err) => {
-          setTransferState((prev) => {
-            if (prev === 'complete') return 'complete';
-            showToast('Transfer error: ' + err.message, 'error');
-            setErrorMsg(err.message);
-            return 'error';
-          });
+          showToast('Connection error with a receiver: ' + err.message, 'error');
+          dropPeer();
         });
       });
 
@@ -730,61 +865,92 @@ function App() {
     attemptConnection(0);
   };
 
-  const sendNextQueuedFile = (conn) => {
-    const idx = sendQueueIndexRef.current;
+  // Recomputes the ring/speed/ETA from whichever connected receiver is
+  // furthest behind, so the UI reflects "done when everyone's done" rather
+  // than one arbitrary peer.
+  const updateAggregateStats = () => {
+    const peers = connsRef.current;
+    if (peers.length === 0) return;
+
+    const total = totalQueueBytesRef.current || 1;
+    const minFraction = Math.min(...peers.map((p) => p.totalBytesSent / total));
+    setTransferProgress(Math.min(100, minFraction * 100));
+
+    const slowest = peers.reduce((a, b) => (a.totalBytesSent <= b.totalBytesSent ? a : b));
+    setSendFileIndex(Math.min(slowest.queueIndex, Math.max(0, sendQueueRef.current.length - 1)));
+
+    const elapsed = (Date.now() - transferStartTime.current) / 1000;
+    const speed = elapsed > 0 ? slowest.totalBytesSent / elapsed : 0;
+    setTransferSpeed(formatSpeed(speed));
+
+    const remaining = totalQueueBytesRef.current - slowest.totalBytesSent;
+    setTimeRemaining(formatTime(speed > 0 ? remaining / speed : 0));
+
+    const files = sendQueueRef.current;
+    const fileLabel = files.length > 1 ? `${files.length} files` : (files[0]?.name || 'file');
+    notifyTransfer(
+      `Sending ${fileLabel} to ${peers.length} receiver${peers.length === 1 ? '' : 's'}`,
+      `${formatSpeed(speed)} · ${formatTime(speed > 0 ? remaining / speed : 0)} left`,
+      Math.min(100, minFraction * 100)
+    );
+  };
+
+  const sendNextQueuedFileForPeer = (peerState) => {
+    const idx = peerState.queueIndex;
     const files = sendQueueRef.current;
 
     if (idx >= files.length) {
-      conn.send({ type: 'batch-complete' });
-      setTransferState('complete');
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.6 }
-      });
-      showToast('Transfer completed!', 'success');
+      try { peerState.conn.send({ type: 'batch-complete' }); } catch (e) {}
+      updateAggregateStats();
+      if (connsRef.current.length > 0 && connsRef.current.every((p) => p.queueIndex >= files.length)) {
+        setTransferState('complete');
+        confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+        showToast('Transfer completed!', 'success');
+      }
       return;
     }
 
     const file = files[idx];
-    setSendFileIndex(idx);
-    conn.send({
-      type: 'metadata',
-      name: file.name,
-      size: file.size,
-      mime: file.type || 'application/octet-stream',
-      fileIndex: idx,
-      totalFiles: files.length
-    });
+    try {
+      peerState.conn.send({
+        type: 'metadata',
+        name: file.name,
+        size: file.size,
+        mime: file.type || 'application/octet-stream',
+        fileIndex: idx,
+        totalFiles: files.length
+      });
+    } catch (e) {
+      return;
+    }
 
-    streamChunks(conn, file);
+    streamChunksForPeer(peerState, file);
   };
 
-  const streamChunks = (conn, file) => {
-    let offset = 0;
-    const startTime = Date.now();
-    transferStartTime.current = startTime;
+  const streamChunksForPeer = (peerState, file, startOffset = 0) => {
+    let offset = startOffset;
+    peerState.fileOffset = offset;
 
     const sendNext = () => {
-      // Check if connection was killed
-      if (!connRef.current || connRef.current !== conn) return;
+      // Peer disconnected mid-stream — stop, dropPeer already handled cleanup
+      if (!connsRef.current.includes(peerState)) return;
 
-      // Paused: stash this continuation, togglePauseTransfer resumes it
+      // Paused: stash this peer's continuation, togglePauseTransfer resumes it
       if (isPausedRef.current) {
-        pendingSendNextRef.current = sendNext;
+        peerState.pendingSendNext = sendNext;
         return;
       }
 
-      // This file done — advance to the next one in the queue
+      // This file done for this peer — advance to their next queued file
       if (offset >= file.size) {
-        setTransferProgress(100);
-        sendQueueIndexRef.current += 1;
-        sendNextQueuedFile(conn);
+        peerState.queueIndex += 1;
+        sendNextQueuedFileForPeer(peerState);
         return;
       }
 
-      // Check for backpressure (We limit RTCDataChannel buffer to 1MB)
-      if (conn.dataChannel && conn.dataChannel.bufferedAmount > 1024 * 1024) {
+      // Backpressure (cap RTCDataChannel buffer at 1MB) — per peer, since
+      // each receiver drains at its own network speed
+      if (peerState.conn.dataChannel && peerState.conn.dataChannel.bufferedAmount > 1024 * 1024) {
         setTimeout(sendNext, 40);
         return;
       }
@@ -793,10 +959,10 @@ function App() {
       const reader = new FileReader();
 
       reader.onload = (e) => {
-        if (!connRef.current || connRef.current !== conn) return;
+        if (!connsRef.current.includes(peerState)) return;
 
         try {
-          conn.send({
+          peerState.conn.send({
             type: 'chunk',
             chunk: e.target.result,
             offset: offset,
@@ -804,28 +970,23 @@ function App() {
           });
 
           offset += slice.size;
-
-          const pct = Math.min((offset / file.size) * 100, 100);
-          setTransferProgress(pct);
-
-          const elapsed = (Date.now() - startTime) / 1000;
-          const speed = elapsed > 0 ? (offset / elapsed) : 0;
-          setTransferSpeed(formatSpeed(speed));
-
-          const remaining = file.size - offset;
-          const eta = speed > 0 ? (remaining / speed) : 0;
-          setTimeRemaining(formatTime(eta));
+          peerState.fileOffset = offset;
+          peerState.totalBytesSent += slice.size;
+          updateAggregateStats();
 
           sendNext();
         } catch (err) {
-          setTransferState('error');
-          setErrorMsg('Error streaming chunk: ' + err.message);
+          // Only this peer's stream failed — drop them, everyone else keeps going
+          showToast('Error streaming to a receiver: ' + err.message, 'error');
+          connsRef.current = connsRef.current.filter((p) => p !== peerState);
+          setConnectedCount(connsRef.current.length);
         }
       };
 
       reader.onerror = () => {
-        setTransferState('error');
-        setErrorMsg('Failed to read file from disk.');
+        showToast('Failed to read file from disk.', 'error');
+        connsRef.current = connsRef.current.filter((p) => p !== peerState);
+        setConnectedCount(connsRef.current.length);
       };
 
       reader.readAsArrayBuffer(slice);
@@ -837,6 +998,8 @@ function App() {
   // ----------------------------------------------------
   // RECEIVER P2P WORKFLOW
   // ----------------------------------------------------
+  const MAX_RECONNECT_ATTEMPTS = 3;
+
   const startP2PReceive = (roomCodeInput) => {
     const code = roomCodeInput || targetPeerId;
     if (!code) {
@@ -848,7 +1011,119 @@ function App() {
     setTransferState('preparing');
     setMode('p2p-receive');
     setTargetPeerId(code);
+    reconnectAttemptRef.current = 0;
+    currentFileIndexRef.current = 0;
 
+    connectToSender(code, false);
+  };
+
+  // Handles every 'data' message from the sender — shared by the initial
+  // connection and any resumed reconnection, since a resume just continues
+  // feeding this same handler mid-batch instead of starting over.
+  const handleReceiverData = (data) => {
+    if (data.type === 'batch-start') {
+      receivedFilesRef.current = [];
+      setCompletedFiles([]);
+    } else if (data.type === 'metadata') {
+      currentFileIndexRef.current = data.fileIndex || 0;
+      incomingFileRef.current = {
+        name: data.name,
+        size: data.size,
+        type: data.mime
+      };
+      setIncomingFile(incomingFileRef.current);
+      setReceiveFileIndex(data.fileIndex || 0);
+      setReceiveFileCount(data.totalFiles || 1);
+      setTransferProgress(0);
+      setTransferSpeed('0 B/s');
+      setTimeRemaining('--');
+      receivedChunks.current = [];
+      receivedBytes.current = 0;
+      transferStartTime.current = Date.now();
+    } else if (data.type === 'control') {
+      setIsPeerPaused(data.action === 'pause');
+    } else if (data.type === 'room-full') {
+      setTransferState('error');
+      setErrorMsg('This room already has the maximum number of receivers.');
+    } else if (data.type === 'chunk') {
+      receivedChunks.current.push(data.chunk);
+      receivedBytes.current += data.chunk.byteLength;
+
+      const totalSize = incomingFileRef.current ? incomingFileRef.current.size : 0;
+
+      if (totalSize > 0) {
+        const pct = Math.min((receivedBytes.current / totalSize) * 100, 100);
+        setTransferProgress(pct);
+
+        const elapsed = (Date.now() - transferStartTime.current) / 1000;
+        const speed = elapsed > 0 ? (receivedBytes.current / elapsed) : 0;
+        setTransferSpeed(formatSpeed(speed));
+
+        const remaining = totalSize - receivedBytes.current;
+        const eta = speed > 0 ? (remaining / speed) : 0;
+        setTimeRemaining(formatTime(eta));
+
+        notifyTransfer(
+          incomingFileRef.current ? incomingFileRef.current.name : 'Receiving file',
+          `${formatSpeed(speed)} · ${formatTime(eta)} left`,
+          pct
+        );
+      }
+
+      if (data.done) {
+        const mimeType = incomingFileRef.current ? incomingFileRef.current.type : 'application/octet-stream';
+        const blob = new Blob(receivedChunks.current, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const fileName = incomingFileRef.current ? incomingFileRef.current.name : 'downloaded-file';
+        const fileSize = incomingFileRef.current ? incomingFileRef.current.size : receivedBytes.current;
+
+        receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, url, size: fileSize }];
+        setCompletedFiles(receivedFilesRef.current);
+
+        saveReceivedFile(blob, fileName, url);
+      }
+    } else if (data.type === 'batch-complete') {
+      setTransferState('complete');
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+      showToast('Transfer completed!', 'success');
+    }
+  };
+
+  // A connection drop only warrants an auto-reconnect if it happened
+  // mid-transfer (the PeerJS "lost connection to server" case); a failure
+  // before that — bad code, sender never showed up — is a real error.
+  const handleReceiverDrop = (code, err) => {
+    setTransferState((prev) => {
+      if (prev === 'complete') return 'complete';
+      if (prev === 'transferring') {
+        scheduleReconnectRetry(code);
+        return 'reconnecting';
+      }
+      showToast(err ? 'Connection error: ' + err.message : 'Sender disconnected.', 'error');
+      setErrorMsg(err ? err.message : 'The sender terminated the connection.');
+      return 'error';
+    });
+  };
+
+  const scheduleReconnectRetry = (code) => {
+    reconnectAttemptRef.current += 1;
+    if (reconnectAttemptRef.current > MAX_RECONNECT_ATTEMPTS) {
+      setTransferState('error');
+      setErrorMsg('Lost connection to the sender and could not reconnect.');
+      return;
+    }
+    showToast(`Connection lost — reconnecting (attempt ${reconnectAttemptRef.current}/${MAX_RECONNECT_ATTEMPTS})…`, 'error');
+    setTimeout(() => connectToSender(code, true), reconnectAttemptRef.current * 1000);
+  };
+
+  // isResume: re-establishing after a mid-transfer drop — skips wiping
+  // already-received bytes and tells the sender exactly where to continue
+  // from, instead of restarting the whole batch.
+  const connectToSender = (code, isResume) => {
     const peer = new Peer({
       host: '0.peerjs.com',
       port: 443,
@@ -860,101 +1135,38 @@ function App() {
     peerRef.current = peer;
 
     peer.on('open', () => {
-      showToast('Connecting to room ' + code + '...', 'info');
+      if (!isResume) showToast('Connecting to room ' + code + '...', 'info');
 
       const conn = peer.connect(code, { reliable: true });
       connRef.current = conn;
 
       conn.on('open', () => {
         setTransferState('transferring');
-        showToast('Connected! Requesting file...', 'success');
-        transferStartTime.current = Date.now();
-        receivedChunks.current = [];
-        receivedBytes.current = 0;
-        receivedFilesRef.current = [];
-        setCompletedFiles([]);
-      });
+        reconnectAttemptRef.current = 0;
 
-      conn.on('data', (data) => {
-        if (data.type === 'batch-start') {
-          receivedFilesRef.current = [];
-          setCompletedFiles([]);
-        } else if (data.type === 'metadata') {
-          incomingFileRef.current = {
-            name: data.name,
-            size: data.size,
-            type: data.mime
-          };
-          setIncomingFile(incomingFileRef.current);
-          setReceiveFileIndex(data.fileIndex || 0);
-          setReceiveFileCount(data.totalFiles || 1);
-          setTransferProgress(0);
-          setTransferSpeed('0 B/s');
-          setTimeRemaining('--');
+        if (isResume) {
+          showToast('Reconnected! Resuming transfer...', 'success');
+          conn.send({ type: 'resume', fileIndex: currentFileIndexRef.current, offset: receivedBytes.current });
+        } else {
+          showToast('Connected! Requesting file...', 'success');
+          transferStartTime.current = Date.now();
           receivedChunks.current = [];
           receivedBytes.current = 0;
-          transferStartTime.current = Date.now();
-        } else if (data.type === 'control') {
-          setIsPeerPaused(data.action === 'pause');
-        } else if (data.type === 'chunk') {
-          receivedChunks.current.push(data.chunk);
-          receivedBytes.current += data.chunk.byteLength;
-
-          const totalSize = incomingFileRef.current ? incomingFileRef.current.size : 0;
-
-          if (totalSize > 0) {
-            const pct = Math.min((receivedBytes.current / totalSize) * 100, 100);
-            setTransferProgress(pct);
-
-            const elapsed = (Date.now() - transferStartTime.current) / 1000;
-            const speed = elapsed > 0 ? (receivedBytes.current / elapsed) : 0;
-            setTransferSpeed(formatSpeed(speed));
-
-            const remaining = totalSize - receivedBytes.current;
-            const eta = speed > 0 ? (remaining / speed) : 0;
-            setTimeRemaining(formatTime(eta));
-          }
-
-          if (data.done) {
-            const mimeType = incomingFileRef.current ? incomingFileRef.current.type : 'application/octet-stream';
-            const blob = new Blob(receivedChunks.current, { type: mimeType });
-            const url = URL.createObjectURL(blob);
-            const fileName = incomingFileRef.current ? incomingFileRef.current.name : 'downloaded-file';
-            const fileSize = incomingFileRef.current ? incomingFileRef.current.size : receivedBytes.current;
-
-            receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, url, size: fileSize }];
-            setCompletedFiles(receivedFilesRef.current);
-
-            saveReceivedFile(blob, fileName, url);
-          }
-        } else if (data.type === 'batch-complete') {
-          setTransferState('complete');
-          confetti({
-            particleCount: 80,
-            spread: 60,
-            origin: { y: 0.6 }
-          });
-          showToast('Transfer completed!', 'success');
+          receivedFilesRef.current = [];
+          setCompletedFiles([]);
         }
       });
 
-      conn.on('close', () => {
-        setTransferState((prev) => {
-          if (prev === 'complete') return 'complete';
-          showToast('Sender disconnected.', 'error');
-          setErrorMsg('The sender terminated the connection.');
-          return 'error';
-        });
-      });
-
-      conn.on('error', (err) => {
-        showToast('Connection error: ' + err.message, 'error');
-        setTransferState('error');
-        setErrorMsg(err.message);
-      });
+      conn.on('data', handleReceiverData);
+      conn.on('close', () => handleReceiverDrop(code));
+      conn.on('error', (err) => handleReceiverDrop(code, err));
     });
 
-    peer.on('error', (err) => {
+    peer.on('error', () => {
+      if (isResume) {
+        scheduleReconnectRetry(code);
+        return;
+      }
       setTransferState((prev) => {
         if (prev === 'complete') return 'complete';
         showToast('Could not reach signaling server.', 'error');
@@ -1349,6 +1561,21 @@ function App() {
                 <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>({formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))})</span>
               </div>
 
+              {/* Preparing: negotiating a room code with the signaling server */}
+              {transferState === 'preparing' && (
+                <>
+                  <p className="hero-subtitle" style={{ margin: '0 0 1rem', fontWeight: 500, textAlign: 'center' }}>
+                    Setting up your P2P sharing room&hellip;
+                  </p>
+                  <div className="connecting-spinner-wrap">
+                    <RefreshCw size={40} className="connecting-spinner" />
+                  </div>
+                  <p className="dropzone-subtitle" style={{ maxWidth: '280px', textAlign: 'center', margin: '0.75rem auto 0' }}>
+                    Reaching the signaling server to allocate your room code. This can take a moment on a slow connection.
+                  </p>
+                </>
+              )}
+
               {/* Waiting for connection */}
               {transferState === 'waiting' && (
                 <>
@@ -1357,7 +1584,7 @@ function App() {
                     <div className="hs-track" />
                     <div className="hs-node hs-node-peer"><Laptop size={18} /></div>
                   </div>
-                  <p className="hs-caption">Waiting for a peer to scan or enter your code&hellip;</p>
+                  <p className="hs-caption">Waiting for peers to scan or enter your code&hellip; anyone with it can join.</p>
 
                   <div className="signal-fields">
                     <div className="signal-code-row">
@@ -1397,6 +1624,10 @@ function App() {
               {/* Transferring State */}
               {transferState === 'transferring' && (
                 <div className="transfer-status-container" style={{width: '100%'}}>
+                  <div className="status-badge" style={{background: 'rgba(6, 182, 212, 0.08)', color: 'var(--accent-cyan)'}}>
+                    <Users size={14} /> {connectedCount} {connectedCount === 1 ? 'receiver' : 'receivers'} connected
+                  </div>
+
                   {sendFileCount > 1 && (
                     <div className="status-badge" style={{background: 'rgba(139, 92, 246, 0.08)'}}>
                       File {sendFileIndex + 1} of {sendFileCount}: {selectedFiles[sendFileIndex]?.name}
@@ -1495,6 +1726,21 @@ function App() {
                   </div>
                   <p className="dropzone-subtitle" style={{ maxWidth: '280px', textAlign: 'center', margin: '0.75rem auto 0' }}>
                     Establishing WebRTC data tunnel. Ensure the sender has the page active.
+                  </p>
+                </>
+              )}
+
+              {/* Reconnecting: connection dropped mid-transfer, auto-retrying with what we've already received kept intact */}
+              {transferState === 'reconnecting' && (
+                <>
+                  <p className="hero-subtitle" style={{ margin: '0 0 1rem', fontWeight: 500, textAlign: 'center' }}>
+                    Connection lost &mdash; reconnecting&hellip;
+                  </p>
+                  <div className="connecting-spinner-wrap">
+                    <RefreshCw size={40} className="connecting-spinner" />
+                  </div>
+                  <p className="dropzone-subtitle" style={{ maxWidth: '280px', textAlign: 'center', margin: '0.75rem auto 0' }}>
+                    Your progress is saved &mdash; the transfer will resume from where it left off.
                   </p>
                 </>
               )}

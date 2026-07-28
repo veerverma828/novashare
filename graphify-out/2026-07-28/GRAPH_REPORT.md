@@ -1,16 +1,16 @@
 # Graph Report - novashare  (2026-07-28)
 
 ## Corpus Check
-- 27 files · ~21,265 words
+- 28 files · ~23,061 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 150 nodes · 155 edges · 24 communities (20 shown, 4 thin omitted)
-- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
+- 173 nodes · 204 edges · 24 communities (20 shown, 4 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 6 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0e29fd55`
+- Built from commit: `be19e972`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -25,7 +25,7 @@
 - gradlew
 - MainActivity
 - NotifyDownloadPlugin
-- InstalledAppsPlugin
+- IncomingSharePlugin
 - dependencies
 - React + Vite
 - rules/graphify.md
@@ -34,24 +34,26 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `Privacy Policy for NovaShare` - 8 edges
-2. `InstalledAppsPlugin` - 6 edges
-3. `scripts` - 6 edges
-4. `rippleTap()` - 5 edges
-5. `AppsPanel()` - 4 edges
-6. `App()` - 4 edges
-7. `InstalledApps` - 4 edges
-8. `listInstalledApps()` - 4 edges
-9. `getAppIcon()` - 4 edges
-10. `getAppApkFile()` - 4 edges
+2. `IncomingSharePlugin` - 7 edges
+3. `InstalledAppsPlugin` - 7 edges
+4. `App()` - 7 edges
+5. `MainActivity` - 6 edges
+6. `scripts` - 6 edges
+7. `AppsPanel()` - 6 edges
+8. `rippleTap()` - 5 edges
+9. `InstalledApps` - 5 edges
+10. `listInstalledApps()` - 4 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `App()` --indirect_call--> `sharedEntryToFile()`  [INFERRED]
+  src/App.jsx → src/native.js
 - `rippleTap()` --calls--> `triggerHaptic()`  [EXTRACTED]
   src/App.jsx → src/native.js
 - `AppIcon()` --calls--> `getAppIcon()`  [EXTRACTED]
   src/App.jsx → src/native.js
-- `AppsPanel()` --calls--> `getAppApkFile()`  [EXTRACTED]
+- `AppsPanel()` --calls--> `clearApkCache()`  [EXTRACTED]
   src/App.jsx → src/native.js
-- `AppsPanel()` --calls--> `listInstalledApps()`  [EXTRACTED]
+- `AppsPanel()` --calls--> `getAppApkFile()`  [EXTRACTED]
   src/App.jsx → src/native.js
 
 ## Import Cycles
@@ -80,24 +82,24 @@ Cohesion: 0.22
 Nodes (8): Changes to This Policy, Children's Privacy, Contact, Data Retention, Privacy Policy for NovaShare, Third-Party Services, What the App Accesses (and Why), What We Do NOT Do
 
 ### Community 5 - "App.jsx"
-Cohesion: 0.23
-Nodes (13): App(), AppIcon(), appIconCache, AppsPanel(), NotifyDownload, rippleTap(), SwipeableFileRow(), getAppApkFile() (+5 more)
+Cohesion: 0.19
+Nodes (19): App(), AppIcon(), appIconCache, AppsPanel(), mapWithConcurrency(), NotifyDownload, rippleTap(), SwipeableFileRow() (+11 more)
 
 ### Community 7 - "gradlew"
 Cohesion: 0.83
 Nodes (3): gradlew script, die(), warn()
 
 ### Community 8 - "MainActivity"
-Cohesion: 0.40
-Nodes (3): MainActivity, BridgeActivity, Bundle
+Cohesion: 0.29
+Nodes (5): MainActivity, BridgeActivity, Bundle, Intent, Uri
 
 ### Community 9 - "NotifyDownloadPlugin"
 Cohesion: 0.40
 Nodes (3): Plugin, PluginCall, NotifyDownloadPlugin
 
-### Community 10 - "InstalledAppsPlugin"
-Cohesion: 0.27
-Nodes (5): InstalledAppsPlugin, Plugin, PluginCall, Bitmap, Drawable
+### Community 10 - "IncomingSharePlugin"
+Cohesion: 0.14
+Nodes (10): IncomingSharePlugin, Plugin, PluginCall, InstalledAppsPlugin, Plugin, PluginCall, Bitmap, Drawable (+2 more)
 
 ### Community 12 - "dependencies"
 Cohesion: 0.06
@@ -116,12 +118,16 @@ Nodes (3): Expanding the ESLint configuration, React Compiler, React + Vite
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `dependencies` connect `dependencies` to `package.json`?**
-  _High betweenness centrality (0.131) - this node is a cross-community bridge._
+  _High betweenness centrality (0.098) - this node is a cross-community bridge._
 - **Why does `devDependencies` connect `devDependencies` to `package.json`?**
-  _High betweenness centrality (0.104) - this node is a cross-community bridge._
+  _High betweenness centrality (0.078) - this node is a cross-community bridge._
+- **Are the 4 inferred relationships involving `JSObject` (e.g. with `.getApkCachePath()` and `.getAppIcon()`) actually correct?**
+  _`JSObject` has 4 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `name`, `private`, `version` to the rest of the system?**
   _51 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `devDependencies` be split into smaller, more focused modules?**
   _Cohesion score 0.08695652173913043 - nodes in this community are weakly interconnected._
+- **Should `IncomingSharePlugin` be split into smaller, more focused modules?**
+  _Cohesion score 0.14285714285714285 - nodes in this community are weakly interconnected._
 - **Should `dependencies` be split into smaller, more focused modules?**
   _Cohesion score 0.06451612903225806 - nodes in this community are weakly interconnected._
