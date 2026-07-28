@@ -1,11 +1,11 @@
 # Graph Report - novashare  (2026-07-28)
 
 ## Corpus Check
-- 27 files · ~21,405 words
+- 27 files · ~21,265 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 153 nodes · 163 edges · 24 communities (20 shown, 4 thin omitted)
+- 150 nodes · 155 edges · 24 communities (20 shown, 4 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -34,12 +34,12 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `Privacy Policy for NovaShare` - 8 edges
-2. `InstalledAppsPlugin` - 7 edges
+2. `InstalledAppsPlugin` - 6 edges
 3. `scripts` - 6 edges
-4. `AppsPanel()` - 6 edges
-5. `rippleTap()` - 5 edges
-6. `InstalledApps` - 5 edges
-7. `App()` - 4 edges
+4. `rippleTap()` - 5 edges
+5. `AppsPanel()` - 4 edges
+6. `App()` - 4 edges
+7. `InstalledApps` - 4 edges
 8. `listInstalledApps()` - 4 edges
 9. `getAppIcon()` - 4 edges
 10. `getAppApkFile()` - 4 edges
@@ -48,8 +48,6 @@
 - `rippleTap()` --calls--> `triggerHaptic()`  [EXTRACTED]
   src/App.jsx → src/native.js
 - `AppIcon()` --calls--> `getAppIcon()`  [EXTRACTED]
-  src/App.jsx → src/native.js
-- `AppsPanel()` --calls--> `clearApkCache()`  [EXTRACTED]
   src/App.jsx → src/native.js
 - `AppsPanel()` --calls--> `getAppApkFile()`  [EXTRACTED]
   src/App.jsx → src/native.js
@@ -82,8 +80,8 @@ Cohesion: 0.22
 Nodes (8): Changes to This Policy, Children's Privacy, Contact, Data Retention, Privacy Policy for NovaShare, Third-Party Services, What the App Accesses (and Why), What We Do NOT Do
 
 ### Community 5 - "App.jsx"
-Cohesion: 0.22
-Nodes (15): App(), AppIcon(), appIconCache, AppsPanel(), mapWithConcurrency(), NotifyDownload, rippleTap(), SwipeableFileRow() (+7 more)
+Cohesion: 0.23
+Nodes (13): App(), AppIcon(), appIconCache, AppsPanel(), NotifyDownload, rippleTap(), SwipeableFileRow(), getAppApkFile() (+5 more)
 
 ### Community 7 - "gradlew"
 Cohesion: 0.83
@@ -98,7 +96,7 @@ Cohesion: 0.40
 Nodes (3): Plugin, PluginCall, NotifyDownloadPlugin
 
 ### Community 10 - "InstalledAppsPlugin"
-Cohesion: 0.25
+Cohesion: 0.27
 Nodes (5): InstalledAppsPlugin, Plugin, PluginCall, Bitmap, Drawable
 
 ### Community 12 - "dependencies"
@@ -118,9 +116,9 @@ Nodes (3): Expanding the ESLint configuration, React Compiler, React + Vite
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `dependencies` connect `dependencies` to `package.json`?**
-  _High betweenness centrality (0.125) - this node is a cross-community bridge._
+  _High betweenness centrality (0.131) - this node is a cross-community bridge._
 - **Why does `devDependencies` connect `devDependencies` to `package.json`?**
-  _High betweenness centrality (0.100) - this node is a cross-community bridge._
+  _High betweenness centrality (0.104) - this node is a cross-community bridge._
 - **What connects `name`, `private`, `version` to the rest of the system?**
   _51 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `devDependencies` be split into smaller, more focused modules?**

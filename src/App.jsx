@@ -27,12 +27,15 @@ import {
   QrCode,
   Camera,
   Pause,
-  Play
+  Play,
+  Smartphone,
+  Search,
+  Check
 } from 'lucide-react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const NotifyDownload = registerPlugin('NotifyDownload');
-import { triggerHaptic } from './native';
+import { triggerHaptic, listInstalledApps, getAppIcon, getAppApkFile, clearApkCache } from './native';
 import './App.css';
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for P2P WebRTC
@@ -124,22 +127,29 @@ function SwipeableFileRow({ file, sizeLabel, onRemove }) {
     }
   };
 
+  const dragProgress = dragX < 0 ? Math.min(1, dragX / REMOVE_THRESHOLD) : 0;
+
   return (
     <div
       className="qitem"
       style={{
         transform: `translateX(${dragX}px)`,
-        opacity: dragX < REMOVE_THRESHOLD ? 0.5 : 1,
-        transition: dragging ? 'none' : 'transform 0.25s ease, opacity 0.25s ease'
+        opacity: 1 - dragProgress * 0.5,
+        borderColor: dragProgress > 0
+          ? `rgba(236, 72, 153, ${0.25 + dragProgress * 0.75})`
+          : undefined,
+        background: dragProgress > 0
+          ? `rgba(236, 72, 153, ${dragProgress * 0.22})`
+          : undefined,
+        transition: dragging ? 'none' : 'transform 0.25s ease'
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finishDrag}
       onPointerLeave={() => dragging && finishDrag()}
     >
-      <span className="qitem-remove-hint">Remove</span>
       <span className="dot" />
-      <span className="qname">{file.name}</span>
+      <span className="qname" style={{ color: dragProgress > 0 ? 'var(--accent-pink)' : undefined }}>{file.name}</span>
       <span className="qsize">{sizeLabel}</span>
       <button
         type="button"
@@ -149,6 +159,204 @@ function SwipeableFileRow({ file, sizeLabel, onRemove }) {
       >
         <X size={12} />
       </button>
+    </div>
+  );
+}
+
+// Module-scope cache so re-mounting the Apps tab doesn't refetch icons
+// already fetched over the native bridge this session.
+const appIconCache = new Map();
+
+function AppIcon({ packageName }) {
+  const [icon, setIcon] = useState(appIconCache.get(packageName) || null);
+
+  useEffect(() => {
+    if (icon) return;
+    let cancelled = false;
+    getAppIcon(packageName)
+      .then((src) => {
+        if (cancelled || !src) return;
+        appIconCache.set(packageName, src);
+        setIcon(src);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [packageName]);
+
+  return icon
+    ? <img src={icon} alt="" className="app-icon-img" />
+    : <div className="app-icon-fallback"><Smartphone size={18} /></div>;
+}
+
+// Runs `worker` over `items` with at most `limit` in flight at once, resolving
+// to results in original item order regardless of completion order.
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const lane = async () => {
+    while (nextIndex < items.length) {
+      const current = nextIndex++;
+      results[current] = await worker(items[current], current);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+  return results;
+}
+
+// Installed-apps browser for the "Apps" home tab: lists user-installed
+// packages (native bridge only), lets the user search and multi-select, and
+// hands back ready-to-send Files built from each APK's bytes so they drop
+// straight into the same selectedFiles queue the file dropzone uses.
+function AppsPanel({ onSelectApps, formatBytes }) {
+  const [apps, setApps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState(() => new Set());
+  const [preparing, setPreparing] = useState(null); // { index, total }
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    listInstalledApps()
+      .then((list) => {
+        if (cancelled) return;
+        setApps([...list].sort((a, b) => a.appName.localeCompare(b.appName)));
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || 'Could not load installed apps.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const filtered = query.trim()
+    ? apps.filter((a) =>
+        a.appName.toLowerCase().includes(query.toLowerCase()) ||
+        a.packageName.toLowerCase().includes(query.toLowerCase())
+      )
+    : apps;
+
+  const toggleSelected = (packageName) => {
+    if (preparing) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(packageName)) next.delete(packageName);
+      else next.add(packageName);
+      return next;
+    });
+  };
+
+  const handleShareSelected = async () => {
+    if (preparing || selected.size === 0) return;
+    const picked = apps.filter((a) => selected.has(a.packageName));
+    setError('');
+    let completed = 0;
+    setPreparing({ index: 0, total: picked.length });
+    try {
+      // A few APK cache-copy+fetch calls run concurrently — each is now a
+      // plain native file copy rather than a heavy base64 bridge payload, so
+      // parallelizing a handful at a time is safe and meaningfully faster
+      // than preparing them one at a time.
+      const files = await mapWithConcurrency(picked, 3, async (app) => {
+        const file = await getAppApkFile(app.packageName, app.appName, app.versionName);
+        completed += 1;
+        setPreparing({ index: completed, total: picked.length });
+        return file;
+      });
+      onSelectApps(files);
+    } catch (err) {
+      setError(err.message || 'Could not prepare the selected apps.');
+    } finally {
+      setPreparing(null);
+      clearApkCache();
+    }
+  };
+
+  if (!Capacitor.isNativePlatform()) {
+    return (
+      <div className="apps-empty-state">
+        <Smartphone size={28} />
+        <p>App sharing is only available in the installed NovaShare app.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="apps-panel">
+      <div className="input-group">
+        <div className="input-icon-wrapper"><Search size={16} /></div>
+        <input
+          type="text"
+          className="code-input"
+          placeholder="Search installed apps..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      {loading && (
+        <div className="apps-loading">
+          <RefreshCw size={22} className="connecting-spinner" />
+          <span>Loading installed apps&hellip;</span>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="qr-scanner-error"><AlertCircle size={16} /> {error}</div>
+      )}
+
+      {!loading && !error && filtered.length === 0 && (
+        <p className="dropzone-subtitle" style={{ textAlign: 'center' }}>
+          {apps.length === 0 ? 'No user-installed apps found.' : `No apps match "${query}".`}
+        </p>
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <div className="apps-list">
+          {filtered.map((app) => {
+            const isChecked = selected.has(app.packageName);
+            return (
+              <div
+                key={app.packageName}
+                className={`app-row ${isChecked ? 'checked' : ''}`}
+                onClick={() => toggleSelected(app.packageName)}
+              >
+                <span className={`app-checkbox ${isChecked ? 'checked' : ''}`}>
+                  {isChecked && <Check size={13} strokeWidth={3} />}
+                </span>
+                <AppIcon packageName={app.packageName} />
+                <div className="app-row-details">
+                  <span className="app-row-name">{app.appName}</span>
+                  <span className="app-row-pkg">
+                    {app.packageName}
+                    {app.versionName ? ` · v${app.versionName}` : ''} · {formatBytes(app.apkSize)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {selected.size > 0 && (
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={!!preparing}
+          onClick={(e) => rippleTap(e, handleShareSelected)}
+        >
+          {preparing
+            ? <><RefreshCw size={16} className="connecting-spinner" /> Preparing {preparing.index}/{preparing.total}&hellip;</>
+            : <><Share2 size={16} /> Share {selected.size} {selected.size === 1 ? 'App' : 'Apps'}</>}
+        </button>
+      )}
     </div>
   );
 }
@@ -191,7 +399,8 @@ function TransferRing({ progress, gradientId = 'ringGrad' }) {
 function App() {
   // Navigation & Mode States
   const [mode, setMode] = useState('home'); // 'home' | 'p2p-send' | 'p2p-receive'
-  
+  const [homeTab, setHomeTab] = useState('home'); // 'home' | 'apps'
+
   // File States
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [incomingFile, setIncomingFile] = useState(null); // { name, size, type }
@@ -349,6 +558,7 @@ function App() {
   const resetToHome = () => {
     cleanup();
     setMode('home');
+    setHomeTab('home');
     setTransferState('idle');
     setSelectedFiles([]);
     setIncomingFile(null);
@@ -933,11 +1143,42 @@ function App() {
           {/* VIEW: HOME VIEW                                      */}
           {/* ==================================================== */}
           {mode === 'home' && (
-            <div>
+            <div className={selectedFiles.length === 0 && homeTab === 'apps' ? 'home-view home-view-fill' : 'home-view'}>
               <div className="hero-text-center">
                 <h2 className="hero-title glow-text">Secure P2P File Sharing</h2>
                 <p className="hero-subtitle">Transfer files directly browser-to-browser. Encrypted, private, with zero size limits.</p>
               </div>
+
+              {/* TOP TAB SWITCHER: Home / Apps (hidden once a file is queued) */}
+              {selectedFiles.length === 0 && (
+                <div className="home-tab-switcher">
+                  <button
+                    type="button"
+                    className={`home-tab-btn ${homeTab === 'home' ? 'active' : ''}`}
+                    onClick={() => setHomeTab('home')}
+                  >
+                    Home
+                  </button>
+                  <button
+                    type="button"
+                    className={`home-tab-btn ${homeTab === 'apps' ? 'active' : ''}`}
+                    onClick={() => setHomeTab('apps')}
+                  >
+                    Apps
+                  </button>
+                </div>
+              )}
+
+              {selectedFiles.length === 0 && homeTab === 'apps' ? (
+                <AppsPanel
+                  formatBytes={formatBytes}
+                  onSelectApps={(files) => {
+                    setSelectedFiles((prev) => [...prev, ...files]);
+                    setHomeTab('home');
+                  }}
+                />
+              ) : (
+              <>
 
               {/* FILE DROP ZONE (IF NO FILES SELECTED) */}
               {selectedFiles.length === 0 ? (
@@ -1077,6 +1318,9 @@ function App() {
                     <canvas ref={scanCanvasRef} style={{ display: 'none' }} />
                   </div>
                 </div>
+              )}
+
+              </>
               )}
 
             </div>

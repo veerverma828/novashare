@@ -91,17 +91,23 @@
 
 /* Main Content Area */
 .app-main {
-  flex-grow: 1;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 0.5rem 0; /* Centered, minimal padding to save vertical space */
+  justify-content: flex-start;
+  padding: 0.5rem 0;
 }
 
 .share-card {
   width: 100%;
   max-width: 490px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding: 1.5rem; /* Compressed padding for compact height */
   background: rgba(15, 23, 42, 0.45);
   backdrop-filter: blur(24px);
@@ -127,6 +133,7 @@
 .hero-text-center {
   text-align: center;
   margin-bottom: 1.5rem;
+  flex-shrink: 0;
 }
 
 .hero-title {
@@ -353,6 +360,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 .input-group .code-input {
@@ -1064,26 +1072,6 @@ button:disabled {
   cursor: grab;
 }
 
-.qitem-remove-hint {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-right: 1rem;
-  color: var(--accent-pink);
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: rgba(236, 72, 153, 0.1);
-  border-radius: 12px;
-  z-index: 0;
-}
-
-.qitem > *:not(.qitem-remove-hint) {
-  position: relative;
-  z-index: 1;
-}
-
 .qitem .dot {
   width: 8px;
   height: 8px;
@@ -1501,4 +1489,174 @@ button:disabled {
 
 .qr-zoom-link svg {
   flex-shrink: 0;
+}
+
+/* Home / Apps top tab switcher */
+.home-tab-switcher {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.4rem;
+  background: rgba(8, 12, 20, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.3rem;
+  margin: 0 0 1.5rem;
+}
+
+.home-tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.55rem 0.75rem;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.home-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.home-tab-btn.active {
+  background: linear-gradient(135deg, var(--accent-purple) 0%, #7c3aed 100%);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.3);
+}
+
+/* When the Apps tab is active, the home view fills the card height so the
+   apps list (below) can scroll independently instead of the whole page
+   scrolling with a separately height-capped list inside it. */
+.home-view-fill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Apps tab: installed-apps browser */
+.apps-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.apps-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 2rem 0;
+}
+
+.apps-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2.5rem 1rem;
+}
+
+.apps-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-y: auto;
+  padding-bottom: 0.25rem;
+}
+
+.app-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.6rem 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.app-row:hover {
+  background: rgba(30, 41, 59, 0.65);
+  border-color: var(--accent-purple);
+}
+
+.app-row.checked {
+  background: rgba(139, 92, 246, 0.14);
+  border-color: var(--accent-purple);
+}
+
+.app-checkbox {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  transition: all 0.15s ease;
+}
+
+.app-checkbox.checked {
+  background: linear-gradient(135deg, var(--accent-purple) 0%, #7c3aed 100%);
+  border-color: var(--accent-purple);
+}
+
+.app-icon-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.app-icon-fallback {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-purple);
+}
+
+.app-row-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-row-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-row-pkg {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
