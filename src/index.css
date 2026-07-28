@@ -52,6 +52,32 @@ html {
   display: none;
 }
 
+/* ...except the scrollable file/app lists — a slim thumb here is a useful
+   "there's more below" signal, not just visual noise */
+.native-app .queue,
+.native-app .apps-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-purple) transparent;
+}
+.native-app .queue::-webkit-scrollbar,
+.native-app .apps-list::-webkit-scrollbar {
+  display: block;
+  width: 4px;
+}
+.native-app .queue::-webkit-scrollbar-track,
+.native-app .apps-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.native-app .queue::-webkit-scrollbar-thumb,
+.native-app .apps-list::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.5);
+  border-radius: 999px;
+}
+.native-app .queue::-webkit-scrollbar-thumb:hover,
+.native-app .apps-list::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-cyan);
+}
+
 /* Native app shell: no page-level scroll/bounce, but allow content taller
    than the viewport to scroll internally so nothing gets clipped */
 .native-app,
