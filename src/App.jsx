@@ -3,8 +3,6 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { createPortal } from 'react-dom';
 import Peer from 'peerjs';
 import { QRCodeSVG } from 'qrcode.react';
-import jsQR from 'jsqr';
-import confetti from 'canvas-confetti';
 import {
   Share2,
   Download,
@@ -956,7 +954,7 @@ function App() {
       updateAggregateStats();
       if (connsRef.current.length > 0 && connsRef.current.every((p) => p.queueIndex >= files.length)) {
         setTransferState('complete');
-        confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+        import('canvas-confetti').then(({ default: confetti }) => confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } }));
         showToast('Transfer completed!', 'success');
       }
       return;
@@ -1136,11 +1134,11 @@ function App() {
       }
     } else if (data.type === 'batch-complete') {
       setTransferState('complete');
-      confetti({
+      import('canvas-confetti').then(({ default: confetti }) => confetti({
         particleCount: 80,
         spread: 60,
         origin: { y: 0.6 }
-      });
+      }));
       showToast('Transfer completed!', 'success');
     }
   };
@@ -1314,6 +1312,7 @@ function App() {
     setCameraReady(false);
     setShowScanner(true);
     try {
+      const { default: jsQR } = await import('jsqr');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' }
       });
