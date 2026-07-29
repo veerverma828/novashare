@@ -1399,7 +1399,7 @@ function App() {
 
       {/* TOAST POPUP */}
       {toast && (
-        <div className="fixed bottom-8 right-8 max-[640px]:left-4 max-[640px]:right-4 max-[640px]:bottom-4 bg-[rgba(15,23,42,0.9)] backdrop-blur-md border border-accent-purple rounded-[14px] px-6 py-4 flex items-center gap-3 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(139,92,246,0.2)] z-[9999] animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
+        <div className="fixed bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1.5rem))] right-8 max-[640px]:left-4 max-[640px]:right-4 bg-[rgba(15,23,42,0.9)] backdrop-blur-md border border-accent-purple rounded-[14px] px-6 py-4 flex items-center gap-3 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(139,92,246,0.2)] z-[9999] animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
           {toast.type === 'success' && <ShieldCheck size={20} className="text-accent-green" />}
           {toast.type === 'error' && <AlertCircle size={20} className="text-accent-pink" />}
           {toast.type === 'info' && <Info size={20} className="text-accent-cyan" />}
@@ -1409,7 +1409,7 @@ function App() {
 
       {/* MAIN LAYOUT CONTAINER */}
       <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2">
-        <div className="w-full max-w-[490px] flex-1 min-h-0 flex flex-col justify-center p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(139,92,246,0.04)] transition-[border-color,box-shadow] duration-300 hover:border-[rgba(139,92,246,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(139,92,246,0.08)]">
+        <div className="w-full max-w-[490px] flex-1 min-h-0 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(139,92,246,0.04)] transition-[border-color,box-shadow] duration-300 hover:border-[rgba(139,92,246,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(139,92,246,0.08)]">
 
           {/* ==================================================== */}
           {/* VIEW: HOME VIEW                                      */}
@@ -1669,17 +1669,15 @@ function App() {
 
               {/* Preparing: negotiating a room code with the signaling server */}
               {transferState === 'preparing' && (
-                <>
-                  <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem] mb-4 font-medium text-center">
+                <div className="flex flex-col items-center gap-6 w-full">
+                  <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem] font-medium text-center">
                     Setting up your P2P sharing room&hellip;
                   </p>
-                  <div className="flex items-center justify-center py-10 pb-6">
-                    <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
-                  </div>
-                  <p className="text-[0.85rem] text-text-muted max-w-[280px] text-center mx-auto mt-3">
+                  <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
+                  <p className="text-[0.85rem] text-text-muted max-w-[280px] text-center mx-auto">
                     Reaching the signaling server to allocate your room code. This can take a moment on a slow connection.
                   </p>
-                </>
+                </div>
               )}
 
               {/* Waiting for connection */}
