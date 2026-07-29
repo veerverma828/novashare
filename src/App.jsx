@@ -49,10 +49,15 @@ import {
   pushTransferNotification,
   stopTransferNotification
 } from './native';
-import './App.css';
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for P2P WebRTC
 const FLAP_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+// Reusable Tailwind class strings for the two button variants used all over
+// the app — kept as constants instead of @apply so JSX stays the source of
+// truth for styling, while avoiding retyping this string 30+ times.
+const BTN_PRIMARY = 'relative overflow-hidden flex items-center justify-center gap-2 bg-gradient-to-br from-accent-purple to-[#7c3aed] text-white border-0 font-heading text-[0.95rem] font-semibold py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 shadow-[0_4px_12px_rgba(124,58,237,0.25)] hover:-translate-y-px hover:shadow-[0_6px_18px_rgba(124,58,237,0.4)] hover:from-[#9061f9] hover:to-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed';
+const BTN_SECONDARY = 'relative overflow-hidden flex items-center justify-center gap-2 bg-transparent border border-border text-text-primary font-heading text-[0.95rem] font-medium py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Spawns a ripple span inside whatever element was tapped, and gives it a
 // light haptic tick on-device. Purely a feedback layer; never blocks the
@@ -100,9 +105,9 @@ function RoomCodeFlap({ code }) {
   }, [code]);
 
   return (
-    <div className="signal-code-digits">
+    <div className="flex gap-[0.3rem] font-[Georgia,serif] text-[1.1rem] max-[380px]:text-[0.95rem] tracking-[0.02em] text-accent-cyan [font-variant-numeric:lining-nums_tabular-nums]">
       {display.map((ch, i) => (
-        <span key={i} className="flap-digit">{ch}</span>
+        <span key={i} className="bg-[rgba(6,182,212,0.08)] rounded-md px-[0.4rem] py-[0.1rem] [font-variant-numeric:tabular-nums]">{ch}</span>
       ))}
     </div>
   );
@@ -144,7 +149,7 @@ function SwipeableFileRow({ file, sizeLabel, onRemove }) {
 
   return (
     <div
-      className="qitem"
+      className="relative flex items-center gap-[0.7rem] bg-[rgba(30,41,59,0.5)] border border-border rounded-xl py-[0.65rem] px-[0.8rem] [touch-action:pan-y] cursor-grab"
       style={{
         transform: `translateX(${dragX}px)`,
         opacity: 1 - dragProgress * 0.5,
@@ -161,12 +166,12 @@ function SwipeableFileRow({ file, sizeLabel, onRemove }) {
       onPointerUp={finishDrag}
       onPointerLeave={() => dragging && finishDrag()}
     >
-      <span className="dot" />
-      <span className="qname" style={{ color: dragProgress > 0 ? 'var(--accent-pink)' : undefined }}>{file.name}</span>
-      <span className="qsize">{sizeLabel}</span>
+      <span className="w-2 h-2 rounded-full bg-accent-purple shadow-[0_0_6px_var(--color-accent-purple)] flex-shrink-0" />
+      <span className="text-[0.85rem] text-text-primary flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: dragProgress > 0 ? 'var(--color-accent-pink)' : undefined }}>{file.name}</span>
+      <span className="text-[0.72rem] text-text-muted flex-shrink-0">{sizeLabel}</span>
       <button
         type="button"
-        className="qx"
+        className="relative overflow-hidden w-[22px] h-[22px] rounded-full bg-[rgba(236,72,153,0.15)] text-accent-pink border-0 flex items-center justify-center flex-shrink-0 cursor-pointer"
         onClick={(e) => { e.stopPropagation(); rippleTap(e, onRemove); }}
         aria-label={`Remove ${file.name}`}
       >
@@ -197,8 +202,8 @@ function AppIcon({ packageName }) {
   }, [packageName]);
 
   return icon
-    ? <img src={icon} alt="" className="app-icon-img" />
-    : <div className="app-icon-fallback"><Smartphone size={18} /></div>;
+    ? <img src={icon} alt="" className="w-9 h-9 rounded-[9px] flex-shrink-0 object-cover" />
+    : <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(139,92,246,0.15)] text-accent-purple"><Smartphone size={18} /></div>;
 }
 
 // Runs `worker` over `items` with at most `limit` in flight at once, resolving
@@ -294,7 +299,7 @@ function AppsPanel({ onSelectApps, formatBytes }) {
 
   if (!Capacitor.isNativePlatform()) {
     return (
-      <div className="apps-empty-state">
+      <div className="flex flex-col items-center gap-3 text-text-muted text-center px-4 py-10">
         <Smartphone size={28} />
         <p>App sharing is only available in the installed NovaShare app.</p>
       </div>
@@ -302,12 +307,12 @@ function AppsPanel({ onSelectApps, formatBytes }) {
   }
 
   return (
-    <div className="apps-panel">
-      <div className="input-group">
-        <div className="input-icon-wrapper"><Search size={16} /></div>
+    <div className="apps-panel flex-1 min-h-0 flex flex-col gap-4">
+      <div className="relative flex items-center gap-[0.4rem] flex-shrink-0">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center"><Search size={16} /></div>
         <input
           type="text"
-          className="code-input"
+          className="flex-1 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(139,92,246,0.12)]"
           placeholder="Search installed apps..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -315,39 +320,39 @@ function AppsPanel({ onSelectApps, formatBytes }) {
       </div>
 
       {loading && (
-        <div className="apps-loading">
-          <RefreshCw size={22} className="connecting-spinner" />
+        <div className="flex items-center justify-center gap-[0.6rem] text-text-muted text-[0.85rem] py-8">
+          <RefreshCw size={22} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
           <span>Loading installed apps&hellip;</span>
         </div>
       )}
 
       {!loading && error && (
-        <div className="qr-scanner-error"><AlertCircle size={16} /> {error}</div>
+        <div className="flex items-center gap-2 text-text-secondary text-[0.9rem] px-2 py-8 text-center justify-center"><AlertCircle size={16} /> {error}</div>
       )}
 
       {!loading && !error && filtered.length === 0 && (
-        <p className="dropzone-subtitle" style={{ textAlign: 'center' }}>
+        <p className="text-[0.85rem] text-text-muted text-center">
           {apps.length === 0 ? 'No user-installed apps found.' : `No apps match "${query}".`}
         </p>
       )}
 
       {!loading && filtered.length > 0 && (
-        <div className="apps-list">
+        <div className="apps-list flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pb-1 pr-[0.4rem]">
           {filtered.map((app) => {
             const isChecked = selected.has(app.packageName);
             return (
               <div
                 key={app.packageName}
-                className={`app-row ${isChecked ? 'checked' : ''}`}
+                className={`flex items-center gap-3 rounded-xl py-[0.6rem] px-[0.8rem] cursor-pointer transition-[background-color,border-color] duration-150 ease-linear border ${isChecked ? 'bg-[rgba(139,92,246,0.14)] border-accent-purple' : 'bg-[rgba(30,41,59,0.4)] border-border hover:bg-[rgba(30,41,59,0.65)] hover:border-accent-purple'}`}
                 onClick={() => toggleSelected(app.packageName)}
               >
-                <span className={`app-checkbox ${isChecked ? 'checked' : ''}`}>
+                <span className={`w-5 h-5 flex-shrink-0 rounded-md border-[1.5px] flex items-center justify-center text-white transition-all duration-150 ${isChecked ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] border-accent-purple' : 'border-border'}`}>
                   {isChecked && <Check size={13} strokeWidth={3} />}
                 </span>
                 <AppIcon packageName={app.packageName} />
-                <div className="app-row-details">
-                  <span className="app-row-name">{app.appName}</span>
-                  <span className="app-row-pkg">
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <span className="text-[0.88rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{app.appName}</span>
+                  <span className="text-[0.72rem] text-text-muted whitespace-nowrap overflow-hidden text-ellipsis">
                     {app.packageName}
                     {app.versionName ? ` · v${app.versionName}` : ''} · {formatBytes(app.apkSize)}
                   </span>
@@ -361,12 +366,12 @@ function AppsPanel({ onSelectApps, formatBytes }) {
       {selected.size > 0 && (
         <button
           type="button"
-          className="btn-primary"
+          className={BTN_PRIMARY}
           disabled={!!preparing}
           onClick={(e) => rippleTap(e, handleShareSelected)}
         >
           {preparing
-            ? <><RefreshCw size={16} className="connecting-spinner" /> Preparing {preparing.index}/{preparing.total}&hellip;</>
+            ? <><RefreshCw size={16} className="animate-[spin_1.1s_linear_infinite]" /> Preparing {preparing.index}/{preparing.total}&hellip;</>
             : <><Share2 size={16} /> Share {selected.size} {selected.size === 1 ? 'App' : 'Apps'}</>}
         </button>
       )}
@@ -383,7 +388,7 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 function TransferRing({ progress, gradientId = 'ringGrad' }) {
   const offset = RING_CIRCUMFERENCE - (Math.min(100, Math.max(0, progress)) / 100) * RING_CIRCUMFERENCE;
   return (
-    <svg className="ring" viewBox="0 0 120 120" role="img" aria-label={`Transfer ${Math.round(progress)}% complete`}>
+    <svg className="w-[130px] h-[130px]" viewBox="0 0 120 120" role="img" aria-label={`Transfer ${Math.round(progress)}% complete`}>
       <circle cx="60" cy="60" r={RING_RADIUS} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
       <circle
         cx="60"
@@ -396,15 +401,15 @@ function TransferRing({ progress, gradientId = 'ringGrad' }) {
         strokeDasharray={RING_CIRCUMFERENCE}
         strokeDashoffset={offset}
         transform="rotate(-90 60 60)"
-        className="ring-fill"
+        className="transition-[stroke-dashoffset] duration-200 ease-out"
       />
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="var(--accent-purple)" />
-          <stop offset="100%" stopColor="var(--accent-cyan)" />
+          <stop offset="0%" stopColor="var(--color-accent-purple)" />
+          <stop offset="100%" stopColor="var(--color-accent-cyan)" />
         </linearGradient>
       </defs>
-      <text x="60" y="66" textAnchor="middle" className="ring-pct">{Math.round(progress)}%</text>
+      <text x="60" y="66" textAnchor="middle" className="font-heading text-[1.35rem] font-bold fill-text-primary [font-variant-numeric:tabular-nums]">{Math.round(progress)}%</text>
     </svg>
   );
 }
@@ -633,7 +638,7 @@ function App() {
           files.length > 1 ? `${files.length} shared files ready to send` : `${files[0].name} ready to send`,
           'success'
         );
-      } catch (err) {
+      } catch {
         if (!cancelled) showToast('Could not load a shared file.', 'error');
       }
     };
@@ -648,15 +653,15 @@ function App() {
   }, []);
 
   // Cleanup active peer/connections
-  const cleanup = () => {
+  function cleanup() {
     if (connRef.current) {
-      try { connRef.current.close(); } catch(e){}
+      try { connRef.current.close(); } catch { /* ignore */ }
       connRef.current = null;
     }
-    connsRef.current.forEach((p) => { try { p.conn.close(); } catch (e) {} });
+    connsRef.current.forEach((p) => { try { p.conn.close(); } catch { /* ignore */ } });
     connsRef.current = [];
     if (peerRef.current) {
-      try { peerRef.current.destroy(); } catch(e){}
+      try { peerRef.current.destroy(); } catch { /* ignore */ }
       peerRef.current = null;
     }
     receivedChunks.current = [];
@@ -669,10 +674,10 @@ function App() {
     receivedFilesRef.current = [];
     isPausedRef.current = false;
     notifyThrottleRef.current = 0;
-  };
+  }
 
   // Reset UI back to Home State
-  const resetToHome = () => {
+  function resetToHome() {
     cleanup();
     setMode('home');
     setHomeTab('home');
@@ -696,7 +701,7 @@ function App() {
 
     // Clear URL search params without page reload
     window.history.pushState({}, document.title, window.location.pathname);
-  };
+  }
 
   // Toggle pause/resume of an in-progress send (sender-side control) —
   // broadcasts to every connected receiver, not just one.
@@ -705,7 +710,7 @@ function App() {
     isPausedRef.current = next;
     setIsPaused(next);
     connsRef.current.forEach((p) => {
-      try { p.conn.send({ type: 'control', action: next ? 'pause' : 'resume' }); } catch (e) {}
+      try { p.conn.send({ type: 'control', action: next ? 'pause' : 'resume' }); } catch { /* ignore */ }
     });
     if (!next) {
       connsRef.current.forEach((p) => {
@@ -817,7 +822,7 @@ function App() {
         // Broadcast mode: the room stays open to more receivers up to a cap,
         // rather than rejecting everyone after the first connects.
         if (connsRef.current.length >= MAX_RECEIVERS) {
-          try { conn.send({ type: 'room-full' }); } catch (e) {}
+          try { conn.send({ type: 'room-full' }); } catch { /* ignore */ }
           conn.close();
           return;
         }
@@ -947,7 +952,7 @@ function App() {
     const files = sendQueueRef.current;
 
     if (idx >= files.length) {
-      try { peerState.conn.send({ type: 'batch-complete' }); } catch (e) {}
+      try { peerState.conn.send({ type: 'batch-complete' }); } catch { /* ignore */ }
       updateAggregateStats();
       if (connsRef.current.length > 0 && connsRef.current.every((p) => p.queueIndex >= files.length)) {
         setTransferState('complete');
@@ -967,7 +972,7 @@ function App() {
         fileIndex: idx,
         totalFiles: files.length
       });
-    } catch (e) {
+    } catch {
       return;
     }
 
@@ -1047,7 +1052,7 @@ function App() {
   // ----------------------------------------------------
   const MAX_RECONNECT_ATTEMPTS = 3;
 
-  const startP2PReceive = (roomCodeInput) => {
+  function startP2PReceive(roomCodeInput) {
     const code = roomCodeInput || targetPeerId;
     if (!code) {
       showToast('Please enter a valid room code.', 'error');
@@ -1062,7 +1067,7 @@ function App() {
     currentFileIndexRef.current = 0;
 
     connectToSender(code, false);
-  };
+  }
 
   // Handles every 'data' message from the sender — shared by the initial
   // connection and any resumed reconnection, since a resume just continues
@@ -1341,7 +1346,7 @@ function App() {
         scanRafRef.current = requestAnimationFrame(tick);
       };
       scanRafRef.current = requestAnimationFrame(tick);
-    } catch (err) {
+    } catch {
       setScannerError('Camera access denied or unavailable.');
     }
   };
@@ -1354,7 +1359,7 @@ function App() {
   // Helper file icon component inside local scope
   const renderFileIconComponent = (fileName) => {
     const type = getFileType(fileName);
-    const wrapperClass = "file-icon-wrapper";
+    const wrapperClass = "w-12 h-12 rounded-xl bg-[rgba(6,182,212,0.15)] flex items-center justify-center text-accent-cyan";
     switch (type) {
       case 'image': return <div className={wrapperClass}><FileImage size={24} /></div>;
       case 'video': return <div className={wrapperClass}><FileVideo size={24} /></div>;
@@ -1367,18 +1372,27 @@ function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className="max-w-[1200px] w-full min-h-0 flex-1 mx-auto flex flex-col justify-start overflow-x-hidden gap-3 max-[640px]:gap-2 p-5 max-[640px]:p-3 max-[380px]:p-2 pt-[max(1.25rem,env(safe-area-inset-top))] max-[640px]:pt-[max(0.75rem,env(safe-area-inset-top))] max-[380px]:pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] max-[640px]:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-[380px]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {/* HEADER */}
-      <header className="app-header">
-        <div className="logo-container" onClick={resetToHome} style={{cursor: 'pointer'}}>
-          <Zap size={32} className="logo-icon" fill="currentColor" />
-          <h1 className="logo-text">NovaShare</h1>
-          <span className="badge" style={{color: 'var(--accent-purple)', borderColor: 'rgba(139, 92, 246, 0.3)'}}>
+      <header className="flex items-center justify-between border-b border-border pb-5 max-[640px]:pb-3 max-[640px]:gap-2">
+        <div className="flex items-center gap-3 cursor-pointer" onClick={resetToHome}>
+          <Zap
+            size={32}
+            className="text-accent-purple drop-shadow-[0_0_8px_rgba(139,92,246,0.5)] w-8 h-8 max-[640px]:w-6 max-[640px]:h-6"
+            fill="currentColor"
+          />
+          <h1 className="text-[1.75rem] max-[640px]:text-[1.4rem] max-[380px]:text-[1.15rem] font-heading bg-[linear-gradient(135deg,#fff_30%,var(--color-accent-cyan)_100%)] bg-clip-text text-transparent">
+            NovaShare
+          </h1>
+          <span className="bg-bg-tertiary border border-[rgba(139,92,246,0.3)] text-accent-purple px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase max-[640px]:px-2 max-[640px]:py-[0.15rem] max-[640px]:text-[0.65rem] max-[380px]:hidden">
             Direct P2P
           </span>
         </div>
         <div>
-          <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)} style={{padding: '0.5rem 1rem', borderRadius: '10px', fontSize: '0.85rem'}}>
+          <button
+            className="relative overflow-hidden flex items-center justify-center gap-2 bg-transparent border border-border text-text-primary font-heading font-medium py-2 px-4 rounded-[10px] text-[0.85rem] cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={(e) => rippleTap(e, resetToHome)}
+          >
             Reset
           </button>
         </div>
@@ -1386,41 +1400,41 @@ function App() {
 
       {/* TOAST POPUP */}
       {toast && (
-        <div className="toast">
-          {toast.type === 'success' && <ShieldCheck size={20} style={{color: 'var(--accent-green)'}} />}
-          {toast.type === 'error' && <AlertCircle size={20} style={{color: 'var(--accent-pink)'}} />}
-          {toast.type === 'info' && <Info size={20} style={{color: 'var(--accent-cyan)'}} />}
+        <div className="fixed bottom-8 right-8 max-[640px]:left-4 max-[640px]:right-4 max-[640px]:bottom-4 bg-[rgba(15,23,42,0.9)] backdrop-blur-md border border-accent-purple rounded-[14px] px-6 py-4 flex items-center gap-3 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(139,92,246,0.2)] z-[9999] animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
+          {toast.type === 'success' && <ShieldCheck size={20} className="text-accent-green" />}
+          {toast.type === 'error' && <AlertCircle size={20} className="text-accent-pink" />}
+          {toast.type === 'info' && <Info size={20} className="text-accent-cyan" />}
           <span>{toast.message}</span>
         </div>
       )}
 
       {/* MAIN LAYOUT CONTAINER */}
-      <main className="app-main">
-        <div className="glass-panel share-card">
+      <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2">
+        <div className="w-full max-w-[490px] flex-1 min-h-0 flex flex-col justify-center p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(139,92,246,0.04)] transition-[border-color,box-shadow] duration-300 hover:border-[rgba(139,92,246,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(139,92,246,0.08)]">
 
           {/* ==================================================== */}
           {/* VIEW: HOME VIEW                                      */}
           {/* ==================================================== */}
           {mode === 'home' && (
-            <div className={selectedFiles.length === 0 && homeTab === 'apps' ? 'home-view home-view-fill' : 'home-view'}>
-              <div className="hero-text-center">
-                <h2 className="hero-title glow-text">Secure P2P File Sharing</h2>
-                <p className="hero-subtitle">Transfer files directly browser-to-browser. Encrypted, private, with zero size limits.</p>
+            <div className="flex-1 min-h-0 flex flex-col w-full">
+              <div className="text-center mb-6 flex-shrink-0">
+                <h2 className="text-[1.85rem] max-[640px]:text-2xl max-[380px]:text-[1.3rem] leading-[1.2] mb-2 font-bold glow-text">Secure P2P File Sharing</h2>
+                <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem]">Transfer files directly browser-to-browser. Encrypted, private, with zero size limits.</p>
               </div>
 
               {/* TOP TAB SWITCHER: Home / Apps (hidden once a file is queued) */}
               {selectedFiles.length === 0 && (
-                <div className="home-tab-switcher">
+                <div className="flex flex-shrink-0 gap-[0.4rem] bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-[0.3rem] mb-6">
                   <button
                     type="button"
-                    className={`home-tab-btn ${homeTab === 'home' ? 'active' : ''}`}
+                    className={`flex-1 bg-transparent border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'home' ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] text-white shadow-[0_2px_10px_rgba(124,58,237,0.3)]' : 'text-text-muted hover:text-text-primary'}`}
                     onClick={() => setHomeTab('home')}
                   >
                     Home
                   </button>
                   <button
                     type="button"
-                    className={`home-tab-btn ${homeTab === 'apps' ? 'active' : ''}`}
+                    className={`flex-1 bg-transparent border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'apps' ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] text-white shadow-[0_2px_10px_rgba(124,58,237,0.3)]' : 'text-text-muted hover:text-text-primary'}`}
                     onClick={() => setHomeTab('apps')}
                   >
                     Apps
@@ -1442,7 +1456,7 @@ function App() {
               {/* FILE DROP ZONE (IF NO FILES SELECTED) */}
               {selectedFiles.length === 0 ? (
                 <div
-                  className={`dropzone ${dragActive ? 'drag-active' : ''}`}
+                  className={`group border-2 border-dashed rounded-[18px] px-6 py-10 max-[640px]:py-8 max-[640px]:px-4 max-[380px]:py-6 max-[380px]:px-3 text-center cursor-pointer bg-[rgba(15,23,42,0.25)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden ${dragActive ? 'border-accent-cyan bg-[rgba(6,182,212,0.04)] shadow-[0_0_25px_rgba(6,182,212,0.12)]' : 'border-[rgba(139,92,246,0.25)] hover:border-accent-cyan hover:bg-[rgba(6,182,212,0.04)] hover:shadow-[0_0_25px_rgba(6,182,212,0.12)]'}`}
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
                   onDragLeave={handleDrag}
@@ -1451,45 +1465,45 @@ function App() {
                 >
                   <input
                     type="file"
-                    className="file-input"
+                    className="hidden"
                     ref={fileInputRef}
                     onChange={handleFileSelect}
                     multiple
                   />
-                  <div className="dropzone-content">
-                    <div className="upload-icon-wrapper">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className={`w-14 h-14 rounded-[14px] flex items-center justify-center transition-all duration-300 ${dragActive ? 'bg-[rgba(6,182,212,0.15)] text-accent-cyan -translate-y-1' : 'bg-[rgba(139,92,246,0.08)] text-accent-purple group-hover:bg-[rgba(6,182,212,0.15)] group-hover:text-accent-cyan group-hover:-translate-y-1'}`}>
                       <UploadCloud size={32} />
                     </div>
                     <div>
-                      <h3 className="dropzone-title">Drag & drop your files here</h3>
-                      <p className="dropzone-subtitle">or click to browse files from your device</p>
+                      <h3 className="text-[1.15rem] max-[380px]:text-base font-medium text-text-primary">Drag & drop your files here</h3>
+                      <p className="text-[0.85rem] text-text-muted">or click to browse files from your device</p>
                     </div>
-                    <span className="badge" style={{color: 'var(--accent-purple)', borderColor: 'rgba(139, 92, 246, 0.3)'}}>
+                    <span className="bg-bg-tertiary border border-[rgba(139,92,246,0.3)] text-accent-purple px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase max-[640px]:px-2 max-[640px]:py-[0.15rem] max-[640px]:text-[0.65rem]">
                       No File Size Limits
                     </span>
                   </div>
                 </div>
               ) : (
                 /* FILES SELECTED STATE CARD */
-                <div>
+                <div className="flex-1 min-h-0 flex flex-col">
                   {selectedFiles.length === 1 ? (
-                    <div className="file-card">
+                    <div className="flex items-center gap-4 bg-[rgba(30,41,59,0.4)] border border-border rounded-2xl p-5 mb-8 max-[380px]:px-3 max-[380px]:py-4 max-[380px]:gap-3">
                       {renderFileIconComponent(selectedFiles[0].name)}
-                      <div className="file-details">
-                        <h4 className="file-name">{selectedFiles[0].name}</h4>
-                        <p className="file-size">{formatBytes(selectedFiles[0].size)}</p>
+                      <div className="flex-grow min-w-0">
+                        <h4 className="text-[0.95rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{selectedFiles[0].name}</h4>
+                        <p className="text-[0.8rem] text-text-secondary">{formatBytes(selectedFiles[0].size)}</p>
                       </div>
-                      <button className="remove-file-btn" onClick={() => setSelectedFiles([])}>
+                      <button className="bg-transparent border-0 text-text-muted cursor-pointer p-1 rounded-md transition-all duration-200 hover:text-accent-pink hover:bg-[rgba(236,72,153,0.15)]" onClick={() => setSelectedFiles([])}>
                         <X size={18} />
                       </button>
                     </div>
                   ) : (
-                    <div>
-                      <div className="queue-header">
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      <div className="flex justify-between items-baseline gap-2 text-[0.8rem] text-text-secondary mb-3 flex-wrap flex-shrink-0">
                         <span>{selectedFiles.length} files selected &middot; {formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))} total</span>
-                        <span className="queue-hint">swipe or tap &times; to drop a file</span>
+                        <span className="text-[0.72rem] text-text-muted">swipe or tap &times; to drop a file</span>
                       </div>
-                      <div className="queue">
+                      <div className="queue flex-1 min-h-[80px] flex flex-col gap-[0.6rem] mb-6 overflow-y-auto p-3 pr-[0.6rem] rounded-2xl border border-border bg-[rgba(8,12,20,0.25)]">
                         {selectedFiles.map((f, i) => (
                           <SwipeableFileRow
                             key={`${f.name}-${f.size}-${i}`}
@@ -1502,40 +1516,40 @@ function App() {
                     </div>
                   )}
 
-                  <div className="add-more-row">
-                    <button className="btn-secondary" onClick={(e) => rippleTap(e, triggerFileInput)}>
+                  <div className="flex flex-row gap-3 mb-3 flex-shrink-0">
+                    <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, triggerFileInput)}>
                       <UploadCloud size={16} /> Add Files
                     </button>
-                    <button className="btn-secondary" onClick={(e) => rippleTap(e, () => setShowAddApps(true))}>
+                    <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, () => setShowAddApps(true))}>
                       <Smartphone size={16} /> Add Apps
                     </button>
                   </div>
                   <input
                     type="file"
-                    className="file-input"
+                    className="hidden"
                     ref={fileInputRef}
                     onChange={handleFileSelect}
                     multiple
                   />
 
-                  <div className="action-buttons">
-                    <button className="btn-primary" onClick={(e) => rippleTap(e, startP2PSend)}>
+                  <div className="flex flex-col gap-3 flex-shrink-0">
+                    <button className={BTN_PRIMARY} onClick={(e) => rippleTap(e, startP2PSend)}>
                       <Zap size={18} /> Start P2P Sharing Room
                     </button>
-                    <button className="btn-secondary" onClick={(e) => rippleTap(e, () => setSelectedFiles([]))}>
+                    <button className={BTN_SECONDARY} onClick={(e) => rippleTap(e, () => setSelectedFiles([]))}>
                       Cancel Selection
                     </button>
                   </div>
 
                   {/* ADD APPS MODAL: append more apps to the existing queue */}
                   {showAddApps && (
-                    <div className="qr-scanner-overlay" onClick={(e) => rippleTap(e, () => setShowAddApps(false))}>
-                      <div className="qr-scanner-panel" onClick={(e) => e.stopPropagation()}>
-                        <div className="qr-scanner-header">
-                          <span style={{display: 'flex', alignItems: 'center', gap: '0.4rem'}}>
+                    <div className="fixed inset-0 bg-[rgba(4,6,12,0.85)] backdrop-blur-sm flex items-center justify-center z-[1000] p-5" onClick={(e) => rippleTap(e, () => setShowAddApps(false))}>
+                      <div className="bg-bg-secondary border border-border rounded-[20px] p-4 w-full max-w-[360px] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_8px_10px_-6px_rgba(0,0,0,0.3)] has-[.apps-panel]:max-h-[80vh] has-[.apps-panel]:flex has-[.apps-panel]:flex-col" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-3 font-heading font-semibold">
+                          <span className="flex items-center gap-[0.4rem]">
                             <Smartphone size={16} /> Add Apps to Queue
                           </span>
-                          <button className="btn-icon-copy" onClick={(e) => rippleTap(e, () => setShowAddApps(false))} title="Close">
+                          <button className="relative overflow-hidden bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-[0.4rem] rounded-md transition-all duration-200 hover:bg-white/5 hover:text-text-primary" onClick={(e) => rippleTap(e, () => setShowAddApps(false))} title="Close">
                             <X size={18} />
                           </button>
                         </div>
@@ -1555,25 +1569,29 @@ function App() {
               {/* RECEIVE AREA (ONLY SHOW IF NO FILE CURRENTLY BEING SENT) */}
               {selectedFiles.length === 0 && (
                 <div>
-                  <div className="or-divider">or receive a file</div>
-                  <div className="receive-block">
-                    <div className="input-group">
-                      <div className="input-icon-wrapper">
+                  <div className="flex items-center text-center my-[1.1rem] text-text-muted text-[0.8rem] before:content-[''] before:flex-1 before:border-b before:border-border before:mr-3 after:content-[''] after:flex-1 after:border-b after:border-border after:ml-3">or receive a file</div>
+                  <div className="flex flex-col gap-3">
+                    <div className="relative flex items-center gap-[0.4rem] flex-shrink-0">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center">
                         <Download size={20} />
                       </div>
                       <input
                         type="text"
                         placeholder="Enter Room Code (e.g. 4D8G2X)"
-                        className="code-input"
+                        className="w-auto flex-1 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(139,92,246,0.12)]"
                         value={targetPeerId}
                         onChange={(e) => setTargetPeerId(e.target.value.toUpperCase())}
                         onKeyDown={(e) => e.key === 'Enter' && startP2PReceive()}
                       />
-                      <button className="btn-icon-copy" onClick={(e) => rippleTap(e, openScanner)} title="Scan QR Code">
+                      <button
+                        className="relative overflow-hidden flex-shrink-0 bg-transparent border border-border text-text-secondary cursor-pointer flex items-center p-[0.7rem] rounded-xl transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
+                        onClick={(e) => rippleTap(e, openScanner)}
+                        title="Scan QR Code"
+                      >
                         <QrCode size={20} />
                       </button>
                     </div>
-                    <button className="btn-secondary" onClick={(e) => rippleTap(e, () => startP2PReceive())} style={{justifyContent: 'center'}}>
+                    <button className={`${BTN_SECONDARY} justify-center`} onClick={(e) => rippleTap(e, () => startP2PReceive())}>
                       Connect & Download
                     </button>
                   </div>
@@ -1582,35 +1600,35 @@ function App() {
 
               {/* QR SCANNER MODAL */}
               {showScanner && (
-                <div className="qr-scanner-overlay" onClick={(e) => rippleTap(e, stopScanner)}>
-                  <div className="qr-scanner-panel" onClick={(e) => e.stopPropagation()}>
-                    <div className="qr-scanner-header">
-                      <span style={{display: 'flex', alignItems: 'center', gap: '0.4rem'}}>
+                <div className="fixed inset-0 bg-[rgba(4,6,12,0.85)] backdrop-blur-sm flex items-center justify-center z-[1000] p-5" onClick={(e) => rippleTap(e, stopScanner)}>
+                  <div className="bg-bg-secondary border border-border rounded-[20px] p-4 w-full max-w-[360px] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_8px_10px_-6px_rgba(0,0,0,0.3)]" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-3 font-heading font-semibold">
+                      <span className="flex items-center gap-[0.4rem]">
                         <Camera size={16} /> Scan Room QR Code
                       </span>
-                      <button className="btn-icon-copy" onClick={(e) => rippleTap(e, stopScanner)} title="Close">
+                      <button className="relative overflow-hidden bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-[0.4rem] rounded-md transition-all duration-200 hover:bg-white/5 hover:text-text-primary" onClick={(e) => rippleTap(e, stopScanner)} title="Close">
                         <X size={18} />
                       </button>
                     </div>
                     {scannerError ? (
-                      <div className="qr-scanner-error">
+                      <div className="flex items-center gap-2 text-text-secondary text-[0.9rem] px-2 py-8 text-center justify-center">
                         <AlertCircle size={18} /> {scannerError}
                       </div>
                     ) : (
-                      <div className="qr-scanner-video-wrapper">
+                      <div className="relative w-full aspect-square rounded-[14px] overflow-hidden bg-black">
                         {!cameraReady && (
-                          <div className="qr-scanner-loading">
-                            <RefreshCw size={32} className="connecting-spinner" />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <RefreshCw size={32} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
                           </div>
                         )}
                         <video
                           ref={scanVideoRef}
-                          className="qr-scanner-video"
+                          className="w-full h-full object-cover"
                           style={{ visibility: cameraReady ? 'visible' : 'hidden' }}
                           playsInline
                           muted
                         />
-                        {cameraReady && <div className="qr-scanner-frame" />}
+                        {cameraReady && <div className="absolute inset-[12%] border-2 border-accent-purple rounded-xl shadow-[0_0_20px_rgba(139,92,246,0.4)] pointer-events-none" />}
                       </div>
                     )}
                     <canvas ref={scanCanvasRef} style={{ display: 'none' }} />
@@ -1628,35 +1646,38 @@ function App() {
           {/* VIEW: SENDER P2P STATE                              */}
           {/* ==================================================== */}
           {mode === 'p2p-send' && (
-            <div className="p2p-setup-container">
-              <div className="view-header-row">
-                <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)} style={{padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', gap: '0.25rem'}}>
+            <div className="flex flex-col items-center text-center gap-8">
+              <div className="w-full flex items-center gap-3 mb-2 flex-wrap">
+                <button
+                  className="relative overflow-hidden flex items-center justify-center gap-1 bg-transparent border border-border text-text-primary font-heading font-medium py-[0.4rem] px-3 rounded-lg text-[0.8rem] cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={(e) => rippleTap(e, resetToHome)}
+                >
                   <ArrowLeft size={14} /> Back
                 </button>
-                <h3 className="signal-title">
+                <h3 className="font-[Georgia,'Iowan_Old_Style',serif] italic text-xl m-0 bg-[linear-gradient(120deg,var(--color-accent-purple),var(--color-accent-cyan))] bg-clip-text text-transparent">
                   Direct P2P Sharing
                 </h3>
               </div>
 
               {/* File Info Inline Pill */}
-              <div className="share-info-pill">
-                <span style={{ fontWeight: 600, color: 'var(--accent-cyan)', flexShrink: 0 }}>Sharing:</span>
-                <span className="share-info-pill-name">
+              <div className="text-[0.85rem] text-text-secondary flex items-center gap-2 mb-1 bg-white/[0.03] py-[0.35rem] px-3 rounded-lg border border-border max-w-full w-fit min-w-0">
+                <span className="font-semibold text-accent-cyan flex-shrink-0">Sharing:</span>
+                <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0 flex-1">
                   {selectedFiles.length > 1 ? `${selectedFiles.length} files` : selectedFiles[0]?.name}
                 </span>
-                <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>({formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))})</span>
+                <span className="text-text-muted flex-shrink-0">({formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))})</span>
               </div>
 
               {/* Preparing: negotiating a room code with the signaling server */}
               {transferState === 'preparing' && (
                 <>
-                  <p className="hero-subtitle" style={{ margin: '0 0 1rem', fontWeight: 500, textAlign: 'center' }}>
+                  <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem] mb-4 font-medium text-center">
                     Setting up your P2P sharing room&hellip;
                   </p>
-                  <div className="connecting-spinner-wrap">
-                    <RefreshCw size={40} className="connecting-spinner" />
+                  <div className="flex items-center justify-center py-10 pb-6">
+                    <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
                   </div>
-                  <p className="dropzone-subtitle" style={{ maxWidth: '280px', textAlign: 'center', margin: '0.75rem auto 0' }}>
+                  <p className="text-[0.85rem] text-text-muted max-w-[280px] text-center mx-auto mt-3">
                     Reaching the signaling server to allocate your room code. This can take a moment on a slow connection.
                   </p>
                 </>
@@ -1665,30 +1686,44 @@ function App() {
               {/* Waiting for connection */}
               {transferState === 'waiting' && (
                 <>
-                  <div className="hs-visual" role="img" aria-label="Waiting for a peer to connect">
-                    <div className="hs-node hs-node-you"><Zap size={18} /></div>
-                    <div className="hs-track" />
-                    <div className="hs-node hs-node-peer"><Laptop size={18} /></div>
+                  <div className="flex items-center justify-center w-full gap-3 my-2 mb-3" role="img" aria-label="Waiting for a peer to connect">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-[1] bg-[rgba(139,92,246,0.15)] border border-[rgba(139,92,246,0.4)] text-accent-purple shadow-[0_0_14px_rgba(139,92,246,0.25)]"><Zap size={18} /></div>
+                    <div className="relative flex-1 min-w-[60px] max-w-[180px] h-[3px] rounded-full overflow-hidden bg-[linear-gradient(90deg,rgba(139,92,246,0.45),rgba(6,182,212,0.45))] shadow-[0_0_6px_rgba(139,92,246,0.3)] after:content-[''] after:absolute after:top-0 after:h-full after:w-[40%] after:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.95),transparent)] after:animate-[hsSweep_1.8s_ease-in-out_infinite]" />
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-[1] bg-[rgba(6,182,212,0.15)] border border-[rgba(6,182,212,0.4)] text-accent-cyan shadow-[0_0_14px_rgba(6,182,212,0.25)]"><Laptop size={18} /></div>
                   </div>
-                  <p className="hs-caption">Waiting for peers to scan or enter your code&hellip; anyone with it can join.</p>
+                  <p className="text-center text-[0.8rem] text-text-muted mb-4">Waiting for peers to scan or enter your code&hellip; anyone with it can join.</p>
 
-                  <div className="signal-fields">
-                    <div className="signal-code-row">
+                  <div className="flex flex-col gap-3 w-full">
+                    <div className="flex items-center justify-between bg-white/[0.03] border border-accent-purple/30 rounded-xl py-[0.65rem] px-[0.9rem]">
                       <RoomCodeFlap code={roomCode} />
-                      <button className="btn-icon-copy" onClick={(e) => rippleTap(e, () => copyToClipboard(roomCode, 'Room code copied!'))} title="Copy Code">
+                      <button
+                        className="relative overflow-hidden bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-[0.4rem] rounded-md transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
+                        onClick={(e) => rippleTap(e, () => copyToClipboard(roomCode, 'Room code copied!'))}
+                        title="Copy Code"
+                      >
                         <Copy size={16} />
                       </button>
                     </div>
 
-                    <div className="signal-link-row">
-                      <span>{getSharingUrl()}</span>
-                      <button className="btn-icon-copy" onClick={(e) => rippleTap(e, () => copyToClipboard(getSharingUrl(), 'Share link copied!'))} title="Copy Link">
+                    <div className="flex items-center justify-between gap-[0.6rem] bg-white/[0.03] border border-accent-purple/30 rounded-xl py-[0.6rem] px-[0.9rem] text-[0.72rem] text-text-secondary">
+                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">{getSharingUrl()}</span>
+                      <button
+                        className="relative overflow-hidden bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-[0.4rem] rounded-md transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
+                        onClick={(e) => rippleTap(e, () => copyToClipboard(getSharingUrl(), 'Share link copied!'))}
+                        title="Copy Link"
+                      >
                         <Copy size={14} />
                       </button>
                     </div>
 
-                    <div className="signal-qr-row">
-                      <div className="signal-qr" onClick={() => setShowQrZoom(true)} role="button" tabIndex={0} title="Tap to enlarge">
+                    <div className="flex items-center gap-4 mt-1">
+                      <div
+                        className="w-[82px] h-[82px] bg-white rounded-[10px] p-[5px] flex-shrink-0 flex items-center justify-center cursor-pointer transition-transform duration-150 hover:scale-105 focus-visible:scale-105 focus-visible:outline-none"
+                        onClick={() => setShowQrZoom(true)}
+                        role="button"
+                        tabIndex={0}
+                        title="Tap to enlarge"
+                      >
                         <QRCodeSVG
                           value={getSharingUrl()}
                           size={72}
@@ -1698,8 +1733,8 @@ function App() {
                           includeMargin={false}
                         />
                       </div>
-                      <div className="signal-qr-note">
-                        <b>Scan to connect</b>
+                      <div className="flex-1 min-w-0 text-[0.72rem] text-text-secondary leading-[1.5] flex flex-col gap-[0.15rem] text-left">
+                        <b className="text-text-primary text-[0.78rem]">Scan to connect</b>
                         Keep this tab open &mdash; the file streams directly, peer to peer. Tap the QR code to enlarge.
                       </div>
                     </div>
@@ -1709,38 +1744,38 @@ function App() {
 
               {/* Transferring State */}
               {transferState === 'transferring' && (
-                <div className="transfer-status-container" style={{width: '100%'}}>
-                  <div className="status-badge" style={{background: 'rgba(6, 182, 212, 0.08)', color: 'var(--accent-cyan)'}}>
+                <div className="flex flex-col gap-6 w-full">
+                  <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(6,182,212,0.08)] border border-[rgba(6,182,212,0.2)] text-accent-cyan">
                     <Users size={14} /> {connectedCount} {connectedCount === 1 ? 'receiver' : 'receivers'} connected
                   </div>
 
                   {sendFileCount > 1 && (
-                    <div className="status-badge" style={{background: 'rgba(139, 92, 246, 0.08)'}}>
+                    <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(139,92,246,0.08)] border border-[rgba(139,92,246,0.2)] text-accent-purple">
                       File {sendFileIndex + 1} of {sendFileCount}: {selectedFiles[sendFileIndex]?.name}
                     </div>
                   )}
 
-                  <div className="status-badge uploading">
-                    <RefreshCw size={14} className="radar-center-icon" style={{animation: isPaused ? 'none' : 'spin 2s linear infinite'}} />
+                  <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(6,182,212,0.1)] border border-[rgba(6,182,212,0.2)] text-accent-cyan">
+                    <RefreshCw size={14} style={{animation: isPaused ? 'none' : 'spin 2s linear infinite'}} />
                     {isPaused ? 'Paused' : 'Streaming File...'}
                   </div>
 
-                  <div className="ring-wrap">
+                  <div className="flex justify-center">
                     <TransferRing progress={transferProgress} gradientId="ringGradSend" />
                   </div>
 
-                  <div className="stats-grid">
-                    <div className="stat-box">
-                      <div className="stat-label">Speed</div>
-                      <div className="stat-value">{isPaused ? 'Paused' : (transferSpeed || 'Connecting...')}</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-[rgba(8,12,20,0.4)] border border-border p-4 rounded-xl text-center">
+                      <div className="text-xs text-text-muted uppercase mb-1 tracking-wide">Speed</div>
+                      <div className="font-heading text-[1.15rem] font-semibold text-text-primary">{isPaused ? 'Paused' : (transferSpeed || 'Connecting...')}</div>
                     </div>
-                    <div className="stat-box">
-                      <div className="stat-label">Estimated Time</div>
-                      <div className="stat-value">{isPaused ? '--' : (timeRemaining || '--')}</div>
+                    <div className="bg-[rgba(8,12,20,0.4)] border border-border p-4 rounded-xl text-center">
+                      <div className="text-xs text-text-muted uppercase mb-1 tracking-wide">Estimated Time</div>
+                      <div className="font-heading text-[1.15rem] font-semibold text-text-primary">{isPaused ? '--' : (timeRemaining || '--')}</div>
                     </div>
                   </div>
 
-                  <button className="btn-secondary" onClick={(e) => rippleTap(e, togglePauseTransfer)} style={{width: '100%', justifyContent: 'center'}}>
+                  <button className={`${BTN_SECONDARY} w-full justify-center`} onClick={(e) => rippleTap(e, togglePauseTransfer)}>
                     {isPaused ? <><Play size={16} /> Resume</> : <><Pause size={16} /> Pause</>}
                   </button>
                 </div>
@@ -1748,17 +1783,17 @@ function App() {
 
               {/* Complete State */}
               {transferState === 'complete' && (
-                <div className="success-container" style={{width: '100%'}}>
-                  <div className="success-icon-wrapper">
+                <div className="flex flex-col items-center text-center gap-6 w-full">
+                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(16,185,129,0.15)] text-accent-green drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]">
                     <ShieldCheck size={36} />
                   </div>
                   <div>
-                    <h3 className="hero-title" style={{fontSize: '1.75rem', marginBottom: '0.25rem'}}>Transfer Complete!</h3>
-                    <p className="hero-subtitle">
+                    <h3 className="text-[1.75rem] mb-1 leading-[1.2] font-bold glow-text">Transfer Complete!</h3>
+                    <p className="text-text-secondary text-[0.925rem]">
                       {sendFileCount > 1 ? `Your ${sendFileCount} files were shared directly and securely.` : 'Your file was shared directly and securely.'}
                     </p>
                   </div>
-                  <button className="btn-primary" onClick={(e) => rippleTap(e, resetToHome)} style={{width: '100%'}}>
+                  <button className={`${BTN_PRIMARY} w-full`} onClick={(e) => rippleTap(e, resetToHome)}>
                     Share Another File
                   </button>
                 </div>
@@ -1766,19 +1801,19 @@ function App() {
 
               {/* Error State */}
               {transferState === 'error' && (
-                <div className="success-container" style={{width: '100%'}}>
-                  <div className="success-icon-wrapper" style={{color: 'var(--accent-pink)', backgroundColor: 'rgba(236, 72, 153, 0.15)', filter: 'none'}}>
+                <div className="flex flex-col items-center text-center gap-6 w-full">
+                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(236,72,153,0.15)] text-accent-pink">
                     <AlertCircle size={36} />
                   </div>
                   <div>
-                    <h3 className="hero-title" style={{fontSize: '1.75rem', marginBottom: '0.25rem'}}>Connection Interrupted</h3>
-                    <p className="hero-subtitle" style={{color: 'var(--accent-pink)', fontSize: '0.9rem'}}>{errorMsg}</p>
+                    <h3 className="text-[1.75rem] mb-1 leading-[1.2] font-bold glow-text">Connection Interrupted</h3>
+                    <p className="text-accent-pink text-[0.9rem]">{errorMsg}</p>
                   </div>
-                  <div className="action-buttons" style={{width: '100%'}}>
-                    <button className="btn-primary" onClick={(e) => rippleTap(e, startP2PSend)}>
+                  <div className="flex flex-col gap-3 w-full">
+                    <button className={BTN_PRIMARY} onClick={(e) => rippleTap(e, startP2PSend)}>
                       Retry Transfer
                     </button>
-                    <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)}>
+                    <button className={BTN_SECONDARY} onClick={(e) => rippleTap(e, resetToHome)}>
                       Return Home
                     </button>
                   </div>
@@ -1791,12 +1826,15 @@ function App() {
           {/* VIEW: RECEIVER P2P STATE                            */}
           {/* ==================================================== */}
           {mode === 'p2p-receive' && (
-            <div className="p2p-setup-container">
-              <div className="view-header-row">
-                <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)} style={{padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', gap: '0.25rem'}}>
+            <div className="flex flex-col items-center text-center gap-8">
+              <div className="w-full flex items-center gap-3 mb-2 flex-wrap">
+                <button
+                  className="relative overflow-hidden flex items-center justify-center gap-1 bg-transparent border border-border text-text-primary font-heading font-medium py-[0.4rem] px-3 rounded-lg text-[0.8rem] cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={(e) => rippleTap(e, resetToHome)}
+                >
                   <ArrowLeft size={14} /> Leave
                 </button>
-                <h3 className="gradient-text" style={{fontSize: '1.25rem', fontFamily: 'var(--font-heading)', margin: 0}}>
+                <h3 className="gradient-text font-heading text-xl m-0">
                   Direct P2P Receiver
                 </h3>
               </div>
@@ -1804,13 +1842,13 @@ function App() {
               {/* Connecting/Resolving */}
               {transferState === 'preparing' && (
                 <>
-                  <p className="hero-subtitle" style={{ margin: '0 0 1rem', fontWeight: 500, textAlign: 'center' }}>
-                    Connecting to sender room <strong style={{ color: 'var(--accent-cyan)' }}>{targetPeerId}</strong>&hellip;
+                  <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem] mb-4 font-medium text-center">
+                    Connecting to sender room <strong className="text-accent-cyan">{targetPeerId}</strong>&hellip;
                   </p>
-                  <div className="connecting-spinner-wrap">
-                    <RefreshCw size={40} className="connecting-spinner" />
+                  <div className="flex items-center justify-center py-10 pb-6">
+                    <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
                   </div>
-                  <p className="dropzone-subtitle" style={{ maxWidth: '280px', textAlign: 'center', margin: '0.75rem auto 0' }}>
+                  <p className="text-[0.85rem] text-text-muted max-w-[280px] text-center mx-auto mt-3">
                     Establishing WebRTC data tunnel. Ensure the sender has the page active.
                   </p>
                 </>
@@ -1819,13 +1857,13 @@ function App() {
               {/* Reconnecting: connection dropped mid-transfer, auto-retrying with what we've already received kept intact */}
               {transferState === 'reconnecting' && (
                 <>
-                  <p className="hero-subtitle" style={{ margin: '0 0 1rem', fontWeight: 500, textAlign: 'center' }}>
+                  <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem] mb-4 font-medium text-center">
                     Connection lost &mdash; reconnecting&hellip;
                   </p>
-                  <div className="connecting-spinner-wrap">
-                    <RefreshCw size={40} className="connecting-spinner" />
+                  <div className="flex items-center justify-center py-10 pb-6">
+                    <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
                   </div>
-                  <p className="dropzone-subtitle" style={{ maxWidth: '280px', textAlign: 'center', margin: '0.75rem auto 0' }}>
+                  <p className="text-[0.85rem] text-text-muted max-w-[280px] text-center mx-auto mt-3">
                     Your progress is saved &mdash; the transfer will resume from where it left off.
                   </p>
                 </>
@@ -1833,40 +1871,40 @@ function App() {
 
               {/* Transferring State */}
               {transferState === 'transferring' && (
-                <div className="transfer-status-container" style={{width: '100%'}}>
+                <div className="flex flex-col gap-6 w-full">
                   {receiveFileCount > 1 && (
-                    <div className="status-badge" style={{background: 'rgba(139, 92, 246, 0.08)'}}>
+                    <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(139,92,246,0.08)] border border-[rgba(139,92,246,0.2)] text-accent-purple">
                       File {receiveFileIndex + 1} of {receiveFileCount}
                     </div>
                   )}
 
                   {incomingFile && (
-                    <div className="file-card" style={{textAlign: 'left', width: '100%'}}>
+                    <div className="flex items-center gap-4 bg-[rgba(30,41,59,0.4)] border border-border rounded-2xl p-5 max-[380px]:px-3 max-[380px]:py-4 max-[380px]:gap-3 text-left w-full">
                       {renderFileIconComponent(incomingFile.name)}
-                      <div className="file-details">
-                        <h4 className="file-name">{incomingFile.name}</h4>
-                        <p className="file-size">{formatBytes(incomingFile.size)}</p>
+                      <div className="flex-grow min-w-0">
+                        <h4 className="text-[0.95rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{incomingFile.name}</h4>
+                        <p className="text-[0.8rem] text-text-secondary">{formatBytes(incomingFile.size)}</p>
                       </div>
                     </div>
                   )}
 
-                  <div className="status-badge">
-                    <RefreshCw size={14} className="radar-center-icon" style={{animation: isPeerPaused ? 'none' : 'spin 2s linear infinite'}} />
+                  <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.2)] text-accent-purple">
+                    <RefreshCw size={14} style={{animation: isPeerPaused ? 'none' : 'spin 2s linear infinite'}} />
                     {isPeerPaused ? 'Paused by sender' : 'Receiving File...'}
                   </div>
 
-                  <div className="ring-wrap">
+                  <div className="flex justify-center">
                     <TransferRing progress={transferProgress} gradientId="ringGradRecv" />
                   </div>
 
-                  <div className="stats-grid">
-                    <div className="stat-box">
-                      <div className="stat-label">Download Speed</div>
-                      <div className="stat-value">{transferSpeed || 'Negotiating...'}</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-[rgba(8,12,20,0.4)] border border-border p-4 rounded-xl text-center">
+                      <div className="text-xs text-text-muted uppercase mb-1 tracking-wide">Download Speed</div>
+                      <div className="font-heading text-[1.15rem] font-semibold text-text-primary">{transferSpeed || 'Negotiating...'}</div>
                     </div>
-                    <div className="stat-box">
-                      <div className="stat-label">Time Remaining</div>
-                      <div className="stat-value">{timeRemaining || '--'}</div>
+                    <div className="bg-[rgba(8,12,20,0.4)] border border-border p-4 rounded-xl text-center">
+                      <div className="text-xs text-text-muted uppercase mb-1 tracking-wide">Time Remaining</div>
+                      <div className="font-heading text-[1.15rem] font-semibold text-text-primary">{timeRemaining || '--'}</div>
                     </div>
                   </div>
                 </div>
@@ -1874,15 +1912,15 @@ function App() {
 
               {/* Complete State */}
               {transferState === 'complete' && (
-                <div className="success-container" style={{width: '100%'}}>
-                  <div className="success-icon-wrapper">
+                <div className="flex flex-col items-center text-center gap-6 w-full">
+                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(16,185,129,0.15)] text-accent-green drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]">
                     <ShieldCheck size={36} />
                   </div>
                   <div>
-                    <h3 className="hero-title" style={{fontSize: '1.75rem', marginBottom: '0.25rem'}}>
+                    <h3 className="text-[1.75rem] mb-1 leading-[1.2] font-bold glow-text">
                       {completedFiles.length > 1 ? `${completedFiles.length} Files Received!` : 'File Received!'}
                     </h3>
-                    <p className="hero-subtitle">
+                    <p className="text-text-secondary text-[0.925rem]">
                       {completedFiles.length > 1
                         ? 'All files were downloaded to your device.'
                         : `${completedFiles[0]?.name || incomingFile?.name || 'Shared file'} was successfully downloaded to your device.`}
@@ -1890,16 +1928,21 @@ function App() {
                   </div>
 
                   {completedFiles.length > 0 && (
-                    <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%'}}>
+                    <div className="flex flex-col gap-2 w-full">
                       {completedFiles.map((f, i) => (
-                        <a key={i} href={f.url} download={f.name} className="btn-download-glow" style={{fontSize: '0.85rem'}}>
+                        <a
+                          key={i}
+                          href={f.url}
+                          download={f.name}
+                          className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl cursor-pointer flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_4px_20px_rgba(16,185,129,0.4)] no-underline w-full mt-4 hover:scale-[1.02] hover:shadow-[0_8px_30px_rgba(16,185,129,0.6)] hover:from-[#34d399] hover:to-[#047857]"
+                        >
                           <Download size={16} /> {f.name}
                         </a>
                       ))}
                     </div>
                   )}
 
-                  <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)} style={{width: '100%', marginTop: '0.5rem'}}>
+                  <button className={`${BTN_SECONDARY} w-full mt-2`} onClick={(e) => rippleTap(e, resetToHome)}>
                     Close & Return
                   </button>
                 </div>
@@ -1907,19 +1950,19 @@ function App() {
 
               {/* Error State */}
               {transferState === 'error' && (
-                <div className="success-container" style={{width: '100%'}}>
-                  <div className="success-icon-wrapper" style={{color: 'var(--accent-pink)', backgroundColor: 'rgba(236, 72, 153, 0.15)', filter: 'none'}}>
+                <div className="flex flex-col items-center text-center gap-6 w-full">
+                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(236,72,153,0.15)] text-accent-pink">
                     <AlertCircle size={36} />
                   </div>
                   <div>
-                    <h3 className="hero-title" style={{fontSize: '1.75rem', marginBottom: '0.25rem'}}>Transfer Failed</h3>
-                    <p className="hero-subtitle" style={{color: 'var(--accent-pink)', fontSize: '0.9rem'}}>{errorMsg}</p>
+                    <h3 className="text-[1.75rem] mb-1 leading-[1.2] font-bold glow-text">Transfer Failed</h3>
+                    <p className="text-accent-pink text-[0.9rem]">{errorMsg}</p>
                   </div>
-                  <div className="action-buttons" style={{width: '100%'}}>
-                    <button className="btn-primary" onClick={(e) => rippleTap(e, () => startP2PReceive())}>
+                  <div className="flex flex-col gap-3 w-full">
+                    <button className={BTN_PRIMARY} onClick={(e) => rippleTap(e, () => startP2PReceive())}>
                       Try Reconnecting
                     </button>
-                    <button className="btn-secondary" onClick={(e) => rippleTap(e, resetToHome)}>
+                    <button className={BTN_SECONDARY} onClick={(e) => rippleTap(e, resetToHome)}>
                       Return Home
                     </button>
                   </div>
@@ -1933,15 +1976,19 @@ function App() {
 
       {/* QR ZOOM MODAL */}
       {showQrZoom && createPortal(
-        <div className="qr-zoom-overlay" onClick={() => setShowQrZoom(false)}>
-          <div className="qr-zoom-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="qr-zoom-header">
+        <div className="fixed inset-0 bg-[rgba(4,6,12,0.92)] backdrop-blur-md flex items-center justify-center z-[2000] px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-[qrZoomFadeIn_0.18s_ease]" onClick={() => setShowQrZoom(false)}>
+          <div className="bg-bg-secondary border border-border rounded-[20px] p-5 max-[380px]:p-4 w-full max-w-[340px] flex flex-col items-center gap-4 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_8px_10px_-6px_rgba(0,0,0,0.3)] animate-[qrZoomPopIn_0.2s_ease]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between w-full font-heading font-semibold text-[0.95rem] text-text-primary">
               <span>Scan to Connect</span>
-              <button className="qr-zoom-close" onClick={() => setShowQrZoom(false)} title="Close">
+              <button
+                className="bg-white/[0.06] border border-border rounded-full w-8 h-8 flex-shrink-0 flex items-center justify-center text-text-primary cursor-pointer transition-colors duration-150 hover:bg-white/[0.14]"
+                onClick={() => setShowQrZoom(false)}
+                title="Close"
+              >
                 <X size={18} />
               </button>
             </div>
-            <div className="qr-zoom-code">
+            <div className="bg-white p-4 rounded-2xl flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
               <QRCodeSVG
                 value={getSharingUrl()}
                 size={240}
@@ -1951,12 +1998,18 @@ function App() {
                 includeMargin={false}
               />
             </div>
-            <div className="qr-zoom-roomcode">
-              {roomCode.split('').map((ch, i) => <span key={i}>{ch}</span>)}
+            <div className="flex gap-[0.4rem]">
+              {roomCode.split('').map((ch, i) => (
+                <span key={i} className="font-heading text-[1.15rem] font-bold tracking-[0.02em] text-accent-cyan bg-white/5 border border-border rounded-lg w-8 h-[38px] flex items-center justify-center">{ch}</span>
+              ))}
             </div>
-            <button className="qr-zoom-link" onClick={(e) => rippleTap(e, () => copyToClipboard(getSharingUrl(), 'Share link copied!'))} title="Copy link">
-              <span>{getSharingUrl()}</span>
-              <Copy size={14} />
+            <button
+              className="flex items-center gap-2 w-full bg-white/[0.03] border border-border rounded-[10px] py-[0.55rem] px-3 cursor-pointer text-text-secondary transition-colors duration-150 hover:bg-white/[0.07]"
+              onClick={(e) => rippleTap(e, () => copyToClipboard(getSharingUrl(), 'Share link copied!'))}
+              title="Copy link"
+            >
+              <span className="flex-1 text-[0.72rem] text-left overflow-hidden text-ellipsis whitespace-nowrap">{getSharingUrl()}</span>
+              <Copy size={14} className="flex-shrink-0" />
             </button>
           </div>
         </div>,

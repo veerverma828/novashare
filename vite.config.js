@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { networkInterfaces } from 'os'
 
 function getLocalIP() {
@@ -19,7 +20,7 @@ function getLocalIP() {
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   return {
-    plugins: [react()],
+    plugins: [tailwindcss(), react()],
     base: process.env.BUILD_TARGET === 'capacitor' ? './' : command === 'build' ? '/novashare/' : '/',
     server: {
       host: true, // Listen on all network interfaces to expose to local network

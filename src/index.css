@@ -1,50 +1,53 @@
-:root {
-  --bg-primary: #080c14;
-  --bg-secondary: #0f172a;
-  --bg-tertiary: #1e293b;
-  --accent-purple: #8b5cf6;
-  --accent-cyan: #06b6d4;
-  --accent-green: #10b981;
-  --accent-pink: #ec4899;
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(139, 92, 246, 0.3);
-  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+@import "tailwindcss";
+
+/* Design tokens — used as Tailwind utilities (bg-bg-primary, text-accent-purple,
+   font-heading, ...) across every component. */
+@theme {
+  --color-bg-primary: #080c14;
+  --color-bg-secondary: #0f172a;
+  --color-bg-tertiary: #1e293b;
+  --color-accent-purple: #8b5cf6;
+  --color-accent-cyan: #06b6d4;
+  --color-accent-green: #10b981;
+  --color-accent-pink: #ec4899;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-border: rgba(255, 255, 255, 0.08);
+
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-heading: 'Space Grotesk', var(--font-sans);
+  --font-heading: 'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
 }
 
+/* Page chrome: not tied to any one component, kept as base CSS rather than
+   repeated utility classes on every mount. */
 * {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
   scrollbar-width: thin;
-  scrollbar-color: var(--accent-purple) var(--bg-secondary);
+  scrollbar-color: var(--color-accent-purple) var(--color-bg-secondary);
 }
 
 html {
   height: 100%;
 }
 
-/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+  background: var(--color-bg-secondary);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--accent-purple);
+  background: var(--color-accent-purple);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-cyan);
+  background: var(--color-accent-cyan);
 }
 
-/* Hide scrollbar in native Android/iOS app shell */
+/* Hide scrollbars in the native Android/iOS app shell... */
 .native-app * {
   scrollbar-width: none;
 }
@@ -53,11 +56,11 @@ html {
 }
 
 /* ...except the scrollable file/app lists — a slim thumb here is a useful
-   "there's more below" signal, not just visual noise */
+   "there's more below" signal, not just visual noise. */
 .native-app .queue,
 .native-app .apps-list {
   scrollbar-width: thin;
-  scrollbar-color: var(--accent-purple) transparent;
+  scrollbar-color: var(--color-accent-purple) transparent;
 }
 .native-app .queue::-webkit-scrollbar,
 .native-app .apps-list::-webkit-scrollbar {
@@ -75,11 +78,11 @@ html {
 }
 .native-app .queue::-webkit-scrollbar-thumb:hover,
 .native-app .apps-list::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-cyan);
+  background: var(--color-accent-cyan);
 }
 
 /* Native app shell: no page-level scroll/bounce, but allow content taller
-   than the viewport to scroll internally so nothing gets clipped */
+   than the viewport to scroll internally so nothing gets clipped. */
 .native-app,
 .native-app body {
   height: 100%;
@@ -95,12 +98,12 @@ html {
 }
 
 body {
-  font-family: var(--font-sans);
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
   height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
   background-image:
@@ -145,14 +148,15 @@ body::after {
   flex-direction: column;
 }
 
-/* Typography */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
-/* Animations */
+/* Custom keyframes referenced from components via Tailwind arbitrary values,
+   e.g. className="animate-[float_3s_ease-in-out_infinite]". Tailwind has no
+   utility for defining a keyframe itself, so these stay as plain CSS. */
 @keyframes float {
   0% { transform: translateY(0px); }
   50% { transform: translateY(-8px); }
@@ -171,14 +175,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 @keyframes radarPing {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(2.2);
-    opacity: 0;
-  }
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
 }
 
 @keyframes textGlow {
@@ -192,15 +190,66 @@ h1, h2, h3, h4, h5, h6 {
   100% { background-position: 0% 50%; }
 }
 
-/* Global utility classes */
+@keyframes slideIn {
+  from { transform: translateY(1rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes rippleOut {
+  to { transform: scale(1); opacity: 0; }
+}
+
+@keyframes hsSweep {
+  0% { left: -40%; }
+  100% { left: 140%; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmerSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes orbitSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes qrZoomFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes qrZoomPopIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Ripple feedback span — created imperatively via document.createElement in
+   rippleTap(), so it can't be a Tailwind className applied through JSX. */
+.ripple {
+  position: absolute;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.45);
+  transform: scale(0);
+  pointer-events: none;
+  animation: rippleOut 0.5s ease-out;
+}
+
+/* Global utility classes kept as-is: used across several components via
+   className, not worth re-deriving as arbitrary Tailwind values each time. */
 .glow-text {
-  background: linear-gradient(135deg, #fff 0%, var(--text-secondary) 100%);
+  background: linear-gradient(135deg, #fff 0%, var(--color-text-secondary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%);
+  background: linear-gradient(135deg, var(--color-accent-purple) 0%, var(--color-accent-cyan) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -211,16 +260,4 @@ h1, h2, h3, h4, h5, h6 {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
-}
-
-/* Glassmorphism panel */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--border-color);
-  border-radius: 24px;
-}
-
-.glass-panel:hover {
-  border-color: rgba(255, 255, 255, 0.15);
 }
