@@ -1,6 +1,6 @@
 # Privacy Policy for NovaShare
 
-**Last updated:** July 27, 2026
+**Last updated:** July 28, 2026
 
 NovaShare ("we", "our", "the app") is a peer-to-peer (P2P) file sharing app. This policy explains what data the app accesses and how it is used.
 
@@ -22,6 +22,15 @@ Used to establish a direct peer-to-peer connection between two devices. To help 
 
 **Clipboard**
 Used only when you tap "copy" to copy a share link or code. Nothing is read from your clipboard automatically.
+
+**List of Installed Apps**
+The "Apps" tab reads the list of other apps installed on your device (name, package ID, version, size) so you can pick one to send as an APK. This list is read on-device only, never uploaded, and is only requested when you open the Apps tab. System apps are excluded from the list. If you share an app, only that app's own installer package is read and sent — no other app data.
+
+**Notifications**
+Used to show an ongoing "transfer in progress" notification (with a progress bar) while a send or receive is running, including while the app is in the background. This keeps the transfer alive and lets you monitor it without keeping the app open. The notification is removed automatically when the transfer finishes, fails, or is cancelled.
+
+**Files Shared From Other Apps**
+If you use another app's "Share" button and choose NovaShare, that file is copied into NovaShare's private storage so it can be sent — this happens only when you explicitly initiate a share from another app, never in the background.
 
 ## Third-Party Services
 - **PeerJS** (peerjs.com) — used solely to establish direct device-to-device connections. See their policy: https://peerjs.com

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { createPortal } from 'react-dom';
 import Peer from 'peerjs';
 import { QRCodeSVG } from 'qrcode.react';
@@ -449,6 +450,9 @@ function App() {
   const [cameraReady, setCameraReady] = useState(false);
   const [showQrZoom, setShowQrZoom] = useState(false);
 
+  // "Add more" picker state (queue view: append files or apps to the queue)
+  const [showAddApps, setShowAddApps] = useState(false);
+
   // Refs for background processes
   const peerRef = useRef(null);
   const connRef = useRef(null);
@@ -551,6 +555,41 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  // Hardware back button: step back through modal > view > tab instead of
+  // closing the app. Refs mirror the live state so the listener (registered
+  // once) never sees stale values.
+  const modeRef = useRef(mode);
+  const homeTabRef = useRef(homeTab);
+  const showQrZoomRef = useRef(showQrZoom);
+  const showScannerRef = useRef(showScanner);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { homeTabRef.current = homeTab; }, [homeTab]);
+  useEffect(() => { showQrZoomRef.current = showQrZoom; }, [showQrZoom]);
+  useEffect(() => { showScannerRef.current = showScanner; }, [showScanner]);
+
+  useEffect(() => {
+    const handle = CapacitorApp.addListener('backButton', () => {
+      if (showQrZoomRef.current) {
+        setShowQrZoom(false);
+        return;
+      }
+      if (showScannerRef.current) {
+        setShowScanner(false);
+        return;
+      }
+      if (modeRef.current !== 'home') {
+        resetToHome();
+        return;
+      }
+      if (homeTabRef.current !== 'home') {
+        setHomeTab('home');
+        return;
+      }
+      CapacitorApp.exitApp();
+    });
+    return () => { handle.remove(); };
+  }, []);
 
   // Auto-close the zoomed QR modal once a peer successfully connects
   useEffect(() => {
@@ -710,9 +749,17 @@ function App() {
     }
   };
 
+  // Appends rather than replaces, so this same input/handler serves both the
+  // empty-state dropzone and the "Add Files" button once a queue exists
+  // (appending to an empty queue is equivalent to replacing it). Files must
+  // be snapshotted before clearing e.target.value — on a file input, value
+  // and .files are linked, so clearing value first empties .files before
+  // React's setState updater ever reads it.
   const handleFileSelect = (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setSelectedFiles(Array.from(e.target.files));
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length > 0) {
+      setSelectedFiles((prev) => [...prev, ...files]);
     }
   };
 
@@ -1455,6 +1502,22 @@ function App() {
                     </div>
                   )}
 
+                  <div className="add-more-row">
+                    <button className="btn-secondary" onClick={(e) => rippleTap(e, triggerFileInput)}>
+                      <UploadCloud size={16} /> Add Files
+                    </button>
+                    <button className="btn-secondary" onClick={(e) => rippleTap(e, () => setShowAddApps(true))}>
+                      <Smartphone size={16} /> Add Apps
+                    </button>
+                  </div>
+                  <input
+                    type="file"
+                    className="file-input"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    multiple
+                  />
+
                   <div className="action-buttons">
                     <button className="btn-primary" onClick={(e) => rippleTap(e, startP2PSend)}>
                       <Zap size={18} /> Start P2P Sharing Room
@@ -1463,6 +1526,29 @@ function App() {
                       Cancel Selection
                     </button>
                   </div>
+
+                  {/* ADD APPS MODAL: append more apps to the existing queue */}
+                  {showAddApps && (
+                    <div className="qr-scanner-overlay" onClick={(e) => rippleTap(e, () => setShowAddApps(false))}>
+                      <div className="qr-scanner-panel" onClick={(e) => e.stopPropagation()}>
+                        <div className="qr-scanner-header">
+                          <span style={{display: 'flex', alignItems: 'center', gap: '0.4rem'}}>
+                            <Smartphone size={16} /> Add Apps to Queue
+                          </span>
+                          <button className="btn-icon-copy" onClick={(e) => rippleTap(e, () => setShowAddApps(false))} title="Close">
+                            <X size={18} />
+                          </button>
+                        </div>
+                        <AppsPanel
+                          formatBytes={formatBytes}
+                          onSelectApps={(files) => {
+                            setSelectedFiles((prev) => [...prev, ...files]);
+                            setShowAddApps(false);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

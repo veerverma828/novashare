@@ -1,5 +1,4 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { App as CapApp } from '@capacitor/app';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
@@ -100,12 +99,4 @@ export function initNative() {
   StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
   StatusBar.setBackgroundColor({ color: '#080c14' }).catch(() => {});
   StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
-
-  CapApp.addListener('backButton', ({ canGoBack }) => {
-    if (canGoBack) {
-      window.history.back();
-    } else {
-      CapApp.exitApp();
-    }
-  });
 }
