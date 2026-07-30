@@ -7,6 +7,15 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+// versionCode lives here instead of hardcoded below so bundleRelease can bump
+// it after every AAB build without editing this file (see bumpVersionCode task).
+def versionPropsFile = rootProject.file("version.properties")
+def versionProps = new Properties()
+if (versionPropsFile.exists()) {
+    versionProps.load(new FileInputStream(versionPropsFile))
+}
+def appVersionCode = (versionProps['VERSION_CODE'] ?: '1').toInteger()
+
 android {
     namespace = "com.veer.novashare"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -14,7 +23,7 @@ android {
         applicationId "com.veer.novashare"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
+        versionCode appVersionCode
         versionName "1.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -64,6 +73,22 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+// Bumps VERSION_CODE in version.properties for the *next* build, right after
+// this one finishes — versionCode is read at configuration time, so it can't
+// bump itself mid-build; bumping after via finalizedBy is what makes every
+// `bundleRelease` land one code higher than the last without manual edits.
+tasks.register('bumpVersionCode') {
+    doLast {
+        def nextCode = appVersionCode + 1
+        versionProps['VERSION_CODE'] = nextCode.toString()
+        versionPropsFile.withWriter { versionProps.store(it, null) }
+        println "versionCode bumped to ${nextCode} for the next build"
+    }
+}
+afterEvaluate {
+    tasks.named('bundleRelease') { finalizedBy 'bumpVersionCode' }
+}
 
 try {
     def servicesJSON = file('google-services.json')
