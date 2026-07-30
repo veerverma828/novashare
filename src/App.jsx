@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { createPortal } from 'react-dom';
 import Peer from 'peerjs';
@@ -16,7 +16,7 @@ import {
   FileAudio,
   FileArchive,
   FileCode,
-  File,
+  File as FileIcon,
   X,
   ArrowLeft,
   AlertCircle,
@@ -30,7 +30,18 @@ import {
   Smartphone,
   Search,
   Check,
-  Users
+  Users,
+  History as HistoryIcon,
+  Type,
+  FolderUp,
+  Folder,
+  ChevronDown,
+  ChevronRight,
+  Gauge,
+  Radar,
+  ShieldQuestion,
+  ClipboardCopy,
+  Trash2
 } from 'lucide-react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
@@ -45,11 +56,66 @@ import {
   onSharedFilesReceived,
   sharedEntryToFile,
   pushTransferNotification,
-  stopTransferNotification
+  stopTransferNotification,
+  startAdvertisingRoom,
+  stopAdvertisingRoom,
+  startNearbyDiscovery,
+  stopNearbyDiscovery,
+  onNearbyPeerFound,
+  onNearbyPeerLost,
+  getDeviceLabel,
+  pickFolder
 } from './native';
+import { addHistoryEntry, getHistory, clearHistory } from './history';
+import { computeSecurityCode } from './security';
+
+// Marks a queued File as a text snippet (feature: send text/clipboard
+// content through the same P2P pipeline as real files) rather than a user
+// picked .txt — checked by MIME type on both ends.
+const TEXT_SNIPPET_MIME = 'text/x-novashare-snippet';
+
+// Sender-rate presets for the bandwidth throttle (feature #8). 0 = unlimited.
+const RATE_PRESETS = [
+  { label: 'Unlimited', kbps: 0 },
+  { label: '512 KB/s', kbps: 512 },
+  { label: '1 MB/s', kbps: 1024 },
+  { label: '5 MB/s', kbps: 5120 },
+  { label: '10 MB/s', kbps: 10240 }
+];
+
+// Runtime-only (never persisted) map from a history entry id to the actual
+// File objects it referred to, so "Re-send" works within the same app
+// session without ever writing file bytes to localStorage. Lost on restart —
+// callers must handle a miss by prompting the user to reselect.
+const sentFilesMemory = new Map();
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for P2P WebRTC
 const FLAP_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+// One 64KB chunk at a time — cheap and GC'd immediately, unlike base64-ing
+// an entire assembled file (see incomingFileIdRef / writeChainRef above).
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+// STUN-only fails behind carrier-grade / symmetric NAT (common on mobile
+// data) — TURN relay is the fallback for those cases. Open Relay Project
+// free public TURN; swap for a paid provider if reliability becomes an issue.
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:openrelay.metered.ca:80' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+  ]
+};
 
 // Reusable Tailwind class strings for the two button variants used all over
 // the app — kept as constants instead of @apply so JSX stays the source of
@@ -147,7 +213,7 @@ function SwipeableFileRow({ file, sizeLabel, onRemove }) {
 
   return (
     <div
-      className="relative flex items-center gap-[0.7rem] bg-[rgba(30,41,59,0.5)] border border-border rounded-xl py-[0.65rem] px-[0.8rem] [touch-action:pan-y] cursor-grab"
+      className="relative flex items-center gap-[0.7rem] bg-[rgba(30,41,59,0.5)] border border-border rounded-xl py-[0.65rem] px-[0.8rem] [touch-action:pan-y] cursor-grab flex-shrink-0"
       style={{
         transform: `translateX(${dragX}px)`,
         opacity: 1 - dragProgress * 0.5,
@@ -179,6 +245,50 @@ function SwipeableFileRow({ file, sizeLabel, onRemove }) {
   );
 }
 
+// A picked folder's files ride in the same flat selectedFiles queue as loose
+// files (webkitRelativePath is how we tell them apart), but shown flat that
+// queue turns into a wall of individual filenames for a big folder. This
+// collapses a folder's files behind one row — tap to expand and browse what's
+// actually going to send, tap X to drop the whole folder at once.
+function FolderQueueRow({ name, entries, formatBytes, onRemoveAll, onRemoveOne }) {
+  const [open, setOpen] = useState(false);
+  const totalSize = entries.reduce((sum, { file }) => sum + file.size, 0);
+
+  return (
+    <div className="rounded-xl border border-border bg-[rgba(30,41,59,0.5)] overflow-hidden flex-shrink-0">
+      <div
+        className="relative flex items-center gap-[0.7rem] py-[0.65rem] px-[0.8rem] cursor-pointer"
+        onClick={() => setOpen((o) => !o)}
+      >
+        {open ? <ChevronDown size={14} className="text-text-muted flex-shrink-0" /> : <ChevronRight size={14} className="text-text-muted flex-shrink-0" />}
+        <Folder size={16} className="text-accent-cyan flex-shrink-0" />
+        <span className="text-[0.85rem] text-text-primary flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{name}</span>
+        <span className="text-[0.72rem] text-text-muted flex-shrink-0">{entries.length} file{entries.length === 1 ? '' : 's'} &middot; {formatBytes(totalSize)}</span>
+        <button
+          type="button"
+          className="relative overflow-hidden w-[22px] h-[22px] rounded-full bg-[rgba(236,72,153,0.15)] text-accent-pink border-0 flex items-center justify-center flex-shrink-0 cursor-pointer"
+          onClick={(e) => { e.stopPropagation(); rippleTap(e, onRemoveAll); }}
+          aria-label={`Remove folder ${name}`}
+        >
+          <X size={12} />
+        </button>
+      </div>
+      {open && (
+        <div className="flex flex-col gap-[0.4rem] p-[0.5rem] pt-0 pl-8">
+          {entries.map(({ file, index }) => (
+            <SwipeableFileRow
+              key={`${file.name}-${file.size}-${index}`}
+              file={file}
+              sizeLabel={formatBytes(file.size)}
+              onRemove={() => onRemoveOne(index)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Module-scope cache so re-mounting the Apps tab doesn't refetch icons
 // already fetched over the native bridge this session.
 const appIconCache = new Map();
@@ -202,6 +312,26 @@ function AppIcon({ packageName }) {
   return icon
     ? <img src={icon} alt="" className="w-9 h-9 rounded-[9px] flex-shrink-0 object-cover" />
     : <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(139,92,246,0.15)] text-accent-purple"><Smartphone size={18} /></div>;
+}
+
+// Wraps the substring of `text` matching `query` (case-insensitive) in a
+// highlighted <mark> — used to show which part of an app name matched search.
+function HighlightMatch({ text, query }) {
+  const q = query.trim();
+  if (!q) return text;
+
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return text;
+
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-accent-purple/30 text-accent-purple rounded-[3px] px-[1px]">
+        {text.slice(idx, idx + q.length)}
+      </mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
 }
 
 // Runs `worker` over `items` with at most `limit` in flight at once, resolving
@@ -253,10 +383,7 @@ function AppsPanel({ onSelectApps, formatBytes }) {
   }, []);
 
   const filtered = query.trim()
-    ? apps.filter((a) =>
-        a.appName.toLowerCase().includes(query.toLowerCase()) ||
-        a.packageName.toLowerCase().includes(query.toLowerCase())
-      )
+    ? apps.filter((a) => a.appName.toLowerCase().includes(query.toLowerCase()))
     : apps;
 
   const toggleSelected = (packageName) => {
@@ -280,13 +407,27 @@ function AppsPanel({ onSelectApps, formatBytes }) {
       // plain native file copy rather than a heavy base64 bridge payload, so
       // parallelizing a handful at a time is safe and meaningfully faster
       // than preparing them one at a time.
-      const files = await mapWithConcurrency(picked, 3, async (app) => {
-        const file = await getAppApkFile(app.packageName, app.appName, app.versionName);
-        completed += 1;
-        setPreparing({ index: completed, total: picked.length });
-        return file;
+      // Each app is prepped independently — one failure (over the size cap,
+      // uninstalled mid-scan, etc.) must not drop the rest of the selection.
+      const failed = [];
+      const results = await mapWithConcurrency(picked, 3, async (app) => {
+        try {
+          const file = await getAppApkFile(app.packageName, app.appName, app.versionName);
+          return file;
+        } catch (err) {
+          failed.push(app.appName || app.packageName);
+          return null;
+        } finally {
+          completed += 1;
+          setPreparing({ index: completed, total: picked.length });
+        }
       });
-      onSelectApps(files);
+      const files = results.filter(Boolean);
+
+      if (failed.length > 0) {
+        setError(`Could not prepare: ${failed.join(', ')}${files.length > 0 ? ' — sending the rest.' : ''}`);
+      }
+      if (files.length > 0) onSelectApps(files);
     } catch (err) {
       setError(err.message || 'Could not prepare the selected apps.');
     } finally {
@@ -335,24 +476,30 @@ function AppsPanel({ onSelectApps, formatBytes }) {
       )}
 
       {!loading && filtered.length > 0 && (
-        <div className="apps-list flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pb-1 pr-[0.4rem]">
+        // Responsive tile grid (was a vertical list): auto-fill sizes each
+        // tile to a ~92px minimum and lets the track add/remove columns as
+        // the panel width changes, so it self-adjusts across phone sizes
+        // (and the wider modal/desktop width) with no manual breakpoints.
+        // Behavior below (click-to-toggle, checkbox state, search highlight,
+        // AppsPanel state/handlers) is unchanged from the list version.
+        <div className="apps-list flex-1 min-h-0 grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] auto-rows-max gap-2.5 content-start overflow-y-auto pb-1 pr-[0.4rem]">
           {filtered.map((app) => {
             const isChecked = selected.has(app.packageName);
             return (
               <div
                 key={app.packageName}
-                className={`flex items-center gap-3 rounded-xl py-[0.6rem] px-[0.8rem] cursor-pointer transition-[background-color,border-color] duration-150 ease-linear border ${isChecked ? 'bg-[rgba(139,92,246,0.14)] border-accent-purple' : 'bg-[rgba(30,41,59,0.4)] border-border hover:bg-[rgba(30,41,59,0.65)] hover:border-accent-purple'}`}
+                title={`${app.packageName}${app.versionName ? ` · v${app.versionName}` : ''} · ${formatBytes(app.apkSize)}`}
+                className={`relative flex flex-col items-center gap-1.5 rounded-xl py-3 px-2 cursor-pointer transition-[background-color,border-color] duration-150 ease-linear border text-center ${isChecked ? 'bg-[rgba(139,92,246,0.14)] border-accent-purple' : 'bg-[rgba(30,41,59,0.4)] border-border hover:bg-[rgba(30,41,59,0.65)] hover:border-accent-purple'}`}
                 onClick={() => toggleSelected(app.packageName)}
               >
-                <span className={`w-5 h-5 flex-shrink-0 rounded-md border-[1.5px] flex items-center justify-center text-white transition-all duration-150 ${isChecked ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] border-accent-purple' : 'border-border'}`}>
+                <span className={`absolute top-1.5 right-1.5 w-5 h-5 flex-shrink-0 rounded-md border-[1.5px] flex items-center justify-center text-white transition-all duration-150 ${isChecked ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] border-accent-purple' : 'border-border bg-[rgba(8,12,20,0.5)]'}`}>
                   {isChecked && <Check size={13} strokeWidth={3} />}
                 </span>
                 <AppIcon packageName={app.packageName} />
-                <div className="flex-1 min-w-0 flex flex-col">
-                  <span className="text-[0.88rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{app.appName}</span>
-                  <span className="text-[0.72rem] text-text-muted whitespace-nowrap overflow-hidden text-ellipsis">
-                    {app.packageName}
-                    {app.versionName ? ` · v${app.versionName}` : ''} · {formatBytes(app.apkSize)}
+                <div className="w-full min-w-0 flex flex-col items-center">
+                  <span className="w-full text-[0.78rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis"><HighlightMatch text={app.appName} query={query} /></span>
+                  <span className="w-full text-[0.65rem] text-text-muted whitespace-nowrap overflow-hidden text-ellipsis">
+                    {app.versionName ? `v${app.versionName} · ` : ''}{formatBytes(app.apkSize)}
                   </span>
                 </div>
               </div>
@@ -373,6 +520,80 @@ function AppsPanel({ onSelectApps, formatBytes }) {
             : <><Share2 size={16} /> Share {selected.size} {selected.size === 1 ? 'App' : 'Apps'}</>}
         </button>
       )}
+    </div>
+  );
+}
+
+// Past sent/received transfers (feature #3), read fresh from localStorage
+// each time it mounts (parent remounts it via a `key` bump). Re-send only
+// works for "sent" entries whose File objects are still alive in
+// sentFilesMemory (this session only) — otherwise it prompts to reselect.
+function HistoryPanel({ formatBytes, onResend, onClear, now }) {
+  const entries = getHistory();
+
+  if (entries.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 text-text-muted text-center px-4 py-10">
+        <HistoryIcon size={28} />
+        <p>No transfers yet — sent and received files will show up here.</p>
+      </div>
+    );
+  }
+
+  // `now` is captured by the caller (at the moment the History tab was
+  // opened, in an event handler) rather than read here via Date.now() —
+  // component render must stay pure/idempotent.
+  const formatWhen = (ts) => {
+    const diff = now - ts;
+    if (diff < 60000) return 'just now';
+    if (diff < 3600000) return `${Math.round(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
+    return new Date(ts).toLocaleDateString();
+  };
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col gap-3">
+      <div className="flex items-center justify-between flex-shrink-0">
+        <span className="text-[0.8rem] text-text-muted">{entries.length} transfer{entries.length === 1 ? '' : 's'}</span>
+        <button
+          type="button"
+          className="relative overflow-hidden flex items-center gap-1 bg-transparent border-0 text-text-muted text-[0.78rem] cursor-pointer py-1 px-2 rounded-md hover:text-accent-pink hover:bg-[rgba(236,72,153,0.1)]"
+          onClick={(e) => rippleTap(e, onClear)}
+        >
+          <Trash2 size={13} /> Clear
+        </button>
+      </div>
+      <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pr-[0.4rem]">
+        {entries.map((entry) => {
+          const totalSize = entry.files.reduce((sum, f) => sum + (f.size || 0), 0);
+          const label = entry.files.length > 1
+            ? `${entry.files.length} ${entry.kind === 'text' ? 'text snippets' : 'files'}`
+            : (entry.files[0]?.name || 'Unknown');
+          return (
+            <div key={entry.id} className="flex items-center gap-3 bg-[rgba(30,41,59,0.4)] border border-border rounded-xl py-[0.6rem] px-[0.8rem]">
+              <div className={`w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center ${entry.direction === 'sent' ? 'bg-[rgba(139,92,246,0.15)] text-accent-purple' : 'bg-[rgba(6,182,212,0.15)] text-accent-cyan'}`}>
+                {entry.direction === 'sent' ? <UploadCloud size={16} /> : <Download size={16} />}
+              </div>
+              <div className="flex-1 min-w-0 flex flex-col">
+                <span className="text-[0.85rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{label}</span>
+                <span className="text-[0.72rem] text-text-muted whitespace-nowrap overflow-hidden text-ellipsis">
+                  {entry.direction === 'sent' ? 'Sent' : 'Received'} · {formatBytes(totalSize)} · {formatWhen(entry.timestamp)} · room {entry.roomCode}
+                </span>
+              </div>
+              {entry.direction === 'sent' && (
+                <button
+                  type="button"
+                  className="relative overflow-hidden flex-shrink-0 bg-transparent border border-border text-text-secondary cursor-pointer flex items-center gap-1 py-[0.4rem] px-[0.6rem] rounded-lg text-[0.75rem] transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
+                  onClick={(e) => rippleTap(e, () => onResend(entry))}
+                  title="Re-send"
+                >
+                  <RefreshCw size={13} /> Re-send
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -421,6 +642,31 @@ function App() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [incomingFile, setIncomingFile] = useState(null); // { name, size, type }
 
+  // Groups selectedFiles for display: consecutive files sharing the same
+  // webkitRelativePath top segment collapse into one folder row instead of
+  // listing every file inside flat. Order follows each item's first
+  // occurrence, so folders and loose files interleave the way they were added.
+  const groupedQueue = useMemo(() => {
+    const items = [];
+    const folders = new Map();
+    selectedFiles.forEach((file, index) => {
+      const rel = file.webkitRelativePath;
+      const folderName = rel ? rel.split('/')[0] : null;
+      if (folderName) {
+        let group = folders.get(folderName);
+        if (!group) {
+          group = { type: 'folder', name: folderName, entries: [] };
+          folders.set(folderName, group);
+          items.push(group);
+        }
+        group.entries.push({ file, index });
+      } else {
+        items.push({ type: 'file', file, index });
+      }
+    });
+    return items;
+  }, [selectedFiles]);
+
   // Connection States
   const [roomCode, setRoomCode] = useState('');
   const [targetPeerId, setTargetPeerId] = useState('');
@@ -456,6 +702,38 @@ function App() {
   // "Add more" picker state (queue view: append files or apps to the queue)
   const [showAddApps, setShowAddApps] = useState(false);
 
+  // Nearby (LAN) device discovery — list of { roomCode, deviceName, host }
+  // found via NsdManager on native builds; always empty on web.
+  const [nearbyPeers, setNearbyPeers] = useState([]);
+
+  // Transfer history tab — bumped to force a re-read from localStorage.
+  // historyOpenedAt is captured once (in the tab-click handler) rather than
+  // read fresh during HistoryPanel's render, keeping render pure.
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [historyOpenedAt, setHistoryOpenedAt] = useState(0);
+
+  // Verified-handshake security codes (feature #4): sender keeps one per
+  // connected receiver id, receiver keeps its own single code.
+  const [peerSecurityCodes, setPeerSecurityCodes] = useState({}); // { [connId]: code }
+  const [mySecurityCode, setMySecurityCode] = useState('');
+
+  // Send-as-text modal (feature #5)
+  const [showTextModal, setShowTextModal] = useState(false);
+  const [textDraft, setTextDraft] = useState('');
+  // Text snippets received this session, shown with a Copy button alongside
+  // the normal completed-file list: { name, text, size }
+  const [receivedTexts, setReceivedTexts] = useState([]);
+
+  // Bandwidth throttle (feature #8) — 0 = unlimited, else target KB/s per peer.
+  const [maxRateKBps, setMaxRateKBps] = useState(0);
+  const [showRateMenu, setShowRateMenu] = useState(false);
+  const maxRateRef = useRef(0);
+  useEffect(() => { maxRateRef.current = maxRateKBps; }, [maxRateKBps]);
+
+  // Receiver-side buffer for reconstructing a text snippet's chunks into a
+  // string once fully received (parallel to the native/web file-save path).
+  const receivedTextChunksRef = useRef([]);
+
   // Refs for background processes
   const peerRef = useRef(null);
   const connRef = useRef(null);
@@ -463,6 +741,12 @@ function App() {
   const receivedChunks = useRef([]);
   const receivedBytes = useRef(0);
   const incomingFileRef = useRef(null);
+  // Native path streams chunks straight to disk instead of buffering the
+  // whole file in JS memory (that buffering OOM-crashed the WebView on large
+  // files) — fileId names the temp file, writeChain serializes the native
+  // append calls so out-of-order bridge resolution can't corrupt the file.
+  const incomingFileIdRef = useRef('');
+  const writeChainRef = useRef(Promise.resolve());
   const fileInputRef = useRef(null);
   const scanVideoRef = useRef(null);
   const scanCanvasRef = useRef(null);
@@ -650,6 +934,47 @@ function App() {
     };
   }, []);
 
+  // Nearby-device discovery (feature #2): browse for other NovaShare devices
+  // on the local Wi-Fi whenever the receive UI is actually visible (idle home
+  // screen with no file queued), so a tap-to-connect list can replace typing
+  // a code for same-network transfers. No-op on web/desktop.
+  useEffect(() => {
+    const browsing = mode === 'home' && homeTab === 'home' && selectedFiles.length === 0;
+    if (!browsing) {
+      setNearbyPeers([]);
+      stopNearbyDiscovery();
+      return;
+    }
+    startNearbyDiscovery();
+    const offFound = onNearbyPeerFound((peer) => {
+      setNearbyPeers((prev) => {
+        const next = prev.filter((p) => p.roomCode !== peer.roomCode);
+        return [...next, peer];
+      });
+    });
+    const offLost = onNearbyPeerLost((peer) => {
+      setNearbyPeers((prev) => prev.filter((p) => p.roomCode !== peer.roomCode));
+    });
+    return () => {
+      offFound();
+      offLost();
+      stopNearbyDiscovery();
+    };
+  }, [mode, homeTab, selectedFiles.length]);
+
+  // Advertise the open room's code on the local network for as long as it's
+  // actively waiting for or serving receivers, so AppsPanel-style "just tap
+  // it" pairing works without a code/QR round trip on the same Wi-Fi.
+  useEffect(() => {
+    const advertising = mode === 'p2p-send' && (transferState === 'waiting' || transferState === 'transferring') && !!roomCode;
+    if (!advertising) {
+      stopAdvertisingRoom();
+      return;
+    }
+    startAdvertisingRoom(roomCode, getDeviceLabel());
+    return () => stopAdvertisingRoom();
+  }, [mode, transferState, roomCode]);
+
   // Cleanup active peer/connections
   function cleanup() {
     if (connRef.current) {
@@ -672,6 +997,9 @@ function App() {
     receivedFilesRef.current = [];
     isPausedRef.current = false;
     notifyThrottleRef.current = 0;
+    receivedTextChunksRef.current = [];
+    setPeerSecurityCodes({});
+    setMySecurityCode('');
   }
 
   // Reset UI back to Home State
@@ -696,6 +1024,7 @@ function App() {
     setIsPaused(false);
     setIsPeerPaused(false);
     setConnectedCount(0);
+    setReceivedTexts([]);
 
     // Clear URL search params without page reload
     window.history.pushState({}, document.title, window.location.pathname);
@@ -770,6 +1099,50 @@ function App() {
     fileInputRef.current.click();
   };
 
+  // Folder picker (feature #6): each File from a webkitdirectory input
+  // carries a read-only webkitRelativePath like "myFolder/sub/photo.png" —
+  // kept as-is on the File object and read off it again when building the
+  // 'metadata' message so the receiver can recreate the folder structure.
+  const folderInputRef = useRef(null);
+  const triggerFolderInput = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const files = await pickFolder();
+        if (files.length > 0) {
+          setSelectedFiles((prev) => [...prev, ...files]);
+          showToast(`${files.length} file${files.length === 1 ? '' : 's'} added from folder`, 'success');
+        }
+      } catch {
+        // User backed out of the folder picker — nothing to add.
+      }
+      return;
+    }
+    folderInputRef.current?.click();
+  };
+  const handleFolderSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length > 0) {
+      setSelectedFiles((prev) => [...prev, ...files]);
+      showToast(`${files.length} file${files.length === 1 ? '' : 's'} added from folder`, 'success');
+    }
+  };
+
+  // Send-as-text (feature #5): wraps the typed text in a File tagged with
+  // TEXT_SNIPPET_MIME so it rides through the exact same P2P send/receive
+  // pipeline as a real file — the receiver just also renders it inline.
+  const sendTextSnippet = () => {
+    const text = textDraft.trim();
+    if (!text) return;
+    const blob = new Blob([text], { type: TEXT_SNIPPET_MIME });
+    const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const file = new File([blob], `Text snippet ${stamp}.txt`, { type: TEXT_SNIPPET_MIME });
+    setSelectedFiles((prev) => [...prev, file]);
+    setTextDraft('');
+    setShowTextModal(false);
+    showToast('Text snippet added to queue', 'success');
+  };
+
   // ----------------------------------------------------
   // SENDER P2P WORKFLOW (broadcast: one room, several receivers)
   // ----------------------------------------------------
@@ -806,7 +1179,8 @@ function App() {
         port: 443,
         path: '/',
         secure: true,
-        debug: 1
+        debug: import.meta.env.DEV ? 2 : 0,
+        config: ICE_SERVERS
       });
 
       peerRef.current = peer;
@@ -846,6 +1220,13 @@ function App() {
         );
 
         conn.on('open', () => {
+          // Verified-handshake code (feature #4): derived from the room code
+          // + this receiver's peer id, so both sides land on the same value
+          // without exchanging anything extra over the wire.
+          computeSecurityCode(code, conn.peer).then((securityCode) => {
+            setPeerSecurityCodes((prev) => ({ ...prev, [conn.peer]: securityCode }));
+          });
+
           // Give a reconnecting receiver a brief window to send a 'resume'
           // message before defaulting to a fresh batch-start — a plain new
           // connection just falls through once the timer fires.
@@ -876,6 +1257,11 @@ function App() {
         const dropPeer = () => {
           connsRef.current = connsRef.current.filter((p) => p !== peerState);
           setConnectedCount(connsRef.current.length);
+          setPeerSecurityCodes((prev) => {
+            const next = { ...prev };
+            delete next[peerState.id];
+            return next;
+          });
           // Room stays alive for more receivers unless the batch is done —
           // no peers left mid-transfer just means back to waiting for one.
           if (connsRef.current.length === 0) {
@@ -956,6 +1342,16 @@ function App() {
         setTransferState('complete');
         import('canvas-confetti').then(({ default: confetti }) => confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } }));
         showToast('Transfer completed!', 'success');
+        const record = addHistoryEntry({
+          direction: 'sent',
+          kind: files.some((f) => f.type === TEXT_SNIPPET_MIME) ? 'text' : 'file',
+          files: files.map((f) => ({ name: f.name, size: f.size })),
+          peerLabel: `${connsRef.current.length} receiver${connsRef.current.length === 1 ? '' : 's'}`,
+          roomCode,
+          status: 'complete'
+        });
+        sentFilesMemory.set(record.id, files);
+        setHistoryVersion((v) => v + 1);
       }
       return;
     }
@@ -968,7 +1364,12 @@ function App() {
         size: file.size,
         mime: file.type || 'application/octet-stream',
         fileIndex: idx,
-        totalFiles: files.length
+        totalFiles: files.length,
+        // Folder transfers (feature #6): the subfolder portion of
+        // webkitRelativePath, e.g. "myFolder/sub" — empty for a plain file.
+        relPath: file.webkitRelativePath
+          ? file.webkitRelativePath.split('/').slice(0, -1).join('/')
+          : ''
       });
     } catch {
       return;
@@ -1024,7 +1425,17 @@ function App() {
           peerState.totalBytesSent += slice.size;
           updateAggregateStats();
 
-          sendNext();
+          // Bandwidth throttle (feature #8): cap this peer's outgoing rate by
+          // delaying the next chunk instead of firing back-to-back — applied
+          // per-connected-receiver, so a broadcast to several peers caps each
+          // one's stream independently rather than sharing one global budget.
+          const rateKBps = maxRateRef.current;
+          if (rateKBps > 0) {
+            const delayMs = (slice.size / (rateKBps * 1024)) * 1000;
+            setTimeout(sendNext, delayMs);
+          } else {
+            sendNext();
+          }
         } catch (err) {
           // Only this peer's stream failed — drop them, everyone else keeps going
           showToast('Error streaming to a receiver: ' + err.message, 'error');
@@ -1079,7 +1490,9 @@ function App() {
       incomingFileRef.current = {
         name: data.name,
         size: data.size,
-        type: data.mime
+        type: data.mime,
+        relPath: data.relPath || '',
+        isText: data.mime === TEXT_SNIPPET_MIME
       };
       setIncomingFile(incomingFileRef.current);
       setReceiveFileIndex(data.fileIndex || 0);
@@ -1089,6 +1502,9 @@ function App() {
       setTimeRemaining('--');
       receivedChunks.current = [];
       receivedBytes.current = 0;
+      receivedTextChunksRef.current = [];
+      incomingFileIdRef.current = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      writeChainRef.current = Promise.resolve();
       transferStartTime.current = Date.now();
     } else if (data.type === 'control') {
       setIsPeerPaused(data.action === 'pause');
@@ -1096,7 +1512,23 @@ function App() {
       setTransferState('error');
       setErrorMsg('This room already has the maximum number of receivers.');
     } else if (data.type === 'chunk') {
-      receivedChunks.current.push(data.chunk);
+      if (Capacitor.isNativePlatform()) {
+        // Stream this chunk to a temp file on the native side instead of
+        // keeping it in JS memory — writeChain keeps appends in arrival
+        // order even though each native call resolves asynchronously.
+        const fileId = incomingFileIdRef.current;
+        const base64Chunk = arrayBufferToBase64(data.chunk);
+        writeChainRef.current = writeChainRef.current
+          .then(() => NotifyDownload.appendChunk({ fileId, data: base64Chunk }))
+          .catch((err) => showToast('Failed to write incoming data: ' + err.message, 'error'));
+      } else {
+        receivedChunks.current.push(data.chunk);
+      }
+      if (incomingFileRef.current?.isText) {
+        // Small by nature (it's typed text) — safe to also keep in memory so
+        // it can be rendered inline with a Copy button once complete.
+        receivedTextChunksRef.current.push(data.chunk);
+      }
       receivedBytes.current += data.chunk.byteLength;
 
       const totalSize = incomingFileRef.current ? incomingFileRef.current.size : 0;
@@ -1122,15 +1554,45 @@ function App() {
 
       if (data.done) {
         const mimeType = incomingFileRef.current ? incomingFileRef.current.type : 'application/octet-stream';
-        const blob = new Blob(receivedChunks.current, { type: mimeType });
-        const url = URL.createObjectURL(blob);
         const fileName = incomingFileRef.current ? incomingFileRef.current.name : 'downloaded-file';
         const fileSize = incomingFileRef.current ? incomingFileRef.current.size : receivedBytes.current;
+        const relPath = incomingFileRef.current ? incomingFileRef.current.relPath : '';
+        const isText = !!incomingFileRef.current?.isText;
 
-        receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, url, size: fileSize }];
-        setCompletedFiles(receivedFilesRef.current);
+        // Reconstruct a text snippet's full string from its buffered chunks,
+        // in addition to (not instead of) saving it as a normal .txt file below.
+        let snippetText = '';
+        if (isText) {
+          try {
+            const decoder = new TextDecoder();
+            snippetText = receivedTextChunksRef.current.map((chunk) => decoder.decode(chunk, { stream: true })).join('') + decoder.decode();
+          } catch {
+            snippetText = '';
+          }
+          if (snippetText) {
+            setReceivedTexts((prev) => [...prev, { name: fileName, text: snippetText, size: fileSize }]);
+          }
+        }
 
-        saveReceivedFile(blob, fileName, url);
+        if (Capacitor.isNativePlatform()) {
+          const fileId = incomingFileIdRef.current;
+          writeChainRef.current = writeChainRef.current.then(async () => {
+            try {
+              await NotifyDownload.finishReceive({ fileId, fileName, mimeType, relPath });
+              receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, size: fileSize, relPath, isText }];
+              setCompletedFiles(receivedFilesRef.current);
+              showToast(isText ? 'Text snippet received' : `${fileName} saved to Downloads`, 'success');
+            } catch (err) {
+              showToast(`Could not save ${fileName}: ${err.message}`, 'error');
+            }
+          });
+        } else {
+          const blob = new Blob(receivedChunks.current, { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, url, size: fileSize, relPath, isText }];
+          setCompletedFiles(receivedFilesRef.current);
+          if (!isText) saveReceivedFile(blob, fileName, url);
+        }
       }
     } else if (data.type === 'batch-complete') {
       setTransferState('complete');
@@ -1140,6 +1602,15 @@ function App() {
         origin: { y: 0.6 }
       }));
       showToast('Transfer completed!', 'success');
+      addHistoryEntry({
+        direction: 'received',
+        kind: receivedFilesRef.current.some((f) => f.isText) ? 'text' : 'file',
+        files: receivedFilesRef.current.map((f) => ({ name: f.name, size: f.size })),
+        peerLabel: targetPeerId,
+        roomCode: targetPeerId,
+        status: 'complete'
+      });
+      setHistoryVersion((v) => v + 1);
     }
   };
 
@@ -1179,13 +1650,16 @@ function App() {
       port: 443,
       path: '/',
       secure: true,
-      debug: 1
+      debug: import.meta.env.DEV ? 2 : 0,
+      config: ICE_SERVERS
     });
 
     peerRef.current = peer;
 
     peer.on('open', () => {
       if (!isResume) showToast('Connecting to room ' + code + '...', 'info');
+
+      computeSecurityCode(code, peer.id).then(setMySecurityCode);
 
       const conn = peer.connect(code, { reliable: true });
       connRef.current = conn;
@@ -1226,41 +1700,16 @@ function App() {
     });
   };
 
-  // Save a received file to actual device storage.
-  // In a real browser, <a download> already writes to the Downloads folder.
-  // Inside the Capacitor WebView that click is a no-op, so write bytes via Filesystem instead.
-  const saveReceivedFile = async (blob, fileName, blobUrl) => {
-    if (!Capacitor.isNativePlatform()) {
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      return;
-    }
-
-    try {
-      const base64Data = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-
-      // Writes into the real system Downloads folder via MediaStore and
-      // registers the file with DownloadManager, so it shows the standard
-      // "Download complete" notification and appears in the system Downloads app.
-      await NotifyDownload.saveToDownloads({
-        fileName,
-        data: base64Data,
-        mimeType: blob.type || 'application/octet-stream'
-      });
-
-      showToast(`${fileName} saved to Downloads`, 'success');
-    } catch (err) {
-      showToast(`Could not save ${fileName}: ${err.message}`, 'error');
-    }
+  // Web-only: a real browser's <a download> already writes to the Downloads
+  // folder. Native path saves via NotifyDownload.appendChunk/finishReceive
+  // as chunks arrive instead — see handleReceiverData.
+  const saveReceivedFile = (blob, fileName, blobUrl) => {
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const copyToClipboard = (text, message = 'Copied to clipboard!') => {
@@ -1269,15 +1718,6 @@ function App() {
     }).catch(() => {
       showToast('Failed to copy.', 'error');
     });
-  };
-
-  const getSharingUrl = () => {
-    let origin = window.location.origin;
-    const localIp = import.meta.env.VITE_LOCAL_IP;
-    if ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && localIp && localIp !== 'localhost') {
-      origin = `${window.location.protocol}//${localIp}:${window.location.port}`;
-    }
-    return `${origin}${window.location.pathname}?room=${roomCode}`;
   };
 
   // Extract a room code from raw scanned QR text (full share URL or bare code)
@@ -1366,7 +1806,7 @@ function App() {
       case 'pdf': return <div className={wrapperClass} style={{color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.15)'}}><FileText size={24} /></div>;
       case 'archive': return <div className={wrapperClass} style={{color: '#eab308', backgroundColor: 'rgba(234, 179, 8, 0.15)'}}><FileArchive size={24} /></div>;
       case 'code': return <div className={wrapperClass} style={{color: '#a855f7', backgroundColor: 'rgba(168, 85, 247, 0.15)'}}><FileCode size={24} /></div>;
-      default: return <div className={wrapperClass}><File size={24} /></div>;
+      default: return <div className={wrapperClass}><FileIcon size={24} /></div>;
     }
   };
 
@@ -1438,6 +1878,13 @@ function App() {
                   >
                     Apps
                   </button>
+                  <button
+                    type="button"
+                    className={`flex-1 bg-transparent border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 flex items-center justify-center gap-1 ${homeTab === 'history' ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] text-white shadow-[0_2px_10px_rgba(124,58,237,0.3)]' : 'text-text-muted hover:text-text-primary'}`}
+                    onClick={() => { setHomeTab('history'); setHistoryVersion((v) => v + 1); setHistoryOpenedAt(Date.now()); }}
+                  >
+                    <HistoryIcon size={13} /> History
+                  </button>
                 </div>
               )}
 
@@ -1448,6 +1895,22 @@ function App() {
                     setSelectedFiles((prev) => [...prev, ...files]);
                     setHomeTab('home');
                   }}
+                />
+              ) : selectedFiles.length === 0 && homeTab === 'history' ? (
+                <HistoryPanel
+                  key={historyVersion}
+                  now={historyOpenedAt}
+                  formatBytes={formatBytes}
+                  onResend={(entry) => {
+                    const files = sentFilesMemory.get(entry.id);
+                    if (!files || files.length === 0) {
+                      showToast('Those files are no longer available — please reselect them.', 'error');
+                      return;
+                    }
+                    setSelectedFiles(files);
+                    setHomeTab('home');
+                  }}
+                  onClear={() => { clearHistory(); setHistoryVersion((v) => v + 1); }}
                 />
               ) : (
               <>
@@ -1482,7 +1945,37 @@ function App() {
                     </span>
                   </div>
                 </div>
-              ) : (
+              ) : null}
+
+              {selectedFiles.length === 0 && (
+                <div className="flex items-center justify-center gap-4 mt-3 flex-shrink-0">
+                  <button
+                    type="button"
+                    className="relative overflow-hidden flex items-center gap-1 bg-transparent border-0 text-text-muted text-[0.8rem] cursor-pointer py-1 px-2 rounded-md hover:text-accent-cyan"
+                    onClick={(e) => rippleTap(e, triggerFolderInput)}
+                  >
+                    <FolderUp size={14} /> Send a folder
+                  </button>
+                  <button
+                    type="button"
+                    className="relative overflow-hidden flex items-center gap-1 bg-transparent border-0 text-text-muted text-[0.8rem] cursor-pointer py-1 px-2 rounded-md hover:text-accent-cyan"
+                    onClick={(e) => rippleTap(e, () => setShowTextModal(true))}
+                  >
+                    <Type size={14} /> Send text
+                  </button>
+                  <input
+                    type="file"
+                    className="hidden"
+                    ref={folderInputRef}
+                    onChange={handleFolderSelect}
+                    webkitdirectory=""
+                    directory=""
+                    multiple
+                  />
+                </div>
+              )}
+
+              {selectedFiles.length > 0 && (
                 /* FILES SELECTED STATE CARD */
                 <div className="flex-1 min-h-0 flex flex-col">
                   {selectedFiles.length === 1 ? (
@@ -1503,24 +1996,42 @@ function App() {
                         <span className="text-[0.72rem] text-text-muted">swipe or tap &times; to drop a file</span>
                       </div>
                       <div className="queue flex-1 min-h-[80px] flex flex-col gap-[0.6rem] mb-6 overflow-y-auto p-3 pr-[0.6rem] rounded-2xl border border-border bg-[rgba(8,12,20,0.25)]">
-                        {selectedFiles.map((f, i) => (
+                        {groupedQueue.map((item) => item.type === 'folder' ? (
+                          <FolderQueueRow
+                            key={`folder-${item.name}`}
+                            name={item.name}
+                            entries={item.entries}
+                            formatBytes={formatBytes}
+                            onRemoveAll={() => {
+                              const dropIndexes = new Set(item.entries.map((e) => e.index));
+                              setSelectedFiles((prev) => prev.filter((_, idx) => !dropIndexes.has(idx)));
+                            }}
+                            onRemoveOne={(index) => setSelectedFiles((prev) => prev.filter((_, idx) => idx !== index))}
+                          />
+                        ) : (
                           <SwipeableFileRow
-                            key={`${f.name}-${f.size}-${i}`}
-                            file={f}
-                            sizeLabel={formatBytes(f.size)}
-                            onRemove={() => setSelectedFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                            key={`${item.file.name}-${item.file.size}-${item.index}`}
+                            file={item.file}
+                            sizeLabel={formatBytes(item.file.size)}
+                            onRemove={() => setSelectedFiles((prev) => prev.filter((_, idx) => idx !== item.index))}
                           />
                         ))}
                       </div>
                     </div>
                   )}
 
-                  <div className="flex flex-row gap-3 mb-3 flex-shrink-0">
+                  <div className="flex flex-row gap-3 mb-3 flex-shrink-0 flex-wrap">
                     <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, triggerFileInput)}>
                       <UploadCloud size={16} /> Add Files
                     </button>
+                    <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, triggerFolderInput)}>
+                      <FolderUp size={16} /> Add Folder
+                    </button>
                     <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, () => setShowAddApps(true))}>
                       <Smartphone size={16} /> Add Apps
+                    </button>
+                    <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, () => setShowTextModal(true))}>
+                      <Type size={16} /> Send Text
                     </button>
                   </div>
                   <input
@@ -1528,6 +2039,15 @@ function App() {
                     className="hidden"
                     ref={fileInputRef}
                     onChange={handleFileSelect}
+                    multiple
+                  />
+                  <input
+                    type="file"
+                    className="hidden"
+                    ref={folderInputRef}
+                    onChange={handleFolderSelect}
+                    webkitdirectory=""
+                    directory=""
                     multiple
                   />
 
@@ -1562,6 +2082,33 @@ function App() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* NEARBY DEVICES (feature #2): same-Wi-Fi senders discovered via NSD — tap to connect with no code entry */}
+              {selectedFiles.length === 0 && nearbyPeers.length > 0 && (
+                <div className="mt-1 mb-2 flex-shrink-0">
+                  <div className="flex items-center gap-[0.4rem] text-[0.78rem] text-text-muted mb-2">
+                    <Radar size={14} className="text-accent-cyan" /> Nearby on this Wi-Fi
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {nearbyPeers.map((peer) => (
+                      <button
+                        key={peer.roomCode}
+                        type="button"
+                        className="relative overflow-hidden flex items-center gap-3 bg-[rgba(6,182,212,0.08)] border border-[rgba(6,182,212,0.3)] rounded-xl py-[0.6rem] px-[0.8rem] text-left cursor-pointer transition-all duration-200 hover:bg-[rgba(6,182,212,0.15)]"
+                        onClick={(e) => rippleTap(e, () => { setTargetPeerId(peer.roomCode); startP2PReceive(peer.roomCode); })}
+                      >
+                        <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(6,182,212,0.15)] text-accent-cyan">
+                          <Laptop size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0 flex flex-col">
+                          <span className="text-[0.85rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{peer.deviceName}</span>
+                          <span className="text-[0.72rem] text-text-muted">Tap to connect</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -1635,6 +2182,37 @@ function App() {
                 </div>
               )}
 
+              {/* SEND TEXT MODAL (feature #5) */}
+              {showTextModal && (
+                <div className="fixed inset-0 bg-[rgba(4,6,12,0.85)] backdrop-blur-sm flex items-center justify-center z-[1000] p-5" onClick={(e) => rippleTap(e, () => setShowTextModal(false))}>
+                  <div className="bg-bg-secondary border border-border rounded-[20px] p-4 w-full max-w-[360px] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_8px_10px_-6px_rgba(0,0,0,0.3)]" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-3 font-heading font-semibold">
+                      <span className="flex items-center gap-[0.4rem]">
+                        <Type size={16} /> Send Text
+                      </span>
+                      <button className="relative overflow-hidden bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-[0.4rem] rounded-md transition-all duration-200 hover:bg-white/5 hover:text-text-primary" onClick={(e) => rippleTap(e, () => setShowTextModal(false))} title="Close">
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <textarea
+                      autoFocus
+                      rows={5}
+                      placeholder="Paste or type a note, link, or password to send..."
+                      className="w-full bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-3 font-heading text-[0.9rem] text-text-primary outline-none resize-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(139,92,246,0.12)]"
+                      value={textDraft}
+                      onChange={(e) => setTextDraft(e.target.value)}
+                    />
+                    <button
+                      className={`${BTN_PRIMARY} w-full mt-3`}
+                      disabled={!textDraft.trim()}
+                      onClick={(e) => rippleTap(e, sendTextSnippet)}
+                    >
+                      <Zap size={16} /> Add to Queue
+                    </button>
+                  </div>
+                </div>
+              )}
+
               </>
               )}
 
@@ -1690,6 +2268,31 @@ function App() {
                   </div>
                   <p className="text-center text-[0.8rem] text-text-muted mb-4">Waiting for peers to scan or enter your code&hellip; anyone with it can join.</p>
 
+                  {/* BANDWIDTH THROTTLE (feature #8) */}
+                  <div className="relative w-full flex justify-center mb-3">
+                    <button
+                      type="button"
+                      className="relative overflow-hidden flex items-center gap-2 bg-transparent border border-border text-text-secondary text-[0.78rem] cursor-pointer py-[0.35rem] px-3 rounded-lg hover:bg-white/5 hover:text-text-primary"
+                      onClick={(e) => rippleTap(e, () => setShowRateMenu((v) => !v))}
+                    >
+                      <Gauge size={14} /> Speed limit: {RATE_PRESETS.find((r) => r.kbps === maxRateKBps)?.label || 'Unlimited'}
+                    </button>
+                    {showRateMenu && (
+                      <div className="absolute top-full mt-1 z-10 bg-bg-secondary border border-border rounded-xl p-1 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.4)] flex flex-col min-w-[140px]">
+                        {RATE_PRESETS.map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            className={`text-left text-[0.8rem] py-[0.4rem] px-3 rounded-lg border-0 cursor-pointer ${maxRateKBps === preset.kbps ? 'bg-[rgba(139,92,246,0.15)] text-accent-purple' : 'bg-transparent text-text-secondary hover:bg-white/5'}`}
+                            onClick={() => { setMaxRateKBps(preset.kbps); setShowRateMenu(false); }}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex flex-col gap-3 w-full">
                     <div className="flex items-center justify-between bg-white/[0.03] border border-accent-purple/30 rounded-xl py-[0.65rem] px-[0.9rem]">
                       <RoomCodeFlap code={roomCode} />
@@ -1702,37 +2305,28 @@ function App() {
                       </button>
                     </div>
 
-                    <div className="flex items-center justify-between gap-[0.6rem] bg-white/[0.03] border border-accent-purple/30 rounded-xl py-[0.6rem] px-[0.9rem] text-[0.72rem] text-text-secondary">
-                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">{getSharingUrl()}</span>
-                      <button
-                        className="relative overflow-hidden bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-[0.4rem] rounded-md transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
-                        onClick={(e) => rippleTap(e, () => copyToClipboard(getSharingUrl(), 'Share link copied!'))}
-                        title="Copy Link"
-                      >
-                        <Copy size={14} />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-4 mt-1">
+                    <div className="flex flex-col items-center gap-3 bg-white/[0.03] border border-accent-purple/30 rounded-xl px-4 py-5">
                       <div
-                        className="w-[82px] h-[82px] bg-white rounded-[10px] p-[5px] flex-shrink-0 flex items-center justify-center cursor-pointer transition-transform duration-150 hover:scale-105 focus-visible:scale-105 focus-visible:outline-none"
+                        className="bg-white rounded-xl p-2 flex items-center justify-center cursor-pointer transition-transform duration-150 hover:scale-105 focus-visible:scale-105 focus-visible:outline-none"
                         onClick={() => setShowQrZoom(true)}
                         role="button"
                         tabIndex={0}
                         title="Tap to enlarge"
                       >
                         <QRCodeSVG
-                          value={getSharingUrl()}
-                          size={72}
+                          value={roomCode}
+                          size={104}
                           bgColor={"#ffffff"}
                           fgColor={"#0b0e1c"}
                           level={"H"}
                           includeMargin={false}
                         />
                       </div>
-                      <div className="flex-1 min-w-0 text-[0.72rem] text-text-secondary leading-[1.5] flex flex-col gap-[0.15rem] text-left">
-                        <b className="text-text-primary text-[0.78rem]">Scan to connect</b>
-                        Keep this tab open &mdash; the file streams directly, peer to peer. Tap the QR code to enlarge.
+                      <div className="flex flex-col items-center gap-1 text-center max-w-[240px]">
+                        <b className="text-text-primary text-[0.8rem]">Scan to connect</b>
+                        <p className="text-[0.72rem] text-text-secondary leading-[1.5]">
+                          Keep this tab open &mdash; the file streams directly, peer to peer. Tap the QR code to enlarge.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1745,6 +2339,21 @@ function App() {
                   <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(6,182,212,0.08)] border border-[rgba(6,182,212,0.2)] text-accent-cyan">
                     <Users size={14} /> {connectedCount} {connectedCount === 1 ? 'receiver' : 'receivers'} connected
                   </div>
+
+                  {/* VERIFIED HANDSHAKE CODES (feature #4) — one per connected receiver */}
+                  {Object.keys(peerSecurityCodes).length > 0 && (
+                    <div className="flex flex-col gap-1 bg-white/[0.03] border border-border rounded-xl px-3 py-2 text-left">
+                      <div className="flex items-center gap-1 text-[0.72rem] text-text-muted uppercase tracking-wide">
+                        <ShieldQuestion size={12} /> Verify on both screens
+                      </div>
+                      {Object.entries(peerSecurityCodes).map(([peerId, code]) => (
+                        <div key={peerId} className="flex items-center justify-between text-[0.8rem]">
+                          <span className="text-text-muted">Receiver {peerId.slice(0, 4)}&hellip;</span>
+                          <span className="font-mono font-semibold text-accent-cyan tracking-wider">{code}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {sendFileCount > 1 && (
                     <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(139,92,246,0.08)] border border-[rgba(139,92,246,0.2)] text-accent-purple">
@@ -1890,6 +2499,15 @@ function App() {
                     {isPeerPaused ? 'Paused by sender' : 'Receiving File...'}
                   </div>
 
+                  {/* VERIFIED HANDSHAKE CODE (feature #4) */}
+                  {mySecurityCode && (
+                    <div className="flex items-center justify-center gap-2 bg-white/[0.03] border border-border rounded-xl px-3 py-2 text-[0.8rem]">
+                      <ShieldQuestion size={13} className="text-text-muted flex-shrink-0" />
+                      <span className="text-text-muted">Verify code matches sender:</span>
+                      <span className="font-mono font-semibold text-accent-cyan tracking-wider">{mySecurityCode}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-center">
                     <TransferRing progress={transferProgress} gradientId="ringGradRecv" />
                   </div>
@@ -1924,17 +2542,44 @@ function App() {
                     </p>
                   </div>
 
-                  {completedFiles.length > 0 && (
+                  {/* RECEIVED TEXT SNIPPETS (feature #5) — copy instead of download */}
+                  {receivedTexts.length > 0 && (
+                    <div className="flex flex-col gap-2 w-full text-left">
+                      {receivedTexts.map((t, i) => (
+                        <div key={i} className="bg-[rgba(6,182,212,0.08)] border border-[rgba(6,182,212,0.3)] rounded-xl p-3 flex flex-col gap-2">
+                          <p className="text-[0.85rem] text-text-primary whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto m-0">{t.text}</p>
+                          <button
+                            type="button"
+                            className="relative overflow-hidden self-end flex items-center gap-1 bg-transparent border border-[rgba(6,182,212,0.4)] text-accent-cyan text-[0.75rem] cursor-pointer py-1 px-2 rounded-md hover:bg-[rgba(6,182,212,0.12)]"
+                            onClick={(e) => rippleTap(e, () => copyToClipboard(t.text, 'Text copied!'))}
+                          >
+                            <ClipboardCopy size={12} /> Copy
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {completedFiles.filter((f) => !f.isText).length > 0 && (
                     <div className="flex flex-col gap-2 w-full">
-                      {completedFiles.map((f, i) => (
-                        <a
-                          key={i}
-                          href={f.url}
-                          download={f.name}
-                          className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl cursor-pointer flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_4px_20px_rgba(16,185,129,0.4)] no-underline w-full mt-4 hover:scale-[1.02] hover:shadow-[0_8px_30px_rgba(16,185,129,0.6)] hover:from-[#34d399] hover:to-[#047857]"
-                        >
-                          <Download size={16} /> {f.name}
-                        </a>
+                      {completedFiles.filter((f) => !f.isText).map((f, i) => (
+                        Capacitor.isNativePlatform() ? (
+                          <div
+                            key={i}
+                            className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl flex items-center justify-center gap-3 shadow-[0_4px_20px_rgba(16,185,129,0.4)] w-full mt-4"
+                          >
+                            <Download size={16} /> {f.relPath ? `${f.relPath}/${f.name}` : f.name}
+                          </div>
+                        ) : (
+                          <a
+                            key={i}
+                            href={f.url}
+                            download={f.name}
+                            className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl cursor-pointer flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_4px_20px_rgba(16,185,129,0.4)] no-underline w-full mt-4 hover:scale-[1.02] hover:shadow-[0_8px_30px_rgba(16,185,129,0.6)] hover:from-[#34d399] hover:to-[#047857]"
+                          >
+                            <Download size={16} /> {f.name}
+                          </a>
+                        )
                       ))}
                     </div>
                   )}
@@ -1987,7 +2632,7 @@ function App() {
             </div>
             <div className="bg-white p-4 rounded-2xl flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
               <QRCodeSVG
-                value={getSharingUrl()}
+                value={roomCode}
                 size={240}
                 bgColor={"#ffffff"}
                 fgColor={"#0b0e1c"}
@@ -2000,14 +2645,6 @@ function App() {
                 <span key={i} className="font-heading text-[1.15rem] font-bold tracking-[0.02em] text-accent-cyan bg-white/5 border border-border rounded-lg w-8 h-[38px] flex items-center justify-center">{ch}</span>
               ))}
             </div>
-            <button
-              className="flex items-center gap-2 w-full bg-white/[0.03] border border-border rounded-[10px] py-[0.55rem] px-3 cursor-pointer text-text-secondary transition-colors duration-150 hover:bg-white/[0.07]"
-              onClick={(e) => rippleTap(e, () => copyToClipboard(getSharingUrl(), 'Share link copied!'))}
-              title="Copy link"
-            >
-              <span className="flex-1 text-[0.72rem] text-left overflow-hidden text-ellipsis whitespace-nowrap">{getSharingUrl()}</span>
-              <Copy size={14} className="flex-shrink-0" />
-            </button>
           </div>
         </div>,
         document.body

@@ -10,12 +10,12 @@
     "semantic_hash": "085ab5be4ee69ae4ef8d44aa6e90552c"
   },
   "android/app/build.gradle": {
-    "mtime": 1785408506.931293,
-    "ast_hash": "443052622931dd0393f6bb4ea37a16ee",
+    "mtime": 1785244717.0959065,
+    "ast_hash": "99669d4515853ce79f540b6a2a162dee",
     "semantic_hash": ""
   },
   "android/app/capacitor.build.gradle": {
-    "mtime": 1785424457.4531264,
+    "mtime": 1785335373.853403,
     "ast_hash": "5b7212fd295a0d57d21afc4da01ab520",
     "semantic_hash": ""
   },
@@ -35,7 +35,7 @@
     "semantic_hash": ""
   },
   "android/capacitor.settings.gradle": {
-    "mtime": 1785424457.4521286,
+    "mtime": 1785335373.8524034,
     "ast_hash": "0e91352e1143222262d0644b5006e02c",
     "semantic_hash": ""
   },
@@ -75,8 +75,8 @@
     "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
   },
   "src/App.jsx": {
-    "mtime": 1785423765.3880718,
-    "ast_hash": "6b618d8d4b9e0385e7dec300079249ec",
+    "mtime": 1785364595.3444226,
+    "ast_hash": "9a75fe462109c2aefe04c11656d76607",
     "semantic_hash": ""
   },
   "src/main.jsx": {
@@ -85,8 +85,8 @@
     "semantic_hash": "8e9934c2dc4c3d2fa5eea8e774b4a8bd"
   },
   "src/native.js": {
-    "mtime": 1785422946.9629135,
-    "ast_hash": "a8d76474006d6dcbf195ab4320098fd0",
+    "mtime": 1785318520.6774375,
+    "ast_hash": "0efad07c65ce8d875d29141aa601d4b8",
     "semantic_hash": ""
   },
   "vite.config.js": {
@@ -295,13 +295,13 @@
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/MainActivity.kt": {
-    "mtime": 1785422906.0035858,
-    "ast_hash": "1b4e626eccc76f17ad1a2b4b6284f1fd",
+    "mtime": 1785251089.3207786,
+    "ast_hash": "f0f8e748b77944ce34698f2aac2c1602",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.kt": {
-    "mtime": 1785422929.1108153,
-    "ast_hash": "6fde85e5eae24b68edcdd2a5cab731e2",
+    "mtime": 1785244740.6937284,
+    "ast_hash": "19bfde61cf881c3b577668dabb7ffcf6",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/IncomingSharePlugin.kt": {
@@ -357,31 +357,6 @@
   "scratch_current.png": {
     "mtime": 1785327161.2098403,
     "ast_hash": "08001b146a71dd281a3aeaace920c848",
-    "semantic_hash": ""
-  },
-  "android/app/src/main/java/com/veer/novashare/NearbyDiscoveryPlugin.kt": {
-    "mtime": 1785422902.8295062,
-    "ast_hash": "6beb80888d6131c13ef2a6e2917bf2db",
-    "semantic_hash": ""
-  },
-  "src/history.js": {
-    "mtime": 1785422957.667218,
-    "ast_hash": "f16db008e97cdb940a0b1dec4ae16f14",
-    "semantic_hash": ""
-  },
-  "src/security.js": {
-    "mtime": 1785422969.2357337,
-    "ast_hash": "316649aa06a4b8acd0b62d263cf15b24",
-    "semantic_hash": ""
-  },
-  "assets/MAIN ICON.png": {
-    "mtime": 1785413331.392386,
-    "ast_hash": "000237b9fb1f2005fd1cf6f1e8678a1e",
-    "semantic_hash": ""
-  },
-  "assets/header_4096x2304.jpg": {
-    "mtime": 1785414172.9657784,
-    "ast_hash": "3512200c0e42ca1c25ea95184f76fc14",
     "semantic_hash": ""
   }
 }

@@ -58,26 +58,31 @@ html {
 /* ...except the scrollable file/app lists — a slim thumb here is a useful
    "there's more below" signal, not just visual noise. */
 .native-app .queue,
-.native-app .apps-list {
+.native-app .apps-list,
+.native-app .folder-queue {
   scrollbar-width: thin;
   scrollbar-color: var(--color-accent-purple) transparent;
 }
 .native-app .queue::-webkit-scrollbar,
-.native-app .apps-list::-webkit-scrollbar {
+.native-app .apps-list::-webkit-scrollbar,
+.native-app .folder-queue::-webkit-scrollbar {
   display: block;
   width: 4px;
 }
 .native-app .queue::-webkit-scrollbar-track,
-.native-app .apps-list::-webkit-scrollbar-track {
+.native-app .apps-list::-webkit-scrollbar-track,
+.native-app .folder-queue::-webkit-scrollbar-track {
   background: transparent;
 }
 .native-app .queue::-webkit-scrollbar-thumb,
-.native-app .apps-list::-webkit-scrollbar-thumb {
+.native-app .apps-list::-webkit-scrollbar-thumb,
+.native-app .folder-queue::-webkit-scrollbar-thumb {
   background: rgba(139, 92, 246, 0.5);
   border-radius: 999px;
 }
 .native-app .queue::-webkit-scrollbar-thumb:hover,
-.native-app .apps-list::-webkit-scrollbar-thumb:hover {
+.native-app .apps-list::-webkit-scrollbar-thumb:hover,
+.native-app .folder-queue::-webkit-scrollbar-thumb:hover {
   background: var(--color-accent-cyan);
 }
 
