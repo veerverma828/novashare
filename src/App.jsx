@@ -307,7 +307,7 @@ function AppIcon({ packageName }) {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [packageName]);
+  }, [packageName, icon]);
 
   return icon
     ? <img src={icon} alt="" className="w-9 h-9 rounded-[9px] flex-shrink-0 object-cover" />
@@ -415,6 +415,7 @@ function AppsPanel({ onSelectApps, formatBytes }) {
           const file = await getAppApkFile(app.packageName, app.appName, app.versionName);
           return file;
         } catch (err) {
+          console.error(`Failed to prepare ${app.packageName}:`, err);
           failed.push(app.appName || app.packageName);
           return null;
         } finally {
@@ -876,6 +877,9 @@ function App() {
       CapacitorApp.exitApp();
     });
     return () => { handle.remove(); };
+    // resetToHome only touches refs/setters, so the version captured on
+    // mount behaves identically to any later render's — safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-close the zoomed QR modal once a peer successfully connects
@@ -900,6 +904,11 @@ function App() {
     }
 
     return () => cleanup();
+    // startP2PReceive is called with the explicit roomParam (not the
+    // targetPeerId state it'd otherwise fall back on), and cleanup only
+    // touches refs/setters — both are safe to call via their mount-time
+    // closure, so it's fine to run this once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Pick up files shared into NovaShare from another app's "Share" menu:

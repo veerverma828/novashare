@@ -9,7 +9,7 @@
   "7": "gradlew",
   "8": "MainActivity",
   "9": "NotifyDownloadPlugin",
-  "10": "JSObject",
+  "10": "IncomingSharePlugin",
   "11": "TransferForegroundService",
   "12": "dependencies",
   "13": "TransferNotificationPlugin",
@@ -31,6 +31,5 @@
   "29": "React + Vite",
   "30": "rules/graphify.md",
   "31": "workflows/graphify.md",
-  "32": ".folderPickerResult",
   "33": "CLAUDE.md"
 }
