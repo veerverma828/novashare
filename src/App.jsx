@@ -2165,7 +2165,7 @@ function App() {
 
       {/* MAIN LAYOUT CONTAINER */}
       <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2">
-        <div className="w-full max-w-[490px] flex-1 min-h-0 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)]">
+        <div className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 min-h-0 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)]`}>
 
           {/* ==================================================== */}
           {/* VIEW: HOME VIEW                                      */}
