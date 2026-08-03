@@ -3,20 +3,23 @@
 /* Design tokens — used as Tailwind utilities (bg-bg-primary, text-accent-purple,
    font-heading, ...) across every component. */
 @theme {
-  --color-bg-primary: #080c14;
-  --color-bg-secondary: #0f172a;
-  --color-bg-tertiary: #1e293b;
-  --color-accent-purple: #8b5cf6;
-  --color-accent-cyan: #06b6d4;
-  --color-accent-green: #10b981;
-  --color-accent-pink: #ec4899;
-  --color-text-primary: #f8fafc;
-  --color-text-secondary: #94a3b8;
-  --color-text-muted: #64748b;
-  --color-border: rgba(255, 255, 255, 0.08);
+  /* Studio theme: near-black neutrals, one icy-blue accent used for both the
+     primary brand color and informational tints (purple/cyan folded into a
+     single hue), semantic success/error kept separate from the accent. */
+  --color-bg-primary: #0a0a0b;
+  --color-bg-secondary: #141416;
+  --color-bg-tertiary: #1a1a1d;
+  --color-accent-purple: #7dd3ff;
+  --color-accent-cyan: #7dd3ff;
+  --color-accent-green: #34d399;
+  --color-accent-pink: #f87171;
+  --color-text-primary: #f2f2f3;
+  --color-text-secondary: #b4b4ba;
+  --color-text-muted: #8a8a90;
+  --color-border: #26262a;
 
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-heading: 'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-heading: system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
 }
@@ -111,40 +114,9 @@ body {
   color: var(--color-text-primary);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
-  background-image:
-    radial-gradient(rgba(139, 92, 246, 0.03) 1.5px, transparent 1.5px),
-    radial-gradient(rgba(6, 182, 212, 0.03) 1.5px, transparent 1.5px);
-  background-size: 32px 32px;
-  background-position: 0 0, 16px 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   position: relative;
-}
-
-body::before {
-  content: '';
-  position: fixed;
-  top: -15%;
-  left: -15%;
-  width: 50vw;
-  height: 50vh;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.06) 0%, transparent 70%);
-  filter: blur(100px);
-  pointer-events: none;
-  z-index: -1;
-}
-
-body::after {
-  content: '';
-  position: fixed;
-  bottom: -15%;
-  right: -15%;
-  width: 50vw;
-  height: 50vh;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.05) 0%, transparent 70%);
-  filter: blur(100px);
-  pointer-events: none;
-  z-index: -1;
 }
 
 #root {

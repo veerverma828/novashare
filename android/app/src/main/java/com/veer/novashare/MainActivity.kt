@@ -16,6 +16,8 @@ class MainActivity : BridgeActivity() {
         registerPlugin(TransferNotificationPlugin::class.java)
         registerPlugin(NearbyDiscoveryPlugin::class.java)
         registerPlugin(FolderPickerPlugin::class.java)
+        registerPlugin(WifiDirectPlugin::class.java)
+        registerPlugin(LocalSignalingServerPlugin::class.java)
         super.onCreate(savedInstanceState)
         // Cold start via share-sheet: the plugin/webview aren't ready yet, so
         // this just queues into IncomingSharePlugin.pendingPaths — JS drains

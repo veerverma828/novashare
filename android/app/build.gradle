@@ -49,6 +49,12 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
+        debug {
+            // Same key as release so a debug install never collides with an
+            // already-installed release build (Android refuses to install
+            // over an app signed with a different key without an uninstall).
+            signingConfig signingConfigs.release
+        }
     }
 }
 

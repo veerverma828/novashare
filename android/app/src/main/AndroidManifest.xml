@@ -78,4 +78,10 @@
     <!-- Nearby-device discovery on the local Wi-Fi network (NsdManager) -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- Wi-Fi Direct: fully offline device-to-device transfer, no router/internet needed -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
+    <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
 </manifest>

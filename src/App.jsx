@@ -64,10 +64,132 @@ import {
   onNearbyPeerFound,
   onNearbyPeerLost,
   getDeviceLabel,
-  pickFolder
+  pickFolder,
+  isWifiDirectSupported,
+  wifiDirectInitialize,
+  wifiDirectDiscoverPeers,
+  wifiDirectStopDiscovery,
+  wifiDirectConnect,
+  wifiDirectRequestGroupInfo,
+  wifiDirectRemoveGroup,
+  onWifiDirectPeersChanged,
+  onWifiDirectConnectionChanged,
+  localSignalingStartServer,
+  localSignalingStopServer,
+  localSignalingConnect,
+  localSignalingSend,
+  localSignalingClose,
+  onLocalSignalingMessage,
+  onLocalSignalingPeerConnected
 } from './native';
 import { addHistoryEntry, getHistory, clearHistory } from './history';
 import { computeSecurityCode } from './security';
+import {
+  createLocalPeerConnection,
+  createOfferAndChannel,
+  waitForRemoteChannel,
+  createAnswerFromOffer,
+  applyRemoteAnswer,
+  addRemoteIceCandidate,
+  waitForChannelOpen,
+  PeerJsCompatDataConnection
+} from './webrtcLocal';
+
+const LOCAL_SIGNALING_PORT = 8916;
+
+// Fully offline handshake: negotiates a manual WebRTC data channel over the
+// Wi-Fi Direct link's local signaling pipe (LocalSignaling native plugin)
+// instead of PeerJS's cloud broker — no internet involved at any point.
+// Whichever device is NOT the Wi-Fi Direct group owner already knows the
+// owner's address, so it connects to the signaling socket and sends the SDP
+// offer immediately; the group owner starts the socket and waits, then
+// answers. Resolves with a PeerJsCompatDataConnection once the resulting
+// RTCDataChannel is open, so callers can treat it exactly like a PeerJS conn.
+// Resolves with { conn, roomCode, deviceName }, not just conn — the group
+// owner side doesn't generate its own roomCode, it learns the offerer's
+// via the offer message, so both ends converge on one canonical value
+// (required for computeSecurityCode(roomCode, ...) to match on both sides).
+async function establishLocalConnection({ isGroupOwner, groupOwnerAddress, roomCode, deviceName }, timeoutMs = 10000) {
+  const pc = createLocalPeerConnection();
+  let signalConnId = null;
+  let settled = false;
+
+  const sendSignal = (msg) => {
+    if (signalConnId == null) return;
+    localSignalingSend(signalConnId, msg);
+  };
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) sendSignal({ type: 'ice', candidate: e.candidate.toJSON() });
+  };
+
+  let resolvedRoomCode = roomCode;
+  let resolvedDeviceName = deviceName;
+
+  const offMessage = onLocalSignalingMessage(async (connId, msg) => {
+    if (signalConnId != null && connId !== signalConnId) return;
+    if (msg.type === 'offer') {
+      resolvedRoomCode = msg.roomCode || resolvedRoomCode;
+      resolvedDeviceName = msg.deviceName || resolvedDeviceName;
+      const answerSdp = await createAnswerFromOffer(pc, msg.sdp);
+      sendSignal({ type: 'answer', sdp: answerSdp });
+    } else if (msg.type === 'answer') {
+      await applyRemoteAnswer(pc, msg.sdp);
+    } else if (msg.type === 'ice') {
+      await addRemoteIceCandidate(pc, msg.candidate);
+    }
+  });
+  const offConnected = onLocalSignalingPeerConnected((connId) => { signalConnId = connId; });
+
+  const cleanupSignal = () => {
+    offMessage();
+    offConnected();
+    if (isGroupOwner) {
+      localSignalingStopServer();
+    } else if (signalConnId != null) {
+      localSignalingClose(signalConnId);
+    }
+  };
+
+  try {
+    const channel = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error('Timed out negotiating a local Wi-Fi Direct connection'));
+      }, timeoutMs);
+
+      const finish = (ch) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        waitForChannelOpen(ch, timeoutMs).then(resolve).catch(reject);
+      };
+
+      if (isGroupOwner) {
+        waitForRemoteChannel(pc).then(finish);
+        localSignalingStartServer().catch((err) => {
+          if (!settled) { settled = true; clearTimeout(timer); reject(err); }
+        });
+      } else {
+        (async () => {
+          try {
+            signalConnId = await localSignalingConnect(groupOwnerAddress, LOCAL_SIGNALING_PORT);
+            const { channel: ch, sdp } = await createOfferAndChannel(pc);
+            sendSignal({ type: 'offer', sdp, roomCode, deviceName });
+            finish(ch);
+          } catch (err) {
+            if (!settled) { settled = true; clearTimeout(timer); reject(err); }
+          }
+        })();
+      }
+    });
+    const peerId = groupOwnerAddress || 'wifi-direct-peer';
+    return { conn: new PeerJsCompatDataConnection(channel, peerId), roomCode: resolvedRoomCode, deviceName: resolvedDeviceName };
+  } finally {
+    cleanupSignal();
+  }
+}
 
 // Marks a queued File as a text snippet (feature: send text/clipboard
 // content through the same P2P pipeline as real files) rather than a user
@@ -120,7 +242,7 @@ const ICE_SERVERS = {
 // Reusable Tailwind class strings for the two button variants used all over
 // the app — kept as constants instead of @apply so JSX stays the source of
 // truth for styling, while avoiding retyping this string 30+ times.
-const BTN_PRIMARY = 'relative overflow-hidden flex items-center justify-center gap-2 bg-gradient-to-br from-accent-purple to-[#7c3aed] text-white border-0 font-heading text-[0.95rem] font-semibold py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 shadow-[0_4px_12px_rgba(124,58,237,0.25)] hover:-translate-y-px hover:shadow-[0_6px_18px_rgba(124,58,237,0.4)] hover:from-[#9061f9] hover:to-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed';
+const BTN_PRIMARY = 'relative overflow-hidden flex items-center justify-center gap-2 bg-accent-purple text-[#06222c] border-0 font-heading text-[0.95rem] font-semibold py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 hover:-translate-y-px hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed';
 const BTN_SECONDARY = 'relative overflow-hidden flex items-center justify-center gap-2 bg-transparent border border-border text-text-primary font-heading text-[0.95rem] font-medium py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Spawns a ripple span inside whatever element was tapped, and gives it a
@@ -171,7 +293,7 @@ function RoomCodeFlap({ code }) {
   return (
     <div className="flex gap-[0.3rem] font-[Georgia,serif] text-[1.1rem] max-[380px]:text-[0.95rem] tracking-[0.02em] text-accent-cyan [font-variant-numeric:lining-nums_tabular-nums]">
       {display.map((ch, i) => (
-        <span key={i} className="bg-[rgba(6,182,212,0.08)] rounded-md px-[0.4rem] py-[0.1rem] [font-variant-numeric:tabular-nums]">{ch}</span>
+        <span key={i} className="bg-[rgba(125,211,255,0.08)] rounded-md px-[0.4rem] py-[0.1rem] [font-variant-numeric:tabular-nums]">{ch}</span>
       ))}
     </div>
   );
@@ -218,10 +340,10 @@ function SwipeableFileRow({ file, sizeLabel, onRemove }) {
         transform: `translateX(${dragX}px)`,
         opacity: 1 - dragProgress * 0.5,
         borderColor: dragProgress > 0
-          ? `rgba(236, 72, 153, ${0.25 + dragProgress * 0.75})`
+          ? `rgba(248,113,113, ${0.25 + dragProgress * 0.75})`
           : undefined,
         background: dragProgress > 0
-          ? `rgba(236, 72, 153, ${dragProgress * 0.22})`
+          ? `rgba(248,113,113, ${dragProgress * 0.22})`
           : undefined,
         transition: dragging ? 'none' : 'transform 0.25s ease'
       }}
@@ -235,7 +357,7 @@ function SwipeableFileRow({ file, sizeLabel, onRemove }) {
       <span className="text-[0.72rem] text-text-muted flex-shrink-0">{sizeLabel}</span>
       <button
         type="button"
-        className="relative overflow-hidden w-[22px] h-[22px] rounded-full bg-[rgba(236,72,153,0.15)] text-accent-pink border-0 flex items-center justify-center flex-shrink-0 cursor-pointer"
+        className="relative overflow-hidden w-[22px] h-[22px] rounded-full bg-[rgba(248,113,113,0.15)] text-accent-pink border-0 flex items-center justify-center flex-shrink-0 cursor-pointer"
         onClick={(e) => { e.stopPropagation(); rippleTap(e, onRemove); }}
         aria-label={`Remove ${file.name}`}
       >
@@ -266,7 +388,7 @@ function FolderQueueRow({ name, entries, formatBytes, onRemoveAll, onRemoveOne }
         <span className="text-[0.72rem] text-text-muted flex-shrink-0">{entries.length} file{entries.length === 1 ? '' : 's'} &middot; {formatBytes(totalSize)}</span>
         <button
           type="button"
-          className="relative overflow-hidden w-[22px] h-[22px] rounded-full bg-[rgba(236,72,153,0.15)] text-accent-pink border-0 flex items-center justify-center flex-shrink-0 cursor-pointer"
+          className="relative overflow-hidden w-[22px] h-[22px] rounded-full bg-[rgba(248,113,113,0.15)] text-accent-pink border-0 flex items-center justify-center flex-shrink-0 cursor-pointer"
           onClick={(e) => { e.stopPropagation(); rippleTap(e, onRemoveAll); }}
           aria-label={`Remove folder ${name}`}
         >
@@ -311,7 +433,7 @@ function AppIcon({ packageName }) {
 
   return icon
     ? <img src={icon} alt="" className="w-9 h-9 rounded-[9px] flex-shrink-0 object-cover" />
-    : <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(139,92,246,0.15)] text-accent-purple"><Smartphone size={18} /></div>;
+    : <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(125,211,255,0.15)] text-accent-purple"><Smartphone size={18} /></div>;
 }
 
 // Wraps the substring of `text` matching `query` (case-insensitive) in a
@@ -452,7 +574,7 @@ function AppsPanel({ onSelectApps, formatBytes }) {
         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center"><Search size={16} /></div>
         <input
           type="text"
-          className="flex-1 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(139,92,246,0.12)]"
+          className="flex-1 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(125,211,255,0.12)]"
           placeholder="Search installed apps..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -461,7 +583,7 @@ function AppsPanel({ onSelectApps, formatBytes }) {
 
       {loading && (
         <div className="flex items-center justify-center gap-[0.6rem] text-text-muted text-[0.85rem] py-8">
-          <RefreshCw size={22} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
+          <RefreshCw size={22} className="text-accent-purple drop-shadow-[0_0_10px_rgba(125,211,255,0.5)] animate-[spin_1.1s_linear_infinite]" />
           <span>Loading installed apps&hellip;</span>
         </div>
       )}
@@ -490,10 +612,10 @@ function AppsPanel({ onSelectApps, formatBytes }) {
               <div
                 key={app.packageName}
                 title={`${app.packageName}${app.versionName ? ` · v${app.versionName}` : ''} · ${formatBytes(app.apkSize)}`}
-                className={`relative flex flex-col items-center gap-1.5 rounded-xl py-3 px-2 cursor-pointer transition-[background-color,border-color] duration-150 ease-linear border text-center ${isChecked ? 'bg-[rgba(139,92,246,0.14)] border-accent-purple' : 'bg-[rgba(30,41,59,0.4)] border-border hover:bg-[rgba(30,41,59,0.65)] hover:border-accent-purple'}`}
+                className={`relative flex flex-col items-center gap-1.5 rounded-xl py-3 px-2 cursor-pointer transition-[background-color,border-color] duration-150 ease-linear border text-center ${isChecked ? 'bg-[rgba(125,211,255,0.14)] border-accent-purple' : 'bg-[rgba(30,41,59,0.4)] border-border hover:bg-[rgba(30,41,59,0.65)] hover:border-accent-purple'}`}
                 onClick={() => toggleSelected(app.packageName)}
               >
-                <span className={`absolute top-1.5 right-1.5 w-5 h-5 flex-shrink-0 rounded-md border-[1.5px] flex items-center justify-center text-white transition-all duration-150 ${isChecked ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] border-accent-purple' : 'border-border bg-[rgba(8,12,20,0.5)]'}`}>
+                <span className={`absolute top-1.5 right-1.5 w-5 h-5 flex-shrink-0 rounded-md border-[1.5px] flex items-center justify-center text-white transition-all duration-150 ${isChecked ? 'bg-accent-purple border-accent-purple !text-[#06222c]' : 'border-border bg-[rgba(8,12,20,0.5)]'}`}>
                   {isChecked && <Check size={13} strokeWidth={3} />}
                 </span>
                 <AppIcon packageName={app.packageName} />
@@ -558,7 +680,7 @@ function HistoryPanel({ formatBytes, onResend, onClear, now }) {
         <span className="text-[0.8rem] text-text-muted">{entries.length} transfer{entries.length === 1 ? '' : 's'}</span>
         <button
           type="button"
-          className="relative overflow-hidden flex items-center gap-1 bg-transparent border-0 text-text-muted text-[0.78rem] cursor-pointer py-1 px-2 rounded-md hover:text-accent-pink hover:bg-[rgba(236,72,153,0.1)]"
+          className="relative overflow-hidden flex items-center gap-1 bg-transparent border-0 text-text-muted text-[0.78rem] cursor-pointer py-1 px-2 rounded-md hover:text-accent-pink hover:bg-[rgba(248,113,113,0.1)]"
           onClick={(e) => rippleTap(e, onClear)}
         >
           <Trash2 size={13} /> Clear
@@ -572,7 +694,7 @@ function HistoryPanel({ formatBytes, onResend, onClear, now }) {
             : (entry.files[0]?.name || 'Unknown');
           return (
             <div key={entry.id} className="flex items-center gap-3 bg-[rgba(30,41,59,0.4)] border border-border rounded-xl py-[0.6rem] px-[0.8rem]">
-              <div className={`w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center ${entry.direction === 'sent' ? 'bg-[rgba(139,92,246,0.15)] text-accent-purple' : 'bg-[rgba(6,182,212,0.15)] text-accent-cyan'}`}>
+              <div className={`w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center ${entry.direction === 'sent' ? 'bg-[rgba(125,211,255,0.15)] text-accent-purple' : 'bg-[rgba(125,211,255,0.15)] text-accent-cyan'}`}>
                 {entry.direction === 'sent' ? <UploadCloud size={16} /> : <Download size={16} />}
               </div>
               <div className="flex-1 min-w-0 flex flex-col">
@@ -702,10 +824,19 @@ function App() {
 
   // "Add more" picker state (queue view: append files or apps to the queue)
   const [showAddApps, setShowAddApps] = useState(false);
+  const [showAddMoreMenu, setShowAddMoreMenu] = useState(false);
 
   // Nearby (LAN) device discovery — list of { roomCode, deviceName, host }
   // found via NsdManager on native builds; always empty on web.
   const [nearbyPeers, setNearbyPeers] = useState([]);
+
+  // Wi-Fi Direct (fully offline, no router/internet needed) discovery —
+  // list of { deviceName, deviceAddress, status }. Off by default (explicit
+  // toggle) since it needs a location/nearby-Wi-Fi permission prompt.
+  const [wifiDirectAvailable, setWifiDirectAvailable] = useState(false);
+  const [wifiDirectBrowsing, setWifiDirectBrowsing] = useState(false);
+  const [wifiDirectPeers, setWifiDirectPeers] = useState([]);
+  const [wifiDirectConnecting, setWifiDirectConnecting] = useState(null); // deviceAddress mid-connect, or null
 
   // Transfer history tab — bumped to force a re-read from localStorage.
   // historyOpenedAt is captured once (in the tab-click handler) rather than
@@ -768,6 +899,9 @@ function App() {
   // reconnect attempts we've burned after an unexpected mid-transfer drop
   const currentFileIndexRef = useRef(0);
   const reconnectAttemptRef = useRef(0);
+  // Active receiver transport, so a mid-transfer reconnect (scheduleReconnectRetry)
+  // retries over the same transport it was using rather than defaulting to cloud.
+  const receiverTransportRef = useRef({ mode: 'cloud', groupInfo: null });
   // Throttles the background transfer notification to a few updates/sec
   // instead of firing on every 64KB chunk
   const notifyThrottleRef = useRef(0);
@@ -971,6 +1105,47 @@ function App() {
     };
   }, [mode, homeTab, selectedFiles.length]);
 
+  // Check once whether this device can do Wi-Fi Direct at all (older devices
+  // / some OEM builds disable it) — hides the offline-discovery section
+  // entirely rather than showing a toggle that will always fail.
+  useEffect(() => {
+    isWifiDirectSupported().then(setWifiDirectAvailable);
+  }, []);
+
+  // Wi-Fi Direct discovery: fully offline, no router/shared-Wi-Fi/internet
+  // needed at all — a separate, explicit toggle (not automatic like NSD
+  // above) since starting it requests a location/nearby-Wi-Fi permission.
+  // Leaving the home/idle screen or turning the toggle off tears it down.
+  useEffect(() => {
+    // Matches the JSX visibility condition for the panel below: the home
+    // view except when parked on the Apps/History tab with nothing queued.
+    const onHomeScreen = mode === 'home' && !(selectedFiles.length === 0 && (homeTab === 'apps' || homeTab === 'history'));
+    const browsing = wifiDirectBrowsing && onHomeScreen;
+    if (!browsing) {
+      setWifiDirectPeers([]);
+      wifiDirectStopDiscovery();
+      return;
+    }
+
+    let cancelled = false;
+    wifiDirectInitialize()
+      .then(() => { if (!cancelled) wifiDirectDiscoverPeers(); })
+      .catch((err) => {
+        if (!cancelled) {
+          setWifiDirectBrowsing(false);
+          showToast('Could not start Wi-Fi Direct discovery: ' + err.message, 'error');
+        }
+      });
+
+    const offPeers = onWifiDirectPeersChanged((peers) => setWifiDirectPeers(peers));
+
+    return () => {
+      cancelled = true;
+      offPeers();
+      wifiDirectStopDiscovery();
+    };
+  }, [wifiDirectBrowsing, mode, homeTab, selectedFiles.length]);
+
   // Advertise the open room's code on the local network for as long as it's
   // actively waiting for or serving receivers, so AppsPanel-style "just tap
   // it" pairing works without a code/QR round trip on the same Wi-Fi.
@@ -983,6 +1158,53 @@ function App() {
     startAdvertisingRoom(roomCode, getDeviceLabel());
     return () => stopAdvertisingRoom();
   }, [mode, transferState, roomCode]);
+
+  // Waits for a Wi-Fi Direct group to actually form after connect() is
+  // called — Android negotiates group ownership asynchronously, and either
+  // side's WIFI_P2P_CONNECTION_CHANGED_ACTION broadcast can arrive first, so
+  // this races a live subscription against an immediate info poll (in case
+  // the group formed before the listener was attached).
+  const waitForWifiDirectGroup = (timeoutMs = 15000) => {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (info) => {
+        if (settled || !info.groupFormed) return;
+        settled = true;
+        clearTimeout(timer);
+        off();
+        resolve(info);
+      };
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        off();
+        reject(new Error('Timed out waiting for the Wi-Fi Direct connection'));
+      }, timeoutMs);
+      const off = onWifiDirectConnectionChanged(finish);
+      wifiDirectRequestGroupInfo().then(finish).catch(() => {});
+    });
+  };
+
+  // Tap-to-connect for a discovered Wi-Fi Direct peer: forms the group, then
+  // hands off to whichever app-level role fits what the user is doing right
+  // now — sending the queued files if any are selected, else receiving.
+  const connectToWifiDirectPeer = async (peer) => {
+    setWifiDirectConnecting(peer.deviceAddress);
+    try {
+      await wifiDirectConnect(peer.deviceAddress);
+      const groupInfo = await waitForWifiDirectGroup();
+      setWifiDirectBrowsing(false);
+      if (selectedFiles.length > 0) {
+        startP2PSend('local', groupInfo);
+      } else {
+        startP2PReceive(generateRoomCode(), 'local', groupInfo);
+      }
+    } catch (err) {
+      showToast('Could not connect over Wi-Fi Direct: ' + err.message, 'error');
+    } finally {
+      setWifiDirectConnecting(null);
+    }
+  };
 
   // Cleanup active peer/connections
   function cleanup() {
@@ -1007,6 +1229,7 @@ function App() {
     isPausedRef.current = false;
     notifyThrottleRef.current = 0;
     receivedTextChunksRef.current = [];
+    receiverTransportRef.current = { mode: 'cloud', groupInfo: null };
     setPeerSecurityCodes({});
     setMySecurityCode('');
   }
@@ -1157,7 +1380,110 @@ function App() {
   // ----------------------------------------------------
   const MAX_RECEIVERS = 8;
 
-  const startP2PSend = () => {
+  // Shared by both transports: wires up a single receiver's connection
+  // (PeerJS DataConnection on the cloud path, PeerJsCompatDataConnection on
+  // the offline Wi-Fi Direct path — API-compatible, so this logic doesn't
+  // need to know which one it got) into the broadcast peer list.
+  const handleIncomingReceiverConnection = (conn, code) => {
+    // Broadcast mode: the room stays open to more receivers up to a cap,
+    // rather than rejecting everyone after the first connects. (Wi-Fi Direct
+    // sessions only ever have one incoming connection in practice, but the
+    // same cap applies harmlessly.)
+    if (connsRef.current.length >= MAX_RECEIVERS) {
+      try { conn.send({ type: 'room-full' }); } catch { /* ignore */ }
+      conn.close();
+      return;
+    }
+
+    const peerState = {
+      conn,
+      id: conn.peer,
+      queueIndex: 0,
+      fileOffset: 0,
+      totalBytesSent: 0,
+      pendingSendNext: null,
+      resumed: false,
+      openTimer: null
+    };
+    connsRef.current = [...connsRef.current, peerState];
+    setConnectedCount(connsRef.current.length);
+    setTransferState('transferring');
+    showToast(
+      connsRef.current.length > 1
+        ? `Receiver connected! (${connsRef.current.length} total)`
+        : 'Receiver connected! Starting stream...',
+      'info'
+    );
+
+    conn.on('open', () => {
+      // Verified-handshake code (feature #4): derived from the room code
+      // + this receiver's peer id, so both sides land on the same value
+      // without exchanging anything extra over the wire.
+      computeSecurityCode(code, conn.peer).then((securityCode) => {
+        setPeerSecurityCodes((prev) => ({ ...prev, [conn.peer]: securityCode }));
+      });
+
+      // Give a reconnecting receiver a brief window to send a 'resume'
+      // message before defaulting to a fresh batch-start — a plain new
+      // connection just falls through once the timer fires.
+      peerState.openTimer = setTimeout(() => {
+        if (peerState.resumed) return;
+        conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length });
+        sendNextQueuedFileForPeer(peerState);
+      }, 150);
+    });
+
+    conn.on('data', (data) => {
+      if (data.type !== 'resume') return;
+      if (peerState.openTimer) {
+        clearTimeout(peerState.openTimer);
+        peerState.openTimer = null;
+      }
+      peerState.resumed = true;
+
+      const files = sendQueueRef.current;
+      const fileIndex = Math.min(data.fileIndex || 0, Math.max(0, files.length - 1));
+      const bytesBeforeThisFile = files.slice(0, fileIndex).reduce((sum, f) => sum + f.size, 0);
+
+      peerState.queueIndex = fileIndex;
+      peerState.totalBytesSent = bytesBeforeThisFile + (data.offset || 0);
+      streamChunksForPeer(peerState, files[fileIndex], data.offset || 0);
+    });
+
+    const dropPeer = () => {
+      connsRef.current = connsRef.current.filter((p) => p !== peerState);
+      setConnectedCount(connsRef.current.length);
+      setPeerSecurityCodes((prev) => {
+        const next = { ...prev };
+        delete next[peerState.id];
+        return next;
+      });
+      // Room stays alive for more receivers unless the batch is done —
+      // no peers left mid-transfer just means back to waiting for one.
+      if (connsRef.current.length === 0) {
+        setTransferState((prev) => (prev === 'complete' ? 'complete' : 'waiting'));
+      }
+    };
+
+    conn.on('close', () => {
+      const finishedQueue = peerState.queueIndex >= sendQueueRef.current.length;
+      if (!finishedQueue) {
+        showToast('A receiver disconnected before finishing.', 'error');
+      }
+      dropPeer();
+    });
+
+    conn.on('error', (err) => {
+      showToast('Connection error with a receiver: ' + err.message, 'error');
+      dropPeer();
+    });
+  };
+
+  // transportMode: 'cloud' (default, PeerJS broker — works cross-network as
+  // long as both sides can reach the internet) or 'local' (Wi-Fi Direct, zero
+  // internet/router needed — see establishLocalConnection above). groupInfo
+  // is required for 'local' and comes from a completed WifiDirect connection.
+  const startP2PSend = (transportMode = 'cloud', groupInfo = null) => {
     if (!selectedFiles || selectedFiles.length === 0) return;
     cleanup();
     setTransferState('preparing');
@@ -1171,6 +1497,37 @@ function App() {
     setSendFileIndex(0);
     setConnectedCount(0);
     transferStartTime.current = Date.now();
+
+    if (transportMode === 'local') {
+      const code = generateRoomCode();
+      setRoomCode(code);
+      // No PeerJS Peer exists on this path — a thin stand-in gives cleanup()
+      // an object shaped like one so it can tear down Wi-Fi Direct the same
+      // way it destroys a real Peer.
+      peerRef.current = { destroy: () => { wifiDirectRemoveGroup(); } };
+
+      establishLocalConnection({
+        isGroupOwner: groupInfo.isGroupOwner,
+        groupOwnerAddress: groupInfo.groupOwnerAddress,
+        roomCode: code,
+        deviceName: getDeviceLabel()
+      })
+        .then(({ conn, roomCode: agreedCode }) => {
+          setRoomCode(agreedCode);
+          setTransferState('waiting');
+          showToast('Offline Wi-Fi Direct link ready!', 'success');
+          handleIncomingReceiverConnection(conn, agreedCode);
+        })
+        .catch((err) => {
+          setTransferState((prev) => {
+            if (prev === 'complete') return 'complete';
+            showToast('Offline connection failed: ' + err.message, 'error');
+            setErrorMsg(err.message || 'Could not establish an offline Wi-Fi Direct connection.');
+            return 'error';
+          });
+        });
+      return;
+    }
 
     const attemptConnection = (retryCount = 0) => {
       if (retryCount > 5) {
@@ -1199,98 +1556,7 @@ function App() {
         showToast('Direct P2P Room Ready!', 'success');
       });
 
-      peer.on('connection', (conn) => {
-        // Broadcast mode: the room stays open to more receivers up to a cap,
-        // rather than rejecting everyone after the first connects.
-        if (connsRef.current.length >= MAX_RECEIVERS) {
-          try { conn.send({ type: 'room-full' }); } catch { /* ignore */ }
-          conn.close();
-          return;
-        }
-
-        const peerState = {
-          conn,
-          id: conn.peer,
-          queueIndex: 0,
-          fileOffset: 0,
-          totalBytesSent: 0,
-          pendingSendNext: null,
-          resumed: false,
-          openTimer: null
-        };
-        connsRef.current = [...connsRef.current, peerState];
-        setConnectedCount(connsRef.current.length);
-        setTransferState('transferring');
-        showToast(
-          connsRef.current.length > 1
-            ? `Receiver connected! (${connsRef.current.length} total)`
-            : 'Receiver connected! Starting stream...',
-          'info'
-        );
-
-        conn.on('open', () => {
-          // Verified-handshake code (feature #4): derived from the room code
-          // + this receiver's peer id, so both sides land on the same value
-          // without exchanging anything extra over the wire.
-          computeSecurityCode(code, conn.peer).then((securityCode) => {
-            setPeerSecurityCodes((prev) => ({ ...prev, [conn.peer]: securityCode }));
-          });
-
-          // Give a reconnecting receiver a brief window to send a 'resume'
-          // message before defaulting to a fresh batch-start — a plain new
-          // connection just falls through once the timer fires.
-          peerState.openTimer = setTimeout(() => {
-            if (peerState.resumed) return;
-            conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length });
-            sendNextQueuedFileForPeer(peerState);
-          }, 150);
-        });
-
-        conn.on('data', (data) => {
-          if (data.type !== 'resume') return;
-          if (peerState.openTimer) {
-            clearTimeout(peerState.openTimer);
-            peerState.openTimer = null;
-          }
-          peerState.resumed = true;
-
-          const files = sendQueueRef.current;
-          const fileIndex = Math.min(data.fileIndex || 0, Math.max(0, files.length - 1));
-          const bytesBeforeThisFile = files.slice(0, fileIndex).reduce((sum, f) => sum + f.size, 0);
-
-          peerState.queueIndex = fileIndex;
-          peerState.totalBytesSent = bytesBeforeThisFile + (data.offset || 0);
-          streamChunksForPeer(peerState, files[fileIndex], data.offset || 0);
-        });
-
-        const dropPeer = () => {
-          connsRef.current = connsRef.current.filter((p) => p !== peerState);
-          setConnectedCount(connsRef.current.length);
-          setPeerSecurityCodes((prev) => {
-            const next = { ...prev };
-            delete next[peerState.id];
-            return next;
-          });
-          // Room stays alive for more receivers unless the batch is done —
-          // no peers left mid-transfer just means back to waiting for one.
-          if (connsRef.current.length === 0) {
-            setTransferState((prev) => (prev === 'complete' ? 'complete' : 'waiting'));
-          }
-        };
-
-        conn.on('close', () => {
-          const finishedQueue = peerState.queueIndex >= sendQueueRef.current.length;
-          if (!finishedQueue) {
-            showToast('A receiver disconnected before finishing.', 'error');
-          }
-          dropPeer();
-        });
-
-        conn.on('error', (err) => {
-          showToast('Connection error with a receiver: ' + err.message, 'error');
-          dropPeer();
-        });
-      });
+      peer.on('connection', (conn) => handleIncomingReceiverConnection(conn, code));
 
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
@@ -1470,7 +1736,7 @@ function App() {
   // ----------------------------------------------------
   const MAX_RECONNECT_ATTEMPTS = 3;
 
-  function startP2PReceive(roomCodeInput) {
+  function startP2PReceive(roomCodeInput, transportMode = 'cloud', groupInfo = null) {
     const code = roomCodeInput || targetPeerId;
     if (!code) {
       showToast('Please enter a valid room code.', 'error');
@@ -1484,7 +1750,7 @@ function App() {
     reconnectAttemptRef.current = 0;
     currentFileIndexRef.current = 0;
 
-    connectToSender(code, false);
+    connectToSender(code, false, transportMode, groupInfo);
   }
 
   // Handles every 'data' message from the sender — shared by the initial
@@ -1647,13 +1913,75 @@ function App() {
       return;
     }
     showToast(`Connection lost — reconnecting (attempt ${reconnectAttemptRef.current}/${MAX_RECONNECT_ATTEMPTS})…`, 'error');
-    setTimeout(() => connectToSender(code, true), reconnectAttemptRef.current * 1000);
+    const { mode, groupInfo } = receiverTransportRef.current;
+    setTimeout(() => connectToSender(code, true, mode, groupInfo), reconnectAttemptRef.current * 1000);
+  };
+
+  // Shared by both transports once a live conn (PeerJS DataConnection or
+  // PeerJsCompatDataConnection) exists — wires open/data/close/error exactly
+  // the same way regardless of which transport produced it.
+  const wireReceiverConnection = (conn, code, isResume) => {
+    connRef.current = conn;
+
+    conn.on('open', () => {
+      setTransferState('transferring');
+      reconnectAttemptRef.current = 0;
+
+      if (isResume) {
+        showToast('Reconnected! Resuming transfer...', 'success');
+        conn.send({ type: 'resume', fileIndex: currentFileIndexRef.current, offset: receivedBytes.current });
+      } else {
+        showToast('Connected! Requesting file...', 'success');
+        transferStartTime.current = Date.now();
+        receivedChunks.current = [];
+        receivedBytes.current = 0;
+        receivedFilesRef.current = [];
+        setCompletedFiles([]);
+      }
+    });
+
+    conn.on('data', handleReceiverData);
+    conn.on('close', () => handleReceiverDrop(code));
+    conn.on('error', (err) => handleReceiverDrop(code, err));
   };
 
   // isResume: re-establishing after a mid-transfer drop — skips wiping
   // already-received bytes and tells the sender exactly where to continue
-  // from, instead of restarting the whole batch.
-  const connectToSender = (code, isResume) => {
+  // from, instead of restarting the whole batch. transportMode/groupInfo
+  // select the offline Wi-Fi Direct path instead of the default PeerJS cloud.
+  const connectToSender = (code, isResume, transportMode = 'cloud', groupInfo = null) => {
+    receiverTransportRef.current = { mode: transportMode, groupInfo };
+
+    if (transportMode === 'local') {
+      peerRef.current = { destroy: () => { wifiDirectRemoveGroup(); } };
+      if (!isResume) showToast('Connecting over Wi-Fi Direct...', 'info');
+
+      establishLocalConnection({
+        isGroupOwner: groupInfo.isGroupOwner,
+        groupOwnerAddress: groupInfo.groupOwnerAddress,
+        roomCode: code,
+        deviceName: getDeviceLabel()
+      })
+        .then(({ conn, roomCode: agreedCode }) => {
+          setTargetPeerId(agreedCode);
+          computeSecurityCode(agreedCode, conn.peer).then(setMySecurityCode);
+          wireReceiverConnection(conn, agreedCode, isResume);
+        })
+        .catch((err) => {
+          if (isResume) {
+            scheduleReconnectRetry(code);
+            return;
+          }
+          setTransferState((prev) => {
+            if (prev === 'complete') return 'complete';
+            showToast('Offline connection failed: ' + err.message, 'error');
+            setErrorMsg(err.message || 'Could not establish an offline Wi-Fi Direct connection.');
+            return 'error';
+          });
+        });
+      return;
+    }
+
     const peer = new Peer({
       host: '0.peerjs.com',
       port: 443,
@@ -1671,28 +1999,7 @@ function App() {
       computeSecurityCode(code, peer.id).then(setMySecurityCode);
 
       const conn = peer.connect(code, { reliable: true });
-      connRef.current = conn;
-
-      conn.on('open', () => {
-        setTransferState('transferring');
-        reconnectAttemptRef.current = 0;
-
-        if (isResume) {
-          showToast('Reconnected! Resuming transfer...', 'success');
-          conn.send({ type: 'resume', fileIndex: currentFileIndexRef.current, offset: receivedBytes.current });
-        } else {
-          showToast('Connected! Requesting file...', 'success');
-          transferStartTime.current = Date.now();
-          receivedChunks.current = [];
-          receivedBytes.current = 0;
-          receivedFilesRef.current = [];
-          setCompletedFiles([]);
-        }
-      });
-
-      conn.on('data', handleReceiverData);
-      conn.on('close', () => handleReceiverDrop(code));
-      conn.on('error', (err) => handleReceiverDrop(code, err));
+      wireReceiverConnection(conn, code, isResume);
     });
 
     peer.on('error', () => {
@@ -1807,7 +2114,7 @@ function App() {
   // Helper file icon component inside local scope
   const renderFileIconComponent = (fileName) => {
     const type = getFileType(fileName);
-    const wrapperClass = "w-12 h-12 rounded-xl bg-[rgba(6,182,212,0.15)] flex items-center justify-center text-accent-cyan";
+    const wrapperClass = "w-12 h-12 rounded-xl bg-[rgba(125,211,255,0.15)] flex items-center justify-center text-accent-cyan";
     switch (type) {
       case 'image': return <div className={wrapperClass}><FileImage size={24} /></div>;
       case 'video': return <div className={wrapperClass}><FileVideo size={24} /></div>;
@@ -1826,13 +2133,13 @@ function App() {
         <div className="flex items-center gap-3 cursor-pointer" onClick={resetToHome}>
           <Zap
             size={32}
-            className="text-accent-purple drop-shadow-[0_0_8px_rgba(139,92,246,0.5)] w-8 h-8 max-[640px]:w-6 max-[640px]:h-6"
+            className="text-accent-purple drop-shadow-[0_0_8px_rgba(125,211,255,0.5)] w-8 h-8 max-[640px]:w-6 max-[640px]:h-6"
             fill="currentColor"
           />
           <h1 className="text-[1.75rem] max-[640px]:text-[1.4rem] max-[380px]:text-[1.15rem] font-heading bg-[linear-gradient(135deg,#fff_30%,var(--color-accent-cyan)_100%)] bg-clip-text text-transparent">
             NovaShare
           </h1>
-          <span className="bg-bg-tertiary border border-[rgba(139,92,246,0.3)] text-accent-purple px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase max-[640px]:px-2 max-[640px]:py-[0.15rem] max-[640px]:text-[0.65rem] max-[380px]:hidden">
+          <span className="bg-bg-tertiary border border-[rgba(125,211,255,0.3)] text-accent-purple px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase max-[640px]:px-2 max-[640px]:py-[0.15rem] max-[640px]:text-[0.65rem] max-[380px]:hidden">
             Direct P2P
           </span>
         </div>
@@ -1848,7 +2155,7 @@ function App() {
 
       {/* TOAST POPUP */}
       {toast && (
-        <div className="fixed bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1.5rem))] right-8 max-[640px]:left-4 max-[640px]:right-4 bg-[rgba(15,23,42,0.9)] backdrop-blur-md border border-accent-purple rounded-[14px] px-6 py-4 flex items-center gap-3 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(139,92,246,0.2)] z-[9999] animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
+        <div className="fixed bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1.5rem))] right-8 max-[640px]:left-4 max-[640px]:right-4 bg-[rgba(15,23,42,0.9)] backdrop-blur-md border border-accent-purple rounded-[14px] px-6 py-4 flex items-center gap-3 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(125,211,255,0.2)] z-[9999] animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
           {toast.type === 'success' && <ShieldCheck size={20} className="text-accent-green" />}
           {toast.type === 'error' && <AlertCircle size={20} className="text-accent-pink" />}
           {toast.type === 'info' && <Info size={20} className="text-accent-cyan" />}
@@ -1858,7 +2165,7 @@ function App() {
 
       {/* MAIN LAYOUT CONTAINER */}
       <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2">
-        <div className="w-full max-w-[490px] flex-1 min-h-0 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(139,92,246,0.04)] transition-[border-color,box-shadow] duration-300 hover:border-[rgba(139,92,246,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(139,92,246,0.08)]">
+        <div className="w-full max-w-[490px] flex-1 min-h-0 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)]">
 
           {/* ==================================================== */}
           {/* VIEW: HOME VIEW                                      */}
@@ -1875,21 +2182,21 @@ function App() {
                 <div className="flex flex-shrink-0 gap-[0.4rem] bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-[0.3rem] mb-6">
                   <button
                     type="button"
-                    className={`flex-1 bg-transparent border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'home' ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] text-white shadow-[0_2px_10px_rgba(124,58,237,0.3)]' : 'text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'home' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
                     onClick={() => setHomeTab('home')}
                   >
                     Home
                   </button>
                   <button
                     type="button"
-                    className={`flex-1 bg-transparent border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'apps' ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] text-white shadow-[0_2px_10px_rgba(124,58,237,0.3)]' : 'text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'apps' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
                     onClick={() => setHomeTab('apps')}
                   >
                     Apps
                   </button>
                   <button
                     type="button"
-                    className={`flex-1 bg-transparent border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 flex items-center justify-center gap-1 ${homeTab === 'history' ? 'bg-gradient-to-br from-accent-purple to-[#7c3aed] text-white shadow-[0_2px_10px_rgba(124,58,237,0.3)]' : 'text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 flex items-center justify-center gap-1 ${homeTab === 'history' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
                     onClick={() => { setHomeTab('history'); setHistoryVersion((v) => v + 1); setHistoryOpenedAt(Date.now()); }}
                   >
                     <HistoryIcon size={13} /> History
@@ -1927,7 +2234,7 @@ function App() {
               {/* FILE DROP ZONE (IF NO FILES SELECTED) */}
               {selectedFiles.length === 0 ? (
                 <div
-                  className={`group border-2 border-dashed rounded-[18px] px-6 py-10 max-[640px]:py-8 max-[640px]:px-4 max-[380px]:py-6 max-[380px]:px-3 text-center cursor-pointer bg-[rgba(15,23,42,0.25)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden ${dragActive ? 'border-accent-cyan bg-[rgba(6,182,212,0.04)] shadow-[0_0_25px_rgba(6,182,212,0.12)]' : 'border-[rgba(139,92,246,0.25)] hover:border-accent-cyan hover:bg-[rgba(6,182,212,0.04)] hover:shadow-[0_0_25px_rgba(6,182,212,0.12)]'}`}
+                  className={`group flex-shrink-0 border-2 border-dashed rounded-[18px] px-6 py-10 max-[640px]:py-8 max-[640px]:px-4 max-[380px]:py-6 max-[380px]:px-3 text-center cursor-pointer bg-[rgba(15,23,42,0.25)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden ${dragActive ? 'border-accent-cyan bg-[rgba(125,211,255,0.04)] shadow-[0_0_25px_rgba(125,211,255,0.12)]' : 'border-[rgba(125,211,255,0.25)] hover:border-accent-cyan hover:bg-[rgba(125,211,255,0.04)] hover:shadow-[0_0_25px_rgba(125,211,255,0.12)]'}`}
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
                   onDragLeave={handleDrag}
@@ -1942,14 +2249,14 @@ function App() {
                     multiple
                   />
                   <div className="flex flex-col items-center gap-4">
-                    <div className={`w-14 h-14 rounded-[14px] flex items-center justify-center transition-all duration-300 ${dragActive ? 'bg-[rgba(6,182,212,0.15)] text-accent-cyan -translate-y-1' : 'bg-[rgba(139,92,246,0.08)] text-accent-purple group-hover:bg-[rgba(6,182,212,0.15)] group-hover:text-accent-cyan group-hover:-translate-y-1'}`}>
+                    <div className={`w-14 h-14 rounded-[14px] flex items-center justify-center transition-all duration-300 ${dragActive ? 'bg-[rgba(125,211,255,0.15)] text-accent-cyan -translate-y-1' : 'bg-[rgba(125,211,255,0.08)] text-accent-purple group-hover:bg-[rgba(125,211,255,0.15)] group-hover:text-accent-cyan group-hover:-translate-y-1'}`}>
                       <UploadCloud size={32} />
                     </div>
                     <div>
                       <h3 className="text-[1.15rem] max-[380px]:text-base font-medium text-text-primary">Drag & drop your files here</h3>
                       <p className="text-[0.85rem] text-text-muted">or click to browse files from your device</p>
                     </div>
-                    <span className="bg-bg-tertiary border border-[rgba(139,92,246,0.3)] text-accent-purple px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase max-[640px]:px-2 max-[640px]:py-[0.15rem] max-[640px]:text-[0.65rem]">
+                    <span className="bg-bg-tertiary border border-[rgba(125,211,255,0.3)] text-accent-purple px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase max-[640px]:px-2 max-[640px]:py-[0.15rem] max-[640px]:text-[0.65rem]">
                       No File Size Limits
                     </span>
                   </div>
@@ -1960,14 +2267,14 @@ function App() {
                 <div className="flex items-center justify-center gap-4 mt-3 flex-shrink-0">
                   <button
                     type="button"
-                    className="relative overflow-hidden flex items-center gap-1 bg-transparent border-0 text-text-muted text-[0.8rem] cursor-pointer py-1 px-2 rounded-md hover:text-accent-cyan"
+                    className="relative overflow-hidden flex items-center gap-1.5 bg-[rgba(30,41,59,0.4)] border border-border text-text-secondary text-[0.8rem] cursor-pointer py-[0.4rem] px-3 rounded-full transition-all duration-200 hover:bg-[rgba(125,211,255,0.1)] hover:border-[rgba(125,211,255,0.3)] hover:text-accent-cyan"
                     onClick={(e) => rippleTap(e, triggerFolderInput)}
                   >
                     <FolderUp size={14} /> Send a folder
                   </button>
                   <button
                     type="button"
-                    className="relative overflow-hidden flex items-center gap-1 bg-transparent border-0 text-text-muted text-[0.8rem] cursor-pointer py-1 px-2 rounded-md hover:text-accent-cyan"
+                    className="relative overflow-hidden flex items-center gap-1.5 bg-[rgba(30,41,59,0.4)] border border-border text-text-secondary text-[0.8rem] cursor-pointer py-[0.4rem] px-3 rounded-full transition-all duration-200 hover:bg-[rgba(125,211,255,0.1)] hover:border-[rgba(125,211,255,0.3)] hover:text-accent-cyan"
                     onClick={(e) => rippleTap(e, () => setShowTextModal(true))}
                   >
                     <Type size={14} /> Send text
@@ -1994,7 +2301,7 @@ function App() {
                         <h4 className="text-[0.95rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{selectedFiles[0].name}</h4>
                         <p className="text-[0.8rem] text-text-secondary">{formatBytes(selectedFiles[0].size)}</p>
                       </div>
-                      <button className="bg-transparent border-0 text-text-muted cursor-pointer p-1 rounded-md transition-all duration-200 hover:text-accent-pink hover:bg-[rgba(236,72,153,0.15)]" onClick={() => setSelectedFiles([])}>
+                      <button className="bg-transparent border-0 text-text-muted cursor-pointer p-1 rounded-md transition-all duration-200 hover:text-accent-pink hover:bg-[rgba(248,113,113,0.15)]" onClick={() => setSelectedFiles([])}>
                         <X size={18} />
                       </button>
                     </div>
@@ -2029,19 +2336,34 @@ function App() {
                     </div>
                   )}
 
-                  <div className="flex flex-row gap-3 mb-3 flex-shrink-0 flex-wrap">
-                    <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, triggerFileInput)}>
-                      <UploadCloud size={16} /> Add Files
+                  <div className="relative w-full mb-3 flex-shrink-0">
+                    <button
+                      type="button"
+                      className="relative overflow-hidden flex items-center justify-center gap-2 w-full bg-transparent border border-border text-text-secondary text-[0.85rem] font-heading font-medium cursor-pointer py-[0.65rem] px-4 rounded-xl transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
+                      onClick={(e) => rippleTap(e, () => setShowAddMoreMenu((v) => !v))}
+                    >
+                      <UploadCloud size={16} /> Add more
+                      <ChevronDown size={14} className={`transition-transform duration-200 ${showAddMoreMenu ? 'rotate-180' : ''}`} />
                     </button>
-                    <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, triggerFolderInput)}>
-                      <FolderUp size={16} /> Add Folder
-                    </button>
-                    <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, () => setShowAddApps(true))}>
-                      <Smartphone size={16} /> Add Apps
-                    </button>
-                    <button className={`${BTN_SECONDARY} flex-1`} onClick={(e) => rippleTap(e, () => setShowTextModal(true))}>
-                      <Type size={16} /> Send Text
-                    </button>
+                    {showAddMoreMenu && (
+                      <div className="absolute top-full mt-1 left-0 right-0 z-10 bg-bg-secondary border border-border rounded-xl p-1 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.4)] flex flex-col">
+                        {[
+                          { label: 'Add Files', icon: <UploadCloud size={16} />, onClick: triggerFileInput },
+                          { label: 'Add Folder', icon: <FolderUp size={16} />, onClick: triggerFolderInput },
+                          { label: 'Add Apps', icon: <Smartphone size={16} />, onClick: () => setShowAddApps(true) },
+                          { label: 'Send Text', icon: <Type size={16} />, onClick: () => setShowTextModal(true) }
+                        ].map((action) => (
+                          <button
+                            key={action.label}
+                            type="button"
+                            className="flex items-center gap-2.5 text-left text-[0.82rem] py-[0.55rem] px-3 rounded-lg border-0 bg-transparent text-text-secondary cursor-pointer hover:bg-white/5 hover:text-text-primary"
+                            onClick={() => { setShowAddMoreMenu(false); action.onClick(); }}
+                          >
+                            {action.icon} {action.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <input
                     type="file"
@@ -2096,7 +2418,7 @@ function App() {
 
               {/* NEARBY DEVICES (feature #2): same-Wi-Fi senders discovered via NSD — tap to connect with no code entry */}
               {selectedFiles.length === 0 && nearbyPeers.length > 0 && (
-                <div className="mt-1 mb-2 flex-shrink-0">
+                <div className="mt-5 mb-2 flex-shrink-0">
                   <div className="flex items-center gap-[0.4rem] text-[0.78rem] text-text-muted mb-2">
                     <Radar size={14} className="text-accent-cyan" /> Nearby on this Wi-Fi
                   </div>
@@ -2105,10 +2427,10 @@ function App() {
                       <button
                         key={peer.roomCode}
                         type="button"
-                        className="relative overflow-hidden flex items-center gap-3 bg-[rgba(6,182,212,0.08)] border border-[rgba(6,182,212,0.3)] rounded-xl py-[0.6rem] px-[0.8rem] text-left cursor-pointer transition-all duration-200 hover:bg-[rgba(6,182,212,0.15)]"
+                        className="relative overflow-hidden flex items-center gap-3 bg-[rgba(125,211,255,0.08)] border border-[rgba(125,211,255,0.3)] rounded-xl py-[0.6rem] px-[0.8rem] text-left cursor-pointer transition-all duration-200 hover:bg-[rgba(125,211,255,0.15)]"
                         onClick={(e) => rippleTap(e, () => { setTargetPeerId(peer.roomCode); startP2PReceive(peer.roomCode); })}
                       >
-                        <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(6,182,212,0.15)] text-accent-cyan">
+                        <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(125,211,255,0.15)] text-accent-cyan">
                           <Laptop size={16} />
                         </div>
                         <div className="flex-1 min-w-0 flex flex-col">
@@ -2118,6 +2440,59 @@ function App() {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* NEARBY (OFFLINE): Wi-Fi Direct — no router, no shared Wi-Fi, no
+                  internet required at all. Explicit opt-in toggle since it
+                  needs a location/nearby-Wi-Fi permission prompt on first use. */}
+              {wifiDirectAvailable && (
+                <div className="mt-5 mb-2 flex-shrink-0">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-[0.4rem] text-[0.78rem] text-text-muted">
+                      <Zap size={14} className="text-accent-purple" /> Nearby (offline, no Wi-Fi needed)
+                    </div>
+                    <button
+                      type="button"
+                      className={`relative overflow-hidden flex items-center gap-1.5 text-[0.72rem] font-semibold rounded-full cursor-pointer py-1 px-3 border transition-all duration-200 ${
+                        wifiDirectBrowsing
+                          ? 'bg-accent-purple text-[#06222c] border-accent-purple'
+                          : 'bg-[rgba(125,211,255,0.1)] text-accent-purple border-[rgba(125,211,255,0.3)] hover:bg-[rgba(125,211,255,0.18)]'
+                      }`}
+                      onClick={(e) => rippleTap(e, () => setWifiDirectBrowsing((prev) => !prev))}
+                    >
+                      {wifiDirectBrowsing && <span className="w-1.5 h-1.5 rounded-full bg-[#06222c] animate-pulse" />}
+                      {wifiDirectBrowsing ? 'Stop searching' : 'Find devices'}
+                    </button>
+                  </div>
+
+                  {wifiDirectBrowsing && wifiDirectPeers.length === 0 && (
+                    <div className="text-[0.78rem] text-text-muted py-2">Searching nearby devices…</div>
+                  )}
+
+                  {wifiDirectPeers.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      {wifiDirectPeers.map((peer) => (
+                        <button
+                          key={peer.deviceAddress}
+                          type="button"
+                          disabled={wifiDirectConnecting === peer.deviceAddress}
+                          className="relative overflow-hidden flex items-center gap-3 bg-[rgba(125,211,255,0.08)] border border-[rgba(125,211,255,0.3)] rounded-xl py-[0.6rem] px-[0.8rem] text-left cursor-pointer transition-all duration-200 hover:bg-[rgba(125,211,255,0.15)] disabled:opacity-60 disabled:cursor-wait"
+                          onClick={(e) => rippleTap(e, () => connectToWifiDirectPeer(peer))}
+                        >
+                          <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(125,211,255,0.15)] text-accent-purple">
+                            <Smartphone size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0 flex flex-col">
+                            <span className="text-[0.85rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{peer.deviceName}</span>
+                            <span className="text-[0.72rem] text-text-muted">
+                              {wifiDirectConnecting === peer.deviceAddress ? 'Connecting…' : 'No internet needed — tap to connect'}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2133,7 +2508,7 @@ function App() {
                       <input
                         type="text"
                         placeholder="Enter Room Code (e.g. 4D8G2X)"
-                        className="w-auto flex-1 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(139,92,246,0.12)]"
+                        className="w-auto flex-1 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(125,211,255,0.12)]"
                         value={targetPeerId}
                         onChange={(e) => setTargetPeerId(e.target.value.toUpperCase())}
                         onKeyDown={(e) => e.key === 'Enter' && startP2PReceive()}
@@ -2146,7 +2521,10 @@ function App() {
                         <QrCode size={20} />
                       </button>
                     </div>
-                    <button className={`${BTN_SECONDARY} justify-center`} onClick={(e) => rippleTap(e, () => startP2PReceive())}>
+                    <button
+                      className={`${targetPeerId.trim() ? `${BTN_PRIMARY} shadow-[0_2px_14px_rgba(125,211,255,0.35)]` : BTN_SECONDARY} justify-center`}
+                      onClick={(e) => rippleTap(e, () => startP2PReceive())}
+                    >
                       Connect & Download
                     </button>
                   </div>
@@ -2173,7 +2551,7 @@ function App() {
                       <div className="relative w-full aspect-square rounded-[14px] overflow-hidden bg-black">
                         {!cameraReady && (
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <RefreshCw size={32} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
+                            <RefreshCw size={32} className="text-accent-purple drop-shadow-[0_0_10px_rgba(125,211,255,0.5)] animate-[spin_1.1s_linear_infinite]" />
                           </div>
                         )}
                         <video
@@ -2183,7 +2561,7 @@ function App() {
                           playsInline
                           muted
                         />
-                        {cameraReady && <div className="absolute inset-[12%] border-2 border-accent-purple rounded-xl shadow-[0_0_20px_rgba(139,92,246,0.4)] pointer-events-none" />}
+                        {cameraReady && <div className="absolute inset-[12%] border-2 border-accent-purple rounded-xl shadow-[0_0_20px_rgba(125,211,255,0.4)] pointer-events-none" />}
                       </div>
                     )}
                     <canvas ref={scanCanvasRef} style={{ display: 'none' }} />
@@ -2207,7 +2585,7 @@ function App() {
                       autoFocus
                       rows={5}
                       placeholder="Paste or type a note, link, or password to send..."
-                      className="w-full bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-3 font-heading text-[0.9rem] text-text-primary outline-none resize-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(139,92,246,0.12)]"
+                      className="w-full bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-3 font-heading text-[0.9rem] text-text-primary outline-none resize-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(125,211,255,0.12)]"
                       value={textDraft}
                       onChange={(e) => setTextDraft(e.target.value)}
                     />
@@ -2260,7 +2638,7 @@ function App() {
                   <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem] font-medium text-center">
                     Setting up your P2P sharing room&hellip;
                   </p>
-                  <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
+                  <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(125,211,255,0.5)] animate-[spin_1.1s_linear_infinite]" />
                   <p className="text-[0.85rem] text-text-muted max-w-[280px] text-center mx-auto">
                     Reaching the signaling server to allocate your room code. This can take a moment on a slow connection.
                   </p>
@@ -2271,9 +2649,9 @@ function App() {
               {transferState === 'waiting' && (
                 <>
                   <div className="flex items-center justify-center w-full gap-3 my-2 mb-3" role="img" aria-label="Waiting for a peer to connect">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-[1] bg-[rgba(139,92,246,0.15)] border border-[rgba(139,92,246,0.4)] text-accent-purple shadow-[0_0_14px_rgba(139,92,246,0.25)]"><Zap size={18} /></div>
-                    <div className="relative flex-1 min-w-[60px] max-w-[180px] h-[3px] rounded-full overflow-hidden bg-[linear-gradient(90deg,rgba(139,92,246,0.45),rgba(6,182,212,0.45))] shadow-[0_0_6px_rgba(139,92,246,0.3)] after:content-[''] after:absolute after:top-0 after:h-full after:w-[40%] after:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.95),transparent)] after:animate-[hsSweep_1.8s_ease-in-out_infinite]" />
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-[1] bg-[rgba(6,182,212,0.15)] border border-[rgba(6,182,212,0.4)] text-accent-cyan shadow-[0_0_14px_rgba(6,182,212,0.25)]"><Laptop size={18} /></div>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-[1] bg-[rgba(125,211,255,0.15)] border border-[rgba(125,211,255,0.4)] text-accent-purple shadow-[0_0_14px_rgba(125,211,255,0.25)]"><Zap size={18} /></div>
+                    <div className="relative flex-1 min-w-[60px] max-w-[180px] h-[3px] rounded-full overflow-hidden bg-[linear-gradient(90deg,rgba(125,211,255,0.45),rgba(125,211,255,0.45))] shadow-[0_0_6px_rgba(125,211,255,0.3)] after:content-[''] after:absolute after:top-0 after:h-full after:w-[40%] after:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.95),transparent)] after:animate-[hsSweep_1.8s_ease-in-out_infinite]" />
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-[1] bg-[rgba(125,211,255,0.15)] border border-[rgba(125,211,255,0.4)] text-accent-cyan shadow-[0_0_14px_rgba(125,211,255,0.25)]"><Laptop size={18} /></div>
                   </div>
                   <p className="text-center text-[0.8rem] text-text-muted mb-4">Waiting for peers to scan or enter your code&hellip; anyone with it can join.</p>
 
@@ -2292,7 +2670,7 @@ function App() {
                           <button
                             key={preset.label}
                             type="button"
-                            className={`text-left text-[0.8rem] py-[0.4rem] px-3 rounded-lg border-0 cursor-pointer ${maxRateKBps === preset.kbps ? 'bg-[rgba(139,92,246,0.15)] text-accent-purple' : 'bg-transparent text-text-secondary hover:bg-white/5'}`}
+                            className={`text-left text-[0.8rem] py-[0.4rem] px-3 rounded-lg border-0 cursor-pointer ${maxRateKBps === preset.kbps ? 'bg-[rgba(125,211,255,0.15)] text-accent-purple' : 'bg-transparent text-text-secondary hover:bg-white/5'}`}
                             onClick={() => { setMaxRateKBps(preset.kbps); setShowRateMenu(false); }}
                           >
                             {preset.label}
@@ -2345,7 +2723,7 @@ function App() {
               {/* Transferring State */}
               {transferState === 'transferring' && (
                 <div className="flex flex-col gap-6 w-full">
-                  <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(6,182,212,0.08)] border border-[rgba(6,182,212,0.2)] text-accent-cyan">
+                  <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(125,211,255,0.08)] border border-[rgba(125,211,255,0.2)] text-accent-cyan">
                     <Users size={14} /> {connectedCount} {connectedCount === 1 ? 'receiver' : 'receivers'} connected
                   </div>
 
@@ -2365,12 +2743,12 @@ function App() {
                   )}
 
                   {sendFileCount > 1 && (
-                    <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(139,92,246,0.08)] border border-[rgba(139,92,246,0.2)] text-accent-purple">
+                    <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(125,211,255,0.08)] border border-[rgba(125,211,255,0.2)] text-accent-purple">
                       File {sendFileIndex + 1} of {sendFileCount}: {selectedFiles[sendFileIndex]?.name}
                     </div>
                   )}
 
-                  <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(6,182,212,0.1)] border border-[rgba(6,182,212,0.2)] text-accent-cyan">
+                  <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(125,211,255,0.1)] border border-[rgba(125,211,255,0.2)] text-accent-cyan">
                     <RefreshCw size={14} style={{animation: isPaused ? 'none' : 'spin 2s linear infinite'}} />
                     {isPaused ? 'Paused' : 'Streaming File...'}
                   </div>
@@ -2399,7 +2777,7 @@ function App() {
               {/* Complete State */}
               {transferState === 'complete' && (
                 <div className="flex flex-col items-center text-center gap-6 w-full">
-                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(16,185,129,0.15)] text-accent-green drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(52,211,153,0.15)] text-accent-green drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
                     <ShieldCheck size={36} />
                   </div>
                   <div>
@@ -2417,7 +2795,7 @@ function App() {
               {/* Error State */}
               {transferState === 'error' && (
                 <div className="flex flex-col items-center text-center gap-6 w-full">
-                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(236,72,153,0.15)] text-accent-pink">
+                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(248,113,113,0.15)] text-accent-pink">
                     <AlertCircle size={36} />
                   </div>
                   <div>
@@ -2461,7 +2839,7 @@ function App() {
                     Connecting to sender room <strong className="text-accent-cyan">{targetPeerId}</strong>&hellip;
                   </p>
                   <div className="flex items-center justify-center py-10 pb-6">
-                    <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
+                    <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(125,211,255,0.5)] animate-[spin_1.1s_linear_infinite]" />
                   </div>
                   <p className="text-[0.85rem] text-text-muted max-w-[280px] text-center mx-auto mt-3">
                     Establishing WebRTC data tunnel. Ensure the sender has the page active.
@@ -2476,7 +2854,7 @@ function App() {
                     Connection lost &mdash; reconnecting&hellip;
                   </p>
                   <div className="flex items-center justify-center py-10 pb-6">
-                    <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] animate-[spin_1.1s_linear_infinite]" />
+                    <RefreshCw size={40} className="text-accent-purple drop-shadow-[0_0_10px_rgba(125,211,255,0.5)] animate-[spin_1.1s_linear_infinite]" />
                   </div>
                   <p className="text-[0.85rem] text-text-muted max-w-[280px] text-center mx-auto mt-3">
                     Your progress is saved &mdash; the transfer will resume from where it left off.
@@ -2488,7 +2866,7 @@ function App() {
               {transferState === 'transferring' && (
                 <div className="flex flex-col gap-6 w-full">
                   {receiveFileCount > 1 && (
-                    <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(139,92,246,0.08)] border border-[rgba(139,92,246,0.2)] text-accent-purple">
+                    <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(125,211,255,0.08)] border border-[rgba(125,211,255,0.2)] text-accent-purple">
                       File {receiveFileIndex + 1} of {receiveFileCount}
                     </div>
                   )}
@@ -2503,7 +2881,7 @@ function App() {
                     </div>
                   )}
 
-                  <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.2)] text-accent-purple">
+                  <div className="inline-flex items-center gap-2 py-[0.4rem] px-4 rounded-full text-[0.85rem] font-semibold mx-auto bg-[rgba(125,211,255,0.1)] border border-[rgba(125,211,255,0.2)] text-accent-purple">
                     <RefreshCw size={14} style={{animation: isPeerPaused ? 'none' : 'spin 2s linear infinite'}} />
                     {isPeerPaused ? 'Paused by sender' : 'Receiving File...'}
                   </div>
@@ -2537,7 +2915,7 @@ function App() {
               {/* Complete State */}
               {transferState === 'complete' && (
                 <div className="flex flex-col items-center text-center gap-6 w-full">
-                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(16,185,129,0.15)] text-accent-green drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(52,211,153,0.15)] text-accent-green drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
                     <ShieldCheck size={36} />
                   </div>
                   <div>
@@ -2555,11 +2933,11 @@ function App() {
                   {receivedTexts.length > 0 && (
                     <div className="flex flex-col gap-2 w-full text-left">
                       {receivedTexts.map((t, i) => (
-                        <div key={i} className="bg-[rgba(6,182,212,0.08)] border border-[rgba(6,182,212,0.3)] rounded-xl p-3 flex flex-col gap-2">
+                        <div key={i} className="bg-[rgba(125,211,255,0.08)] border border-[rgba(125,211,255,0.3)] rounded-xl p-3 flex flex-col gap-2">
                           <p className="text-[0.85rem] text-text-primary whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto m-0">{t.text}</p>
                           <button
                             type="button"
-                            className="relative overflow-hidden self-end flex items-center gap-1 bg-transparent border border-[rgba(6,182,212,0.4)] text-accent-cyan text-[0.75rem] cursor-pointer py-1 px-2 rounded-md hover:bg-[rgba(6,182,212,0.12)]"
+                            className="relative overflow-hidden self-end flex items-center gap-1 bg-transparent border border-[rgba(125,211,255,0.4)] text-accent-cyan text-[0.75rem] cursor-pointer py-1 px-2 rounded-md hover:bg-[rgba(125,211,255,0.12)]"
                             onClick={(e) => rippleTap(e, () => copyToClipboard(t.text, 'Text copied!'))}
                           >
                             <ClipboardCopy size={12} /> Copy
@@ -2575,7 +2953,7 @@ function App() {
                         Capacitor.isNativePlatform() ? (
                           <div
                             key={i}
-                            className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl flex items-center justify-center gap-3 shadow-[0_4px_20px_rgba(16,185,129,0.4)] w-full mt-4"
+                            className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl flex items-center justify-center gap-3 shadow-[0_4px_20px_rgba(52,211,153,0.4)] w-full mt-4"
                           >
                             <Download size={16} /> {f.relPath ? `${f.relPath}/${f.name}` : f.name}
                           </div>
@@ -2584,7 +2962,7 @@ function App() {
                             key={i}
                             href={f.url}
                             download={f.name}
-                            className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl cursor-pointer flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_4px_20px_rgba(16,185,129,0.4)] no-underline w-full mt-4 hover:scale-[1.02] hover:shadow-[0_8px_30px_rgba(16,185,129,0.6)] hover:from-[#34d399] hover:to-[#047857]"
+                            className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl cursor-pointer flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_4px_20px_rgba(52,211,153,0.4)] no-underline w-full mt-4 hover:scale-[1.02] hover:shadow-[0_8px_30px_rgba(52,211,153,0.6)] hover:from-[#34d399] hover:to-[#047857]"
                           >
                             <Download size={16} /> {f.name}
                           </a>
@@ -2602,7 +2980,7 @@ function App() {
               {/* Error State */}
               {transferState === 'error' && (
                 <div className="flex flex-col items-center text-center gap-6 w-full">
-                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(236,72,153,0.15)] text-accent-pink">
+                  <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[rgba(248,113,113,0.15)] text-accent-pink">
                     <AlertCircle size={36} />
                   </div>
                   <div>

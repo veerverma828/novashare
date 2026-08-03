@@ -7,6 +7,8 @@ const IncomingShare = registerPlugin('IncomingShare');
 const TransferNotification = registerPlugin('TransferNotification');
 const NearbyDiscovery = registerPlugin('NearbyDiscovery');
 const FolderPicker = registerPlugin('FolderPicker');
+const WifiDirect = registerPlugin('WifiDirect');
+const LocalSignaling = registerPlugin('LocalSignaling');
 
 // Fires a light haptic tick on real devices; no-op on web.
 export function triggerHaptic(style = ImpactStyle.Light) {
@@ -158,6 +160,132 @@ export function getDeviceLabel() {
   const ua = navigator.userAgent || '';
   const match = ua.match(/;\s*([^;)]+?)\s*Build\//);
   return match ? match[1] : 'NovaShare device';
+}
+
+// --- Wi-Fi Direct (fully offline device-to-device: no router, no internet,
+// no pre-existing shared network needed — one phone becomes the group owner
+// at a fixed local IP, the other joins directly). Pairs with LocalSignaling
+// below to negotiate a manual WebRTC connection over that link. ---
+export async function isWifiDirectSupported() {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    const { supported } = await WifiDirect.isSupported();
+    return !!supported;
+  } catch {
+    return false;
+  }
+}
+
+export async function wifiDirectInitialize() {
+  if (!Capacitor.isNativePlatform()) return;
+  await WifiDirect.initialize();
+}
+
+export async function wifiDirectDiscoverPeers() {
+  if (!Capacitor.isNativePlatform()) return;
+  await WifiDirect.discoverPeers();
+}
+
+export async function wifiDirectStopDiscovery() {
+  if (!Capacitor.isNativePlatform()) return;
+  await WifiDirect.stopDiscovery().catch(() => {});
+}
+
+export async function wifiDirectConnect(deviceAddress) {
+  if (!Capacitor.isNativePlatform()) return;
+  await WifiDirect.connect({ deviceAddress });
+}
+
+export async function wifiDirectCancelConnect() {
+  if (!Capacitor.isNativePlatform()) return;
+  await WifiDirect.cancelConnect().catch(() => {});
+}
+
+export async function wifiDirectRequestGroupInfo() {
+  if (!Capacitor.isNativePlatform()) return { groupFormed: false, isGroupOwner: false, groupOwnerAddress: '' };
+  return WifiDirect.requestGroupInfo();
+}
+
+export async function wifiDirectRemoveGroup() {
+  if (!Capacitor.isNativePlatform()) return;
+  await WifiDirect.removeGroup().catch(() => {});
+}
+
+// Fires with { peers: [{deviceName, deviceAddress, status}] } whenever the
+// nearby Wi-Fi Direct peer list changes. Returns an unsubscribe function.
+export function onWifiDirectPeersChanged(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  WifiDirect.addListener('peersChanged', (data) => callback(data.peers || [])).then((h) => { handle = h; });
+  return () => handle?.remove();
+}
+
+// Fires with { groupFormed, isGroupOwner, groupOwnerAddress } whenever the
+// Wi-Fi Direct connection state changes (group forms/dissolves).
+export function onWifiDirectConnectionChanged(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  WifiDirect.addListener('connectionChanged', (data) => callback(data)).then((h) => { handle = h; });
+  return () => handle?.remove();
+}
+
+// --- Local signaling (raw socket byte-pipe over the Wi-Fi Direct link) ---
+// Carries exactly one WebRTC SDP offer/answer plus trickle ICE candidates
+// between the two devices with no internet-reachable broker involved. The
+// group owner starts the server and waits; the other side connects to it.
+export async function localSignalingStartServer() {
+  if (!Capacitor.isNativePlatform()) throw new Error('Local signaling requires native platform');
+  await LocalSignaling.startServer();
+}
+
+export async function localSignalingStopServer() {
+  if (!Capacitor.isNativePlatform()) return;
+  await LocalSignaling.stopServer().catch(() => {});
+}
+
+export async function localSignalingConnect(ip, port) {
+  if (!Capacitor.isNativePlatform()) throw new Error('Local signaling requires native platform');
+  const { connectionId } = await LocalSignaling.connectToServer({ ip, port });
+  return connectionId;
+}
+
+export async function localSignalingSend(connectionId, message) {
+  if (!Capacitor.isNativePlatform()) return;
+  await LocalSignaling.send({ connectionId, json: JSON.stringify(message) });
+}
+
+export async function localSignalingClose(connectionId) {
+  if (!Capacitor.isNativePlatform()) return;
+  await LocalSignaling.close({ connectionId }).catch(() => {});
+}
+
+// Fires with (connectionId, parsedMessage) as signaling frames arrive.
+export function onLocalSignalingMessage(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  LocalSignaling.addListener('message', (data) => {
+    try {
+      callback(data.connectionId, JSON.parse(data.json));
+    } catch {
+      // Malformed frame — ignore, the sender will just time out on its side.
+    }
+  }).then((h) => { handle = h; });
+  return () => handle?.remove();
+}
+
+// Fires with { connectionId } when the other device's socket connects.
+export function onLocalSignalingPeerConnected(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  LocalSignaling.addListener('peerConnected', (data) => callback(data.connectionId)).then((h) => { handle = h; });
+  return () => handle?.remove();
+}
+
+export function onLocalSignalingPeerDisconnected(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  LocalSignaling.addListener('peerDisconnected', (data) => callback(data.connectionId)).then((h) => { handle = h; });
+  return () => handle?.remove();
 }
 
 export function initNative() {
