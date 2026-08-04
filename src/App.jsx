@@ -2229,7 +2229,7 @@ function App() {
                         <span>{selectedFiles.length} files selected &middot; {formatBytes(selectedFiles.reduce((sum, f) => sum + f.size, 0))} total</span>
                         <span className="text-[0.72rem] text-text-muted">swipe or tap &times; to drop a file</span>
                       </div>
-                      <div className="queue flex-1 min-h-[80px] flex flex-col gap-[0.6rem] mb-6 overflow-y-auto p-3 pr-[0.6rem] rounded-2xl border border-border bg-[rgba(8,12,20,0.25)]">
+                      <div className="queue flex-1 min-h-[80px] max-h-[45vh] flex flex-col gap-[0.6rem] mb-6 overflow-y-auto p-3 pr-[0.6rem] rounded-2xl border border-border bg-[rgba(8,12,20,0.25)]">
                         {groupedQueue.map((item) => item.type === 'folder' ? (
                           <FolderQueueRow
                             key={`folder-${item.name}`}
