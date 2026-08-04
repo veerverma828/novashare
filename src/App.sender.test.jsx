@@ -99,7 +99,11 @@ vi.mock('./native', () => ({
   localSignalingSend: vi.fn(async () => {}),
   localSignalingClose: vi.fn(async () => {}),
   onLocalSignalingMessage: vi.fn(() => () => {}),
-  onLocalSignalingPeerConnected: vi.fn(() => () => {})
+  onLocalSignalingPeerConnected: vi.fn(() => () => {}),
+  checkForAppUpdate: vi.fn(async () => ({ updateAvailable: false })),
+  startFlexibleAppUpdate: vi.fn(async () => ({ accepted: false })),
+  completeFlexibleAppUpdate: vi.fn(async () => {}),
+  onAppUpdateStateChanged: vi.fn(() => () => {})
 }));
 
 vi.mock('@capacitor/app', () => ({

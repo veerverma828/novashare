@@ -115,6 +115,10 @@ vi.mock('./native', () => ({
   localSignalingClose: vi.fn(() => Promise.resolve()),
   onLocalSignalingMessage: vi.fn(() => () => {}),
   onLocalSignalingPeerConnected: vi.fn(() => () => {}),
+  checkForAppUpdate: vi.fn(() => Promise.resolve({ updateAvailable: false })),
+  startFlexibleAppUpdate: vi.fn(() => Promise.resolve({ accepted: false })),
+  completeFlexibleAppUpdate: vi.fn(() => Promise.resolve()),
+  onAppUpdateStateChanged: vi.fn(() => () => {}),
 }));
 
 vi.mock('canvas-confetti', () => ({

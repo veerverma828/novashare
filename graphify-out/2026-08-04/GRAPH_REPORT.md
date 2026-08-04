@@ -1,11 +1,11 @@
 # Graph Report - novashare  (2026-08-04)
 
 ## Corpus Check
-- 52 files · ~78,322 words
+- 54 files · ~81,501 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 380 nodes · 632 edges · 39 communities (33 shown, 6 thin omitted)
+- 391 nodes · 649 edges · 38 communities (32 shown, 6 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 15 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
@@ -32,7 +32,7 @@
 - gen-feature-graphics-batch.mjs
 - build-gallery.mjs
 - NearbyDiscoveryPlugin
-- App.panels.test.jsx
+- history.js
 - computeSecurityCode
 - React + Vite
 - rules/graphify.md
@@ -41,10 +41,9 @@
 - CLAUDE.md
 - WifiDirectPlugin
 - PeerJsCompatDataConnection
-- transferUtils.js
 
 ## God Nodes (most connected - your core abstractions)
-1. `App()` - 39 edges
+1. `App()` - 41 edges
 2. `WifiDirectPlugin` - 23 edges
 3. `establishLocalConnection()` - 16 edges
 4. `LocalSignalingServerPlugin` - 12 edges
@@ -58,19 +57,19 @@
 ## Surprising Connections (you probably didn't know these)
 - `App()` --references--> `@capacitor/app`  [EXTRACTED]
   src/App.jsx → package.json
-- `FolderQueueRow()` --calls--> `formatBytes()`  [EXTRACTED]
-  src/App.jsx → src/transferUtils.js
-- `AppsPanel()` --calls--> `mapWithConcurrency()`  [EXTRACTED]
-  src/App.jsx → src/transferUtils.js
+- `HistoryPanel()` --calls--> `getHistory()`  [EXTRACTED]
+  src/App.jsx → src/history.js
 - `App()` --calls--> `addHistoryEntry()`  [EXTRACTED]
   src/App.jsx → src/history.js
 - `App()` --calls--> `clearHistory()`  [EXTRACTED]
   src/App.jsx → src/history.js
+- `App()` --indirect_call--> `sharedEntryToFile()`  [INFERRED]
+  src/App.jsx → src/native.js
 
 ## Import Cycles
 - None detected.
 
-## Communities (39 total, 6 thin omitted)
+## Communities (38 total, 6 thin omitted)
 
 ### Community 0 - "devDependencies"
 Cohesion: 0.05
@@ -93,8 +92,8 @@ Cohesion: 0.22
 Nodes (8): Changes to This Policy, Children's Privacy, Contact, Data Retention, Privacy Policy for NovaShare, Third-Party Services, What the App Accesses (and Why), What We Do NOT Do
 
 ### Community 5 - "App.jsx"
-Cohesion: 0.08
-Nodes (62): App(), AppIcon(), appIconCache, establishLocalConnection(), FolderQueueRow(), HighlightMatch(), ICE_SERVERS, NotifyDownload (+54 more)
+Cohesion: 0.06
+Nodes (77): App(), AppIcon(), appIconCache, AppsPanel(), establishLocalConnection(), FolderQueueRow(), HighlightMatch(), HistoryPanel() (+69 more)
 
 ### Community 7 - "gradlew"
 Cohesion: 0.83
@@ -132,9 +131,9 @@ Nodes (3): A, cards, items
 Cohesion: 0.23
 Nodes (5): Plugin, PluginCall, NearbyDiscoveryPlugin, NsdManager, NsdServiceInfo
 
-### Community 19 - "App.panels.test.jsx"
-Cohesion: 0.24
-Nodes (13): AppsPanel(), HistoryPanel(), addHistoryEntry(), clearHistory(), getHistory(), readAll(), removeHistoryEntry(), writeAll() (+5 more)
+### Community 19 - "history.js"
+Cohesion: 0.18
+Nodes (8): { FakePeer, getCreatedPeers, getCreatedConns, resetFakePeerState }, { FakePeer }, addHistoryEntry(), clearHistory(), getHistory(), readAll(), removeHistoryEntry(), writeAll()
 
 ### Community 20 - "computeSecurityCode"
 Cohesion: 0.70
@@ -152,12 +151,8 @@ Nodes (6): FolderPickerPlugin, JSArray, Plugin, PluginCall, androidx, DocumentFi
 Cohesion: 0.17
 Nodes (6): Plugin, PluginCall, WifiDirectPlugin, BroadcastReceiver, IntentFilter, WifiP2pManager
 
-### Community 38 - "transferUtils.js"
-Cohesion: 0.38
-Nodes (8): arrayBufferToBase64(), extractRoomCode(), formatSpeed(), formatTime(), generateRoomCode(), getFileType(), mapWithConcurrency(), RATE_PRESETS
-
 ## Knowledge Gaps
-- **71 isolated node(s):** `name`, `private`, `version`, `type`, `dev` (+66 more)
+- **73 isolated node(s):** `name`, `private`, `version`, `type`, `dev` (+68 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **6 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -165,15 +160,15 @@ Nodes (8): arrayBufferToBase64(), extractRoomCode(), formatSpeed(), formatTime()
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `dependencies` connect `dependencies` to `scripts`?**
-  _High betweenness centrality (0.154) - this node is a cross-community bridge._
-- **Why does `App()` connect `App.jsx` to `App.panels.test.jsx`, `dependencies`, `computeSecurityCode`, `transferUtils.js`?**
-  _High betweenness centrality (0.135) - this node is a cross-community bridge._
+  _High betweenness centrality (0.157) - this node is a cross-community bridge._
+- **Why does `App()` connect `App.jsx` to `history.js`, `dependencies`, `computeSecurityCode`?**
+  _High betweenness centrality (0.143) - this node is a cross-community bridge._
 - **Why does `@capacitor/app` connect `dependencies` to `App.jsx`?**
-  _High betweenness centrality (0.130) - this node is a cross-community bridge._
+  _High betweenness centrality (0.135) - this node is a cross-community bridge._
 - **Are the 14 inferred relationships involving `JSObject` (e.g. with `.collect()` and `.folderPickerResult()`) actually correct?**
   _`JSObject` has 14 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `name`, `private`, `version` to the rest of the system?**
-  _71 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _73 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `devDependencies` be split into smaller, more focused modules?**
   _Cohesion score 0.05128205128205128 - nodes in this community are weakly interconnected._
 - **Should `scripts` be split into smaller, more focused modules?**

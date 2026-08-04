@@ -9,6 +9,7 @@ const NearbyDiscovery = registerPlugin('NearbyDiscovery');
 const FolderPicker = registerPlugin('FolderPicker');
 const WifiDirect = registerPlugin('WifiDirect');
 const LocalSignaling = registerPlugin('LocalSignaling');
+const AppUpdate = registerPlugin('AppUpdate');
 
 // Fires a light haptic tick on real devices; no-op on web.
 export function triggerHaptic(style = ImpactStyle.Light) {
@@ -285,6 +286,40 @@ export function onLocalSignalingPeerDisconnected(callback) {
   if (!Capacitor.isNativePlatform()) return () => {};
   let handle;
   LocalSignaling.addListener('peerDisconnected', (data) => callback(data.connectionId)).then((h) => { handle = h; });
+  return () => handle?.remove();
+}
+
+// --- In-app update (Play Core flexible flow) ---
+// Reads Play Store's cached update info; cheap enough to call on every
+// foreground. downloadedPending covers the case where a flexible download
+// finished in a previous session and is still waiting to be installed.
+export async function checkForAppUpdate() {
+  if (!Capacitor.isNativePlatform()) return { updateAvailable: false };
+  return AppUpdate.checkForUpdate();
+}
+
+// Opens Play Store's own consent sheet and, if accepted, starts the
+// background download. Resolves once the user responds to the sheet —
+// download/install progress arrives separately via onAppUpdateStateChanged.
+export async function startFlexibleAppUpdate() {
+  if (!Capacitor.isNativePlatform()) throw new Error('In-app update requires native platform');
+  return AppUpdate.startFlexibleUpdate();
+}
+
+// Installs a fully-downloaded update and restarts the app. Only call this
+// from an explicit user action (e.g. tapping "Restart now").
+export async function completeFlexibleAppUpdate() {
+  if (!Capacitor.isNativePlatform()) return;
+  await AppUpdate.completeFlexibleUpdate();
+}
+
+// Fires with { status, bytesDownloaded, totalBytesToDownload } as the
+// download progresses; status is one of PENDING/DOWNLOADING/DOWNLOADED/
+// INSTALLING/INSTALLED/FAILED/CANCELED.
+export function onAppUpdateStateChanged(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  AppUpdate.addListener('downloadStateChanged', (data) => callback(data)).then((h) => { handle = h; });
   return () => handle?.remove();
 }
 

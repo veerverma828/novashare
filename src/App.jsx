@@ -80,7 +80,11 @@ import {
   localSignalingSend,
   localSignalingClose,
   onLocalSignalingMessage,
-  onLocalSignalingPeerConnected
+  onLocalSignalingPeerConnected,
+  checkForAppUpdate,
+  startFlexibleAppUpdate,
+  completeFlexibleAppUpdate,
+  onAppUpdateStateChanged
 } from './native';
 import { addHistoryEntry, getHistory, clearHistory } from './history';
 import { computeSecurityCode } from './security';
@@ -915,6 +919,72 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  // In-app update (Play Core flexible flow). status mirrors the user-facing
+  // stage: 'available' (not yet downloading) -> 'downloading' -> 'downloaded'
+  // (ready to restart) -> 'failed'. null/dismissed hides the banner entirely.
+  const [appUpdate, setAppUpdate] = useState(null);
+  const appUpdateDismissedRef = useRef(false);
+
+  const runUpdateCheck = () => {
+    checkForAppUpdate().then(({ updateAvailable, flexibleAllowed, downloadedPending }) => {
+      if (downloadedPending) {
+        appUpdateDismissedRef.current = false;
+        setAppUpdate({ status: 'downloaded', progress: 100 });
+      } else if (updateAvailable && flexibleAllowed && !appUpdateDismissedRef.current) {
+        setAppUpdate((prev) => prev ?? { status: 'available', progress: 0 });
+      }
+    }).catch(() => {});
+  };
+
+  // Check once on mount, then again whenever the app returns to the
+  // foreground — catches an update that finished downloading while backgrounded.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    runUpdateCheck();
+    const handle = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) runUpdateCheck();
+    });
+    return () => { handle.remove(); };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAppUpdateStateChanged(({ status, bytesDownloaded, totalBytesToDownload }) => {
+      if (status === 'DOWNLOADING') {
+        const progress = totalBytesToDownload > 0
+          ? Math.min(99, Math.round((bytesDownloaded / totalBytesToDownload) * 100))
+          : 0;
+        appUpdateDismissedRef.current = false;
+        setAppUpdate({ status: 'downloading', progress });
+      } else if (status === 'DOWNLOADED') {
+        appUpdateDismissedRef.current = false;
+        setAppUpdate({ status: 'downloaded', progress: 100 });
+      } else if (status === 'FAILED' || status === 'CANCELED') {
+        setAppUpdate((prev) => (prev ? { status: 'available', progress: 0 } : prev));
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  const handleStartUpdate = () => {
+    setAppUpdate((prev) => (prev ? { ...prev, status: 'downloading', progress: 0 } : prev));
+    startFlexibleAppUpdate()
+      .then(({ accepted }) => {
+        if (!accepted) setAppUpdate({ status: 'available', progress: 0 });
+      })
+      .catch(() => setAppUpdate({ status: 'available', progress: 0 }));
+  };
+
+  const handleRestartUpdate = () => {
+    completeFlexibleAppUpdate().catch(() =>
+      showToast('Could not restart to install the update.', 'error')
+    );
+  };
+
+  const handleDismissUpdate = () => {
+    appUpdateDismissedRef.current = true;
+    setAppUpdate(null);
+  };
 
   // Hardware back button: step back through modal > view > tab instead of
   // closing the app. Refs mirror the live state so the listener (registered
@@ -2070,6 +2140,65 @@ function App() {
           </button>
         </div>
       </header>
+
+      {/* UPDATE BANNER (Play Core flexible in-app update) */}
+      {appUpdate && (
+        <div className="fixed top-[max(1rem,calc(env(safe-area-inset-top)+0.75rem))] left-4 right-4 max-w-[460px] mx-auto bg-[rgba(15,23,42,0.92)] backdrop-blur-md border border-accent-purple rounded-[14px] px-4 py-3 flex items-center gap-3 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(125,211,255,0.2)] z-[9999] animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
+          <div className="flex-shrink-0 w-9 h-9 rounded-full bg-bg-tertiary flex items-center justify-center border border-border">
+            {appUpdate.status === 'downloading'
+              ? <RefreshCw size={17} className="text-accent-cyan animate-[spin_1.4s_linear_infinite]" />
+              : appUpdate.status === 'downloaded'
+                ? <Check size={17} className="text-accent-green" />
+                : <Download size={17} className="text-accent-cyan" />}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold leading-tight">
+              {appUpdate.status === 'downloading' && 'Downloading update…'}
+              {appUpdate.status === 'downloaded' && 'Update ready to install'}
+              {appUpdate.status === 'available' && 'A new version of NovaShare is available'}
+            </p>
+            {appUpdate.status === 'downloading' && (
+              <div className="mt-2 h-1.5 w-full rounded-full bg-bg-tertiary overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-accent-purple to-accent-cyan transition-[width] duration-300 ease-out"
+                  style={{ width: `${appUpdate.progress}%` }}
+                />
+              </div>
+            )}
+            {appUpdate.status === 'downloaded' && (
+              <p className="text-xs text-text-secondary mt-0.5">Restart to finish installing.</p>
+            )}
+          </div>
+
+          {appUpdate.status === 'available' && (
+            <button
+              className="flex-shrink-0 bg-accent-purple/15 border border-accent-purple text-accent-purple font-heading font-semibold py-1.5 px-3 rounded-[8px] text-[0.8rem] cursor-pointer transition-colors hover:bg-accent-purple/25"
+              onClick={handleStartUpdate}
+            >
+              Update
+            </button>
+          )}
+          {appUpdate.status === 'downloaded' && (
+            <button
+              className="flex-shrink-0 bg-accent-green/15 border border-accent-green text-accent-green font-heading font-semibold py-1.5 px-3 rounded-[8px] text-[0.8rem] cursor-pointer transition-colors hover:bg-accent-green/25"
+              onClick={handleRestartUpdate}
+            >
+              Restart
+            </button>
+          )}
+
+          {appUpdate.status !== 'downloading' && (
+            <button
+              className="flex-shrink-0 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+              onClick={handleDismissUpdate}
+              aria-label="Dismiss update notice"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* TOAST POPUP */}
       {toast && (

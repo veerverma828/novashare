@@ -10,12 +10,12 @@
     "semantic_hash": ""
   },
   "android/app/build.gradle": {
-    "mtime": 1785758803.1737463,
-    "ast_hash": "b9353435640b4a474ebbcca6ed68ed09",
+    "mtime": 1785851573.64245,
+    "ast_hash": "ed7ab83ddcfc69e978ea4a39b1c42d8b",
     "semantic_hash": ""
   },
   "android/app/capacitor.build.gradle": {
-    "mtime": 1785848772.326491,
+    "mtime": 1785850815.548387,
     "ast_hash": "5b7212fd295a0d57d21afc4da01ab520",
     "semantic_hash": ""
   },
@@ -35,7 +35,7 @@
     "semantic_hash": ""
   },
   "android/capacitor.settings.gradle": {
-    "mtime": 1785848772.3254912,
+    "mtime": 1785850815.548387,
     "ast_hash": "0e91352e1143222262d0644b5006e02c",
     "semantic_hash": ""
   },
@@ -75,8 +75,8 @@
     "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
   },
   "src/App.jsx": {
-    "mtime": 1785850330.4351418,
-    "ast_hash": "5d2daa499e9be08c1c49e29d9d508e6c",
+    "mtime": 1785851752.6118336,
+    "ast_hash": "d877b18eaf4075b18fe6570f8154c61c",
     "semantic_hash": ""
   },
   "src/main.jsx": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "src/native.js": {
-    "mtime": 1785756858.8703063,
-    "ast_hash": "d063192cbca2644fc56ee35143efe49f",
+    "mtime": 1785851659.830187,
+    "ast_hash": "6479a940dc545863b15c284141d70885",
     "semantic_hash": ""
   },
   "vite.config.js": {
@@ -295,8 +295,8 @@
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/MainActivity.kt": {
-    "mtime": 1785756738.007922,
-    "ast_hash": "98e5c4ac1be8d5da44af93bb3eb5bb95",
+    "mtime": 1785851641.419249,
+    "ast_hash": "a6259364e610bf585b2b24a61ead286a",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.kt": {
@@ -465,13 +465,18 @@
     "semantic_hash": ""
   },
   "src/App.receiver.test.jsx": {
-    "mtime": 1785829398.7249968,
-    "ast_hash": "ec7787cae6acee78eaee77975b76d8a7",
+    "mtime": 1785851813.8975656,
+    "ast_hash": "778b170f34dbfab4fad833ed10fe8895",
     "semantic_hash": ""
   },
   "src/App.sender.test.jsx": {
-    "mtime": 1785829411.9792252,
-    "ast_hash": "f4c8aa80d7b7364a6e4b865a99d5e26f",
+    "mtime": 1785851807.5655944,
+    "ast_hash": "7100c0f549d08e85782abf778edeec7f",
+    "semantic_hash": ""
+  },
+  "android/app/src/main/java/com/veer/novashare/AppUpdatePlugin.kt": {
+    "mtime": 1785851637.3002625,
+    "ast_hash": "ad9612161587f40159d0047b881419a5",
     "semantic_hash": ""
   }
 }
