@@ -120,7 +120,7 @@ const LOCAL_SIGNALING_PORT = 8916;
 // owner side doesn't generate its own roomCode, it learns the offerer's
 // via the offer message, so both ends converge on one canonical value
 // (required for computeSecurityCode(roomCode, ...) to match on both sides).
-async function establishLocalConnection({ isGroupOwner, groupOwnerAddress, roomCode, deviceName }, timeoutMs = 10000) {
+async function establishLocalConnection({ isGroupOwner, groupOwnerAddress, roomCode, deviceName }, timeoutMs = 30000) {
   const pc = createLocalPeerConnection();
   let signalConnId = null;
   let settled = false;
@@ -2528,8 +2528,8 @@ function App() {
           {/* VIEW: SENDER P2P STATE                              */}
           {/* ==================================================== */}
           {mode === 'p2p-send' && (
-            <div className="flex flex-col items-center text-center gap-8">
-              <div className="w-full flex items-center gap-3 mb-2 flex-wrap">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-full flex items-center gap-3 mb-1 flex-wrap">
                 <button
                   className="relative overflow-hidden flex items-center justify-center gap-1 bg-transparent border border-border text-text-primary font-heading font-medium py-[0.4rem] px-3 rounded-lg text-[0.8rem] cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={(e) => rippleTap(e, resetToHome)}
@@ -2566,15 +2566,15 @@ function App() {
               {/* Waiting for connection */}
               {transferState === 'waiting' && (
                 <>
-                  <div className="flex items-center justify-center w-full gap-3 my-2 mb-3" role="img" aria-label="Waiting for a peer to connect">
+                  <div className="flex items-center justify-center w-full gap-3 my-1 mb-2" role="img" aria-label="Waiting for a peer to connect">
                     <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-[1] bg-[rgba(125,211,255,0.15)] border border-[rgba(125,211,255,0.4)] text-accent-purple shadow-[0_0_14px_rgba(125,211,255,0.25)]"><Zap size={18} /></div>
                     <div className="relative flex-1 min-w-[60px] max-w-[180px] h-[3px] rounded-full overflow-hidden bg-[linear-gradient(90deg,rgba(125,211,255,0.45),rgba(125,211,255,0.45))] shadow-[0_0_6px_rgba(125,211,255,0.3)] after:content-[''] after:absolute after:top-0 after:h-full after:w-[40%] after:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.95),transparent)] after:animate-[hsSweep_1.8s_ease-in-out_infinite]" />
                     <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-[1] bg-[rgba(125,211,255,0.15)] border border-[rgba(125,211,255,0.4)] text-accent-cyan shadow-[0_0_14px_rgba(125,211,255,0.25)]"><Laptop size={18} /></div>
                   </div>
-                  <p className="text-center text-[0.8rem] text-text-muted mb-4">Waiting for peers to scan or enter your code&hellip; anyone with it can join.</p>
+                  <p className="text-center text-[0.8rem] text-text-muted mb-2">Waiting for peers to scan or enter your code&hellip; anyone with it can join.</p>
 
                   {/* BANDWIDTH THROTTLE (feature #8) */}
-                  <div className="relative w-full flex justify-center mb-3">
+                  <div className="relative w-full flex justify-center mb-2">
                     <button
                       type="button"
                       className="relative overflow-hidden flex items-center gap-2 bg-transparent border border-border text-text-secondary text-[0.78rem] cursor-pointer py-[0.35rem] px-3 rounded-lg hover:bg-white/5 hover:text-text-primary"
@@ -2598,8 +2598,8 @@ function App() {
                     )}
                   </div>
 
-                  <div className="flex flex-col gap-3 w-full">
-                    <div className="flex items-center justify-between bg-white/[0.03] border border-accent-purple/30 rounded-xl py-[0.65rem] px-[0.9rem]">
+                  <div className="flex flex-col gap-2 w-full">
+                    <div className="flex items-center justify-between bg-white/[0.03] border border-accent-purple/30 rounded-xl py-[0.5rem] px-[0.9rem]">
                       <RoomCodeFlap code={roomCode} />
                       <button
                         className="relative overflow-hidden bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-[0.4rem] rounded-md transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
@@ -2610,7 +2610,7 @@ function App() {
                       </button>
                     </div>
 
-                    <div className="flex flex-col items-center gap-3 bg-white/[0.03] border border-accent-purple/30 rounded-xl px-4 py-5">
+                    <div className="flex flex-col items-center gap-2 bg-white/[0.03] border border-accent-purple/30 rounded-xl px-4 py-3">
                       <div
                         className="bg-white rounded-xl p-2 flex items-center justify-center cursor-pointer transition-transform duration-150 hover:scale-105 focus-visible:scale-105 focus-visible:outline-none"
                         onClick={() => setShowQrZoom(true)}
@@ -2620,7 +2620,7 @@ function App() {
                       >
                         <QRCodeSVG
                           value={roomCode}
-                          size={104}
+                          size={92}
                           bgColor={"#ffffff"}
                           fgColor={"#0b0e1c"}
                           level={"H"}

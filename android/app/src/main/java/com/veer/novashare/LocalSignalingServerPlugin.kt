@@ -25,7 +25,7 @@ class LocalSignalingServerPlugin : Plugin() {
 
     companion object {
         const val PORT = 8916
-        const val CONNECT_BUDGET_MS = 8000L
+        const val CONNECT_BUDGET_MS = 25000L
         const val CONNECT_ATTEMPT_TIMEOUT_MS = 1000
         const val RETRY_DELAY_MS = 300L
     }
