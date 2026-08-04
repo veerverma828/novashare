@@ -85,6 +85,17 @@ import {
 import { addHistoryEntry, getHistory, clearHistory } from './history';
 import { computeSecurityCode } from './security';
 import {
+  RATE_PRESETS,
+  arrayBufferToBase64,
+  mapWithConcurrency,
+  formatBytes,
+  formatSpeed,
+  formatTime,
+  getFileType,
+  generateRoomCode,
+  extractRoomCode
+} from './transferUtils';
+import {
   createLocalPeerConnection,
   createOfferAndChannel,
   waitForRemoteChannel,
@@ -196,15 +207,6 @@ async function establishLocalConnection({ isGroupOwner, groupOwnerAddress, roomC
 // picked .txt — checked by MIME type on both ends.
 const TEXT_SNIPPET_MIME = 'text/x-novashare-snippet';
 
-// Sender-rate presets for the bandwidth throttle (feature #8). 0 = unlimited.
-const RATE_PRESETS = [
-  { label: 'Unlimited', kbps: 0 },
-  { label: '512 KB/s', kbps: 512 },
-  { label: '1 MB/s', kbps: 1024 },
-  { label: '5 MB/s', kbps: 5120 },
-  { label: '10 MB/s', kbps: 10240 }
-];
-
 // Runtime-only (never persisted) map from a history entry id to the actual
 // File objects it referred to, so "Re-send" works within the same app
 // session without ever writing file bytes to localStorage. Lost on restart —
@@ -213,18 +215,6 @@ const sentFilesMemory = new Map();
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for P2P WebRTC
 const FLAP_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-
-// One 64KB chunk at a time — cheap and GC'd immediately, unlike base64-ing
-// an entire assembled file (see incomingFileIdRef / writeChainRef above).
-function arrayBufferToBase64(buffer) {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
 
 // STUN-only fails behind carrier-grade / symmetric NAT (common on mobile
 // data) — TURN relay is the fallback for those cases. Open Relay Project
@@ -267,7 +257,7 @@ function rippleTap(e, handler) {
 
 // Split-flap style reveal for the freshly generated room code: each
 // character scrambles briefly before settling, staggered left to right.
-function RoomCodeFlap({ code }) {
+export function RoomCodeFlap({ code }) {
   const [display, setDisplay] = useState(code.split(''));
 
   useEffect(() => {
@@ -302,7 +292,7 @@ function RoomCodeFlap({ code }) {
 // One row in the multi-file send queue: drag/swipe left (or tap the X) to
 // drop a file before the transfer starts. Pointer Events cover mouse,
 // touch, and pen with one handler set.
-function SwipeableFileRow({ file, sizeLabel, onRemove }) {
+export function SwipeableFileRow({ file, sizeLabel, onRemove }) {
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const startXRef = useRef(0);
@@ -372,7 +362,7 @@ function SwipeableFileRow({ file, sizeLabel, onRemove }) {
 // queue turns into a wall of individual filenames for a big folder. This
 // collapses a folder's files behind one row — tap to expand and browse what's
 // actually going to send, tap X to drop the whole folder at once.
-function FolderQueueRow({ name, entries, formatBytes, onRemoveAll, onRemoveOne }) {
+export function FolderQueueRow({ name, entries, formatBytes, onRemoveAll, onRemoveOne }) {
   const [open, setOpen] = useState(false);
   const totalSize = entries.reduce((sum, { file }) => sum + file.size, 0);
 
@@ -415,7 +405,7 @@ function FolderQueueRow({ name, entries, formatBytes, onRemoveAll, onRemoveOne }
 // already fetched over the native bridge this session.
 const appIconCache = new Map();
 
-function AppIcon({ packageName }) {
+export function AppIcon({ packageName }) {
   const [icon, setIcon] = useState(appIconCache.get(packageName) || null);
 
   useEffect(() => {
@@ -438,7 +428,7 @@ function AppIcon({ packageName }) {
 
 // Wraps the substring of `text` matching `query` (case-insensitive) in a
 // highlighted <mark> — used to show which part of an app name matched search.
-function HighlightMatch({ text, query }) {
+export function HighlightMatch({ text, query }) {
   const q = query.trim();
   if (!q) return text;
 
@@ -458,24 +448,11 @@ function HighlightMatch({ text, query }) {
 
 // Runs `worker` over `items` with at most `limit` in flight at once, resolving
 // to results in original item order regardless of completion order.
-async function mapWithConcurrency(items, limit, worker) {
-  const results = new Array(items.length);
-  let nextIndex = 0;
-  const lane = async () => {
-    while (nextIndex < items.length) {
-      const current = nextIndex++;
-      results[current] = await worker(items[current], current);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
-  return results;
-}
-
 // Installed-apps browser for the "Apps" home tab: lists user-installed
 // packages (native bridge only), lets the user search and multi-select, and
 // hands back ready-to-send Files built from each APK's bytes so they drop
 // straight into the same selectedFiles queue the file dropzone uses.
-function AppsPanel({ onSelectApps, formatBytes }) {
+export function AppsPanel({ onSelectApps, formatBytes }) {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -651,7 +628,7 @@ function AppsPanel({ onSelectApps, formatBytes }) {
 // each time it mounts (parent remounts it via a `key` bump). Re-send only
 // works for "sent" entries whose File objects are still alive in
 // sentFilesMemory (this session only) — otherwise it prompts to reselect.
-function HistoryPanel({ formatBytes, onResend, onClear, now }) {
+export function HistoryPanel({ formatBytes, onResend, onClear, now }) {
   const entries = getHistory();
 
   if (entries.length === 0) {
@@ -727,7 +704,7 @@ function HistoryPanel({ formatBytes, onResend, onClear, now }) {
 const RING_RADIUS = 52;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-function TransferRing({ progress, gradientId = 'ringGrad' }) {
+export function TransferRing({ progress, gradientId = 'ringGrad' }) {
   const offset = RING_CIRCUMFERENCE - (Math.min(100, Math.max(0, progress)) / 100) * RING_CIRCUMFERENCE;
   return (
     <svg className="w-[130px] h-[130px]" viewBox="0 0 120 120" role="img" aria-label={`Transfer ${Math.round(progress)}% complete`}>
@@ -909,45 +886,6 @@ function App() {
   const isPausedRef = useRef(false);
 
   // Format Helper: Bytes -> Human Readable
-  const formatBytes = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  // Format Helper: Speed
-  const formatSpeed = (bytesPerSecond) => {
-    if (bytesPerSecond === 0) return '0 B/s';
-    const k = 1024;
-    const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-    const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k));
-    return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  // Format Helper: Time (ETA)
-  const formatTime = (seconds) => {
-    if (isNaN(seconds) || seconds === Infinity) return '--';
-    if (seconds < 60) return Math.round(seconds) + 's';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.round(seconds % 60);
-    return mins + 'm ' + secs + 's';
-  };
-
-  // Dynamic File Icon Selector
-  const getFileType = (fileName) => {
-    if (!fileName) return 'file';
-    const ext = fileName.split('.').pop().toLowerCase();
-    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
-    if (['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext)) return 'video';
-    if (['mp3', 'wav', 'flac', 'aac'].includes(ext)) return 'audio';
-    if (['pdf'].includes(ext)) return 'pdf';
-    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'archive';
-    if (['txt', 'md', 'html', 'css', 'js', 'json', 'py', 'java', 'cpp'].includes(ext)) return 'code';
-    return 'file';
-  };
-
   // Show Toast Helper
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
@@ -1283,15 +1221,6 @@ function App() {
   };
 
   // Generate a random 6-character room code
-  const generateRoomCode = () => {
-    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
-  };
-
   // Drag and Drop Handlers
   const [dragActive, setDragActive] = useState(false);
   const handleDrag = (e) => {
@@ -2037,17 +1966,6 @@ function App() {
   };
 
   // Extract a room code from raw scanned QR text (full share URL or bare code)
-  const extractRoomCode = (text) => {
-    try {
-      const url = new URL(text);
-      const room = url.searchParams.get('room');
-      if (room) return room.toUpperCase();
-    } catch {
-      // Not a URL, fall through to treat as a bare code
-    }
-    return text.trim().toUpperCase();
-  };
-
   // Stop camera stream and scan loop
   const stopScanner = () => {
     if (scanRafRef.current) {

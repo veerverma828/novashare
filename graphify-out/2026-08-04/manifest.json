@@ -463,15 +463,5 @@
     "mtime": 1785829038.875307,
     "ast_hash": "5e7a71f25e157299393ad2385c19eaa6",
     "semantic_hash": ""
-  },
-  "src/App.receiver.test.jsx": {
-    "mtime": 1785829398.7249968,
-    "ast_hash": "ec7787cae6acee78eaee77975b76d8a7",
-    "semantic_hash": ""
-  },
-  "src/App.sender.test.jsx": {
-    "mtime": 1785829411.9792252,
-    "ast_hash": "f4c8aa80d7b7364a6e4b865a99d5e26f",
-    "semantic_hash": ""
   }
 }

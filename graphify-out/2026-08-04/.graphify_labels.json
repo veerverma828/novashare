@@ -18,7 +18,7 @@
   "16": "gen-feature-graphic.mjs",
   "17": "gen-feature-graphic-v2.mjs",
   "18": "NearbyDiscoveryPlugin",
-  "19": "history.js",
+  "19": "App.panels.test.jsx",
   "20": "computeSecurityCode",
   "21": "vite.config.js",
   "22": "app/build.gradle",
@@ -36,5 +36,6 @@
   "34": "WifiDirectPlugin",
   "35": "PeerJsCompatDataConnection",
   "36": "setup.js",
-  "37": "vitest.config.js"
+  "37": "vitest.config.js",
+  "38": "transferUtils.js"
 }

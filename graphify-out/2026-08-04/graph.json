@@ -2886,8 +2886,8 @@
       "source_location": "L455",
       "_origin": "ast",
       "id": "src_app_appspanel",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 19,
+      "community_name": "App.panels.test.jsx",
       "norm_label": "appspanel()"
     },
     {
@@ -2897,8 +2897,8 @@
       "source_location": "L631",
       "_origin": "ast",
       "id": "src_app_historypanel",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 19,
+      "community_name": "App.panels.test.jsx",
       "norm_label": "historypanel()"
     },
     {
@@ -2930,8 +2930,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_app_panels_test",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 19,
+      "community_name": "App.panels.test.jsx",
       "norm_label": "app.panels.test.jsx"
     },
     {
@@ -2941,130 +2941,9 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "src_app_panels_test_formatbytes",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 19,
+      "community_name": "App.panels.test.jsx",
       "norm_label": "formatbytes()"
-    },
-    {
-      "label": "App.receiver.test.jsx",
-      "file_type": "code",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "src_app_receiver_test",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "app.receiver.test.jsx"
-    },
-    {
-      "label": "{ FakePeer, getCreatedPeers, getCreatedConns, resetFakePeerState }",
-      "file_type": "code",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L16",
-      "_origin": "ast",
-      "id": "src_app_receiver_test_fakepeer_getcreatedpeers_getcreatedconns_resetfakepeerstate",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "{ fakepeer, getcreatedpeers, getcreatedconns, resetfakepeerstate }"
-    },
-    {
-      "label": "enterRoomCodeAndConnect()",
-      "file_type": "code",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L168",
-      "_origin": "ast",
-      "id": "src_app_receiver_test_enterroomcodeandconnect",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "enterroomcodeandconnect()"
-    },
-    {
-      "label": "textEncode()",
-      "file_type": "code",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L175",
-      "_origin": "ast",
-      "id": "src_app_receiver_test_textencode",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "textencode()"
-    },
-    {
-      "label": "App.sender.test.jsx",
-      "file_type": "code",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "src_app_sender_test",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "app.sender.test.jsx"
-    },
-    {
-      "label": "{ FakePeer }",
-      "file_type": "code",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L13",
-      "_origin": "ast",
-      "id": "src_app_sender_test_fakepeer",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "{ fakepeer }"
-    },
-    {
-      "label": "makeFakeConn()",
-      "file_type": "code",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L44",
-      "_origin": "ast",
-      "id": "src_app_sender_test_makefakeconn",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "makefakeconn()"
-    },
-    {
-      "label": "makeFile()",
-      "file_type": "code",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L141",
-      "_origin": "ast",
-      "id": "src_app_sender_test_makefile",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "makefile()"
-    },
-    {
-      "label": "selectFiles()",
-      "file_type": "code",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L145",
-      "_origin": "ast",
-      "id": "src_app_sender_test_selectfiles",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "selectfiles()"
-    },
-    {
-      "label": "startSend()",
-      "file_type": "code",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L150",
-      "_origin": "ast",
-      "id": "src_app_sender_test_startsend",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "startsend()"
-    },
-    {
-      "label": "latestPeer()",
-      "file_type": "code",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L155",
-      "_origin": "ast",
-      "id": "src_app_sender_test_latestpeer",
-      "community": 19,
-      "community_name": "history.js",
-      "norm_label": "latestpeer()"
     },
     {
       "label": "history.js",
@@ -3074,7 +2953,7 @@
       "_origin": "ast",
       "id": "src_history",
       "community": 19,
-      "community_name": "history.js",
+      "community_name": "App.panels.test.jsx",
       "norm_label": "history.js"
     },
     {
@@ -3085,7 +2964,7 @@
       "_origin": "ast",
       "id": "src_history_readall",
       "community": 19,
-      "community_name": "history.js",
+      "community_name": "App.panels.test.jsx",
       "norm_label": "readall()"
     },
     {
@@ -3096,7 +2975,7 @@
       "_origin": "ast",
       "id": "src_history_writeall",
       "community": 19,
-      "community_name": "history.js",
+      "community_name": "App.panels.test.jsx",
       "norm_label": "writeall()"
     },
     {
@@ -3107,7 +2986,7 @@
       "_origin": "ast",
       "id": "src_history_gethistory",
       "community": 19,
-      "community_name": "history.js",
+      "community_name": "App.panels.test.jsx",
       "norm_label": "gethistory()"
     },
     {
@@ -3118,7 +2997,7 @@
       "_origin": "ast",
       "id": "src_history_addhistoryentry",
       "community": 19,
-      "community_name": "history.js",
+      "community_name": "App.panels.test.jsx",
       "norm_label": "addhistoryentry()"
     },
     {
@@ -3129,7 +3008,7 @@
       "_origin": "ast",
       "id": "src_history_clearhistory",
       "community": 19,
-      "community_name": "history.js",
+      "community_name": "App.panels.test.jsx",
       "norm_label": "clearhistory()"
     },
     {
@@ -3140,7 +3019,7 @@
       "_origin": "ast",
       "id": "src_history_removehistoryentry",
       "community": 19,
-      "community_name": "history.js",
+      "community_name": "App.panels.test.jsx",
       "norm_label": "removehistoryentry()"
     },
     {
@@ -3151,7 +3030,7 @@
       "_origin": "ast",
       "id": "src_history_test",
       "community": 19,
-      "community_name": "history.js",
+      "community_name": "App.panels.test.jsx",
       "norm_label": "history.test.js"
     },
     {
@@ -3183,8 +3062,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "src_native_installedapps",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 19,
+      "community_name": "App.panels.test.jsx",
       "norm_label": "installedapps"
     },
     {
@@ -3271,8 +3150,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "src_native_listinstalledapps",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 19,
+      "community_name": "App.panels.test.jsx",
       "norm_label": "listinstalledapps()"
     },
     {
@@ -3293,8 +3172,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "src_native_getappapkfile",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 19,
+      "community_name": "App.panels.test.jsx",
       "norm_label": "getappapkfile()"
     },
     {
@@ -3304,8 +3183,8 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "src_native_clearapkcache",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 19,
+      "community_name": "App.panels.test.jsx",
       "norm_label": "clearapkcache()"
     },
     {
@@ -3766,8 +3645,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_transferutils",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "transferutils.js"
     },
     {
@@ -3777,8 +3656,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "src_transferutils_rate_presets",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "rate_presets"
     },
     {
@@ -3788,8 +3667,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "src_transferutils_arraybuffertobase64",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "arraybuffertobase64()"
     },
     {
@@ -3799,8 +3678,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "src_transferutils_mapwithconcurrency",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "mapwithconcurrency()"
     },
     {
@@ -3810,8 +3689,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "src_transferutils_formatbytes",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 19,
+      "community_name": "App.panels.test.jsx",
       "norm_label": "formatbytes()"
     },
     {
@@ -3821,8 +3700,8 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "src_transferutils_formatspeed",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "formatspeed()"
     },
     {
@@ -3832,8 +3711,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "src_transferutils_formattime",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "formattime()"
     },
     {
@@ -3843,8 +3722,8 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "src_transferutils_getfiletype",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "getfiletype()"
     },
     {
@@ -3854,8 +3733,8 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "src_transferutils_generateroomcode",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "generateroomcode()"
     },
     {
@@ -3865,8 +3744,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "src_transferutils_extractroomcode",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "extractroomcode()"
     },
     {
@@ -3876,8 +3755,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_transferutils_test",
-      "community": 5,
-      "community_name": "App.jsx",
+      "community": 38,
+      "community_name": "transferUtils.js",
       "norm_label": "transferutils.test.js"
     },
     {
@@ -8919,30 +8798,6 @@
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L146",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_receiver_test",
-      "target": "src_app",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L134",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_app",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
       "source_file": "src/main.jsx",
       "source_location": "L4",
       "weight": 1.0,
@@ -9747,30 +9602,6 @@
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L146",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_receiver_test",
-      "target": "src_app_app",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L134",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_app_app",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
       "source_file": "src/main.jsx",
       "source_location": "L4",
       "weight": 1.0,
@@ -9848,153 +9679,6 @@
       "_origin": "ast",
       "source": "src_app_panels_test",
       "target": "src_native_listinstalledapps",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L168",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_receiver_test",
-      "target": "src_app_receiver_test_enterroomcodeandconnect",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L16",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_receiver_test",
-      "target": "src_app_receiver_test_fakepeer_getcreatedpeers_getcreatedconns_resetfakepeerstate",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L175",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_receiver_test",
-      "target": "src_app_receiver_test_textencode",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L147",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_receiver_test",
-      "target": "src_history",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.receiver.test.jsx",
-      "source_location": "L147",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_receiver_test",
-      "target": "src_history_addhistoryentry",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L13",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_app_sender_test_fakepeer",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L155",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_app_sender_test_latestpeer",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L44",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_app_sender_test_makefakeconn",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L141",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_app_sender_test_makefile",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L145",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_app_sender_test_selectfiles",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L150",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_app_sender_test_startsend",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L135",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_history",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/App.sender.test.jsx",
-      "source_location": "L135",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_app_sender_test",
-      "target": "src_history_addhistoryentry",
       "confidence_score": 1.0
     },
     {

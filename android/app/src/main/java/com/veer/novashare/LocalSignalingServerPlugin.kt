@@ -25,6 +25,9 @@ class LocalSignalingServerPlugin : Plugin() {
 
     companion object {
         const val PORT = 8916
+        const val CONNECT_BUDGET_MS = 8000L
+        const val CONNECT_ATTEMPT_TIMEOUT_MS = 1000
+        const val RETRY_DELAY_MS = 300L
     }
 
     private var serverSocket: ServerSocket? = null
@@ -72,9 +75,32 @@ class LocalSignalingServerPlugin : Plugin() {
         val port = call.getInt("port") ?: PORT
 
         Thread {
+            // The group owner's ServerSocket may not be bound yet when we get here —
+            // both sides kick off right after the Wi-Fi Direct group forms, with no
+            // ordering guarantee. A bare connect() can hit ECONNREFUSED instantly
+            // instead of blocking, so retry with backoff until CONNECT_BUDGET_MS runs out.
+            val deadline = System.currentTimeMillis() + CONNECT_BUDGET_MS
+            var lastError: Exception? = null
+            var socket: Socket? = null
+
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    val s = Socket()
+                    s.connect(InetSocketAddress(ip, port), CONNECT_ATTEMPT_TIMEOUT_MS)
+                    socket = s
+                    break
+                } catch (e: Exception) {
+                    lastError = e
+                    Thread.sleep(RETRY_DELAY_MS)
+                }
+            }
+
+            if (socket == null) {
+                call.reject("Failed to connect to signaling server: " + lastError?.message, lastError)
+                return@Thread
+            }
+
             try {
-                val socket = Socket()
-                socket.connect(InetSocketAddress(ip, port), 8000)
                 val id = nextConnectionId.getAndIncrement()
                 connections[id] = socket
 
