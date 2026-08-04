@@ -2124,8 +2124,8 @@ function App() {
             className="text-accent-purple drop-shadow-[0_0_8px_rgba(125,211,255,0.5)] w-8 h-8 max-[640px]:w-6 max-[640px]:h-6"
             fill="currentColor"
           />
-          <h1 className="text-[1.75rem] max-[640px]:text-[1.4rem] max-[380px]:text-[1.15rem] font-heading bg-[linear-gradient(135deg,#fff_30%,var(--color-accent-cyan)_100%)] bg-clip-text text-transparent">
-            NovaShare
+          <h1 className="text-[1.75rem] max-[640px]:text-[1.4rem] max-[380px]:text-[1.15rem] font-heading">
+            <span className="text-white">Nova</span><span className="bg-[linear-gradient(135deg,#5cc2ec_0%,#cdeeff_100%)] bg-clip-text text-transparent">Share</span>
           </h1>
           <span className="bg-bg-tertiary border border-[rgba(125,211,255,0.3)] text-accent-purple px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase max-[640px]:px-2 max-[640px]:py-[0.15rem] max-[640px]:text-[0.65rem] max-[380px]:hidden">
             Direct P2P
@@ -2212,21 +2212,21 @@ function App() {
 
       {/* MAIN LAYOUT CONTAINER */}
       <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2">
-        <div className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 min-h-0 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)]`}>
+        <div className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)]`}>
 
           {/* ==================================================== */}
           {/* VIEW: HOME VIEW                                      */}
           {/* ==================================================== */}
           {mode === 'home' && (
-            <div className="flex-1 min-h-0 flex flex-col w-full">
-              <div className="text-center mb-6 flex-shrink-0">
+            <div className="flex-1 flex flex-col w-full">
+              <div className="text-center mb-6 max-[640px]:mb-4 flex-shrink-0">
                 <h2 className="text-[1.85rem] max-[640px]:text-2xl max-[380px]:text-[1.3rem] leading-[1.2] mb-2 font-bold glow-text">Secure P2P File Sharing</h2>
                 <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem]">Transfer files directly browser-to-browser. Encrypted, private, with zero size limits.</p>
               </div>
 
               {/* TOP TAB SWITCHER: Home / Apps (hidden once a file is queued) */}
               {selectedFiles.length === 0 && (
-                <div className="flex flex-shrink-0 gap-[0.4rem] bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-[0.3rem] mb-6">
+                <div className="flex flex-shrink-0 gap-[0.4rem] bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-[0.3rem] mb-6 max-[640px]:mb-4">
                   <button
                     type="button"
                     className={`flex-1 border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'home' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
@@ -2281,7 +2281,7 @@ function App() {
               {/* FILE DROP ZONE (IF NO FILES SELECTED) */}
               {selectedFiles.length === 0 ? (
                 <div
-                  className={`group flex-shrink-0 border-2 border-dashed rounded-[18px] px-6 py-10 max-[640px]:py-8 max-[640px]:px-4 max-[380px]:py-6 max-[380px]:px-3 text-center cursor-pointer bg-[rgba(15,23,42,0.25)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden ${dragActive ? 'border-accent-cyan bg-[rgba(125,211,255,0.04)] shadow-[0_0_25px_rgba(125,211,255,0.12)]' : 'border-[rgba(125,211,255,0.25)] hover:border-accent-cyan hover:bg-[rgba(125,211,255,0.04)] hover:shadow-[0_0_25px_rgba(125,211,255,0.12)]'}`}
+                  className={`group flex-shrink-0 border-2 border-dashed rounded-[18px] px-6 py-10 max-[640px]:py-6 max-[640px]:px-4 max-[380px]:py-6 max-[380px]:px-3 text-center cursor-pointer bg-[rgba(15,23,42,0.25)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden ${dragActive ? 'border-accent-cyan bg-[rgba(125,211,255,0.04)] shadow-[0_0_25px_rgba(125,211,255,0.12)]' : 'border-[rgba(125,211,255,0.25)] hover:border-accent-cyan hover:bg-[rgba(125,211,255,0.04)] hover:shadow-[0_0_25px_rgba(125,211,255,0.12)]'}`}
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
                   onDragLeave={handleDrag}
@@ -2469,7 +2469,7 @@ function App() {
                   <div className="flex items-center gap-[0.4rem] text-[0.78rem] text-text-muted mb-2">
                     <Radar size={14} className="text-accent-cyan" /> Nearby on this Wi-Fi
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 max-h-[16vh] overflow-y-auto pr-[0.2rem]">
                     {nearbyPeers.map((peer) => (
                       <button
                         key={peer.roomCode}
@@ -2494,31 +2494,31 @@ function App() {
                   internet required at all. Explicit opt-in toggle since it
                   needs a location/nearby-Wi-Fi permission prompt on first use. */}
               {wifiDirectAvailable && (
-                <div className="mt-5 mb-2 flex-shrink-0">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-[0.4rem] text-[0.78rem] text-text-muted">
-                      <Zap size={14} className="text-accent-purple" /> Nearby (offline, no Wi-Fi needed)
+                <div className="mt-4 mb-2 flex-shrink-0">
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <div className="flex items-center gap-[0.4rem] text-[0.78rem] text-text-muted min-w-0">
+                      <Zap size={14} className="text-accent-purple flex-shrink-0" /> <span>Nearby (offline, no Wi-Fi needed)</span>
                     </div>
                     <button
                       type="button"
-                      className={`relative overflow-hidden flex items-center gap-1.5 text-[0.72rem] font-semibold rounded-full cursor-pointer py-1 px-3 border transition-all duration-200 ${
+                      className={`relative overflow-hidden flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 text-[0.72rem] font-semibold rounded-full cursor-pointer py-1 px-3 border transition-all duration-200 ${
                         wifiDirectBrowsing
                           ? 'bg-accent-purple text-[#06222c] border-accent-purple'
                           : 'bg-[rgba(125,211,255,0.1)] text-accent-purple border-[rgba(125,211,255,0.3)] hover:bg-[rgba(125,211,255,0.18)]'
                       }`}
                       onClick={(e) => rippleTap(e, () => setWifiDirectBrowsing((prev) => !prev))}
                     >
-                      {wifiDirectBrowsing && <span className="w-1.5 h-1.5 rounded-full bg-[#06222c] animate-pulse" />}
+                      {wifiDirectBrowsing && <span className="w-1.5 h-1.5 rounded-full bg-[#06222c] animate-pulse flex-shrink-0" />}
                       {wifiDirectBrowsing ? 'Stop searching' : 'Find devices'}
                     </button>
                   </div>
 
                   {wifiDirectBrowsing && wifiDirectPeers.length === 0 && (
-                    <div className="text-[0.78rem] text-text-muted py-2">Searching nearby devices…</div>
+                    <div className="text-[0.78rem] text-text-muted py-1">Searching nearby devices…</div>
                   )}
 
                   {wifiDirectPeers.length > 0 && (
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 max-h-[16vh] overflow-y-auto pr-[0.2rem]">
                       {wifiDirectPeers.map((peer) => (
                         <button
                           key={peer.deviceAddress}
@@ -2546,7 +2546,7 @@ function App() {
               {/* RECEIVE AREA (ONLY SHOW IF NO FILE CURRENTLY BEING SENT) */}
               {selectedFiles.length === 0 && (
                 <div>
-                  <div className="flex items-center text-center my-[1.1rem] text-text-muted text-[0.8rem] before:content-[''] before:flex-1 before:border-b before:border-border before:mr-3 after:content-[''] after:flex-1 after:border-b after:border-border after:ml-3">or receive a file</div>
+                  <div className="flex items-center text-center my-3 text-text-muted text-[0.8rem] before:content-[''] before:flex-1 before:border-b before:border-border before:mr-3 after:content-[''] after:flex-1 after:border-b after:border-border after:ml-3">or receive a file</div>
                   <div className="flex flex-col gap-3">
                     <div className="relative flex items-center gap-[0.4rem] flex-shrink-0">
                       <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center">

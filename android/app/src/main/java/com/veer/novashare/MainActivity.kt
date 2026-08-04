@@ -4,6 +4,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.ViewGroup
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.getcapacitor.BridgeActivity
 import java.io.File
 import java.io.FileOutputStream
@@ -24,6 +27,23 @@ class MainActivity : BridgeActivity() {
         // this just queues into IncomingSharePlugin.pendingPaths — JS drains
         // it once on mount via getPendingFiles().
         handleIncomingShare(intent, notifyIfActive = false)
+
+        // Android 15+ (targetSdk 35+) forces edge-to-edge and ignores
+        // setDecorFitsSystemWindows(true), so the WebView draws underneath both
+        // the status bar and the gesture nav bar unless we pad it ourselves —
+        // otherwise the header renders under the status bar icons and bottom
+        // content (e.g. the Connect & Download button) renders behind/under
+        // the gesture bar.
+        // WebView doesn't reliably reposition its rendered content in response
+        // to View.setPadding, so use layout margins instead — those actually
+        // move/resize the view within its parent.
+        ViewCompat.setOnApplyWindowInsetsListener(bridge.webView) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val params = view.layoutParams as ViewGroup.MarginLayoutParams
+            params.setMargins(bars.left, bars.top, bars.right, bars.bottom)
+            view.layoutParams = params
+            insets
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
