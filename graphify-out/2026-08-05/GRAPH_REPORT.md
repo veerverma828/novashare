@@ -1,11 +1,11 @@
 # Graph Report - novashare  (2026-08-05)
 
 ## Corpus Check
-- 55 files · ~83,653 words
+- 55 files · ~83,124 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 408 nodes · 693 edges · 39 communities (33 shown, 6 thin omitted)
+- 408 nodes · 681 edges · 39 communities (34 shown, 5 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 17 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
@@ -40,11 +40,11 @@
 - .folderPickerResult
 - CLAUDE.md
 - WifiDirectPlugin
-- PeerJsCompatDataConnection
+- establishLocalConnection
 - AppUpdatePlugin
 
 ## God Nodes (most connected - your core abstractions)
-1. `App()` - 57 edges
+1. `App()` - 45 edges
 2. `WifiDirectPlugin` - 23 edges
 3. `establishLocalConnection()` - 16 edges
 4. `LocalSignalingServerPlugin` - 12 edges
@@ -58,19 +58,19 @@
 ## Surprising Connections (you probably didn't know these)
 - `App()` --references--> `@capacitor/app`  [EXTRACTED]
   src/App.jsx → package.json
-- `AppsPanel()` --calls--> `formatBytes()`  [EXTRACTED]
-  src/App.jsx → src/transferUtils.js
-- `AppsPanel()` --calls--> `mapWithConcurrency()`  [EXTRACTED]
-  src/App.jsx → src/transferUtils.js
 - `HistoryPanel()` --calls--> `formatBytes()`  [EXTRACTED]
   src/App.jsx → src/transferUtils.js
 - `App()` --calls--> `addHistoryEntry()`  [EXTRACTED]
   src/App.jsx → src/history.js
+- `App()` --calls--> `clearHistory()`  [EXTRACTED]
+  src/App.jsx → src/history.js
+- `App()` --indirect_call--> `sharedEntryToFile()`  [INFERRED]
+  src/App.jsx → src/native.js
 
 ## Import Cycles
 - None detected.
 
-## Communities (39 total, 6 thin omitted)
+## Communities (39 total, 5 thin omitted)
 
 ### Community 0 - "devDependencies"
 Cohesion: 0.05
@@ -93,8 +93,8 @@ Cohesion: 0.22
 Nodes (8): Changes to This Policy, Children's Privacy, Contact, Data Retention, Privacy Policy for NovaShare, Third-Party Services, What the App Accesses (and Why), What We Do NOT Do
 
 ### Community 5 - "App.jsx"
-Cohesion: 0.07
-Nodes (76): App(), AppIcon(), appIconCache, establishLocalConnection(), FolderQueueRow(), HighlightMatch(), ICE_SERVERS, NotifyDownload (+68 more)
+Cohesion: 0.08
+Nodes (63): App(), AppIcon(), appIconCache, AppsPanel(), FolderQueueRow(), HighlightMatch(), ICE_SERVERS, NotifyDownload (+55 more)
 
 ### Community 7 - "gradlew"
 Cohesion: 0.83
@@ -133,8 +133,8 @@ Cohesion: 0.23
 Nodes (5): Plugin, PluginCall, NearbyDiscoveryPlugin, NsdManager, NsdServiceInfo
 
 ### Community 19 - "history.js"
-Cohesion: 0.13
-Nodes (14): AppsPanel(), HistoryPanel(), { FakePeer, getCreatedPeers, getCreatedConns, resetFakePeerState }, { FakePeer }, addHistoryEntry(), clearHistory(), getHistory(), readAll() (+6 more)
+Cohesion: 0.15
+Nodes (9): HistoryPanel(), { FakePeer, getCreatedPeers, getCreatedConns, resetFakePeerState }, { FakePeer }, addHistoryEntry(), clearHistory(), getHistory(), readAll(), removeHistoryEntry() (+1 more)
 
 ### Community 20 - "computeSecurityCode"
 Cohesion: 0.70
@@ -152,6 +152,10 @@ Nodes (6): FolderPickerPlugin, JSArray, Plugin, PluginCall, androidx, DocumentFi
 Cohesion: 0.17
 Nodes (6): Plugin, PluginCall, WifiDirectPlugin, BroadcastReceiver, IntentFilter, WifiP2pManager
 
+### Community 35 - "establishLocalConnection"
+Cohesion: 0.11
+Nodes (19): establishLocalConnection(), LocalSignaling, localSignalingClose(), localSignalingConnect(), localSignalingSend(), localSignalingStartServer(), localSignalingStopServer(), onLocalSignalingMessage() (+11 more)
+
 ### Community 38 - "AppUpdatePlugin"
 Cohesion: 0.20
 Nodes (5): AppUpdatePlugin, Intent, Plugin, PluginCall, AppUpdateManager
@@ -159,15 +163,15 @@ Nodes (5): AppUpdatePlugin, Intent, Plugin, PluginCall, AppUpdateManager
 ## Knowledge Gaps
 - **73 isolated node(s):** `name`, `private`, `version`, `type`, `dev` (+68 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **6 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **5 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `dependencies` connect `dependencies` to `scripts`?**
   _High betweenness centrality (0.149) - this node is a cross-community bridge._
-- **Why does `App()` connect `App.jsx` to `PeerJsCompatDataConnection`, `history.js`, `dependencies`, `computeSecurityCode`?**
-  _High betweenness centrality (0.144) - this node is a cross-community bridge._
+- **Why does `App()` connect `App.jsx` to `history.js`, `establishLocalConnection`, `dependencies`, `computeSecurityCode`?**
+  _High betweenness centrality (0.137) - this node is a cross-community bridge._
 - **Why does `@capacitor/app` connect `dependencies` to `App.jsx`?**
   _High betweenness centrality (0.129) - this node is a cross-community bridge._
 - **Are the 16 inferred relationships involving `JSObject` (e.g. with `.checkForUpdate()` and `.handleOnActivityResult()`) actually correct?**

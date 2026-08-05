@@ -883,6 +883,11 @@ function App() {
   // Active receiver transport, so a mid-transfer reconnect (scheduleReconnectRetry)
   // retries over the same transport it was using rather than defaulting to cloud.
   const receiverTransportRef = useRef({ mode: 'cloud', groupInfo: null });
+  // Tracks the active send's transport so the room-advertising effect below
+  // knows whether it's safe to also host a direct local-LAN listener (only
+  // for 'cloud' sends — a 'local' Wi-Fi Direct send already owns the same
+  // native LocalSignaling server for its own handshake).
+  const senderTransportRef = useRef('cloud');
   // Throttles the background transfer notification to a few updates/sec
   // instead of firing on every 64KB chunk
   const notifyThrottleRef = useRef(0);
@@ -1164,7 +1169,16 @@ function App() {
       return;
     }
     startAdvertisingRoom(roomCode, getDeviceLabel());
-    return () => stopAdvertisingRoom();
+    // Only host a direct local-LAN listener for cloud sends — a Wi-Fi Direct
+    // send (transportMode 'local') already owns the same native
+    // LocalSignaling server for its own handshake, and starting it a second
+    // time here would tear that connection down (LocalSignaling.startServer()
+    // closes any existing server first).
+    const stopLocalHost = senderTransportRef.current === 'cloud' ? startLocalRoomHost(roomCode) : null;
+    return () => {
+      stopAdvertisingRoom();
+      if (stopLocalHost) stopLocalHost();
+    };
   }, [mode, transferState, roomCode]);
 
   // Waits for a Wi-Fi Direct group to actually form after connect() is
@@ -1202,10 +1216,14 @@ function App() {
       await wifiDirectConnect(peer.deviceAddress);
       const groupInfo = await waitForWifiDirectGroup();
       setWifiDirectBrowsing(false);
+      // Awaited so "Waiting for them to tap too…" stays up through the whole
+      // handshake instead of clearing the moment the Wi-Fi Direct group
+      // forms — the group forming just means both sides tapped connect, not
+      // that the peer-to-peer link is actually ready yet.
       if (selectedFiles.length > 0) {
-        startP2PSend('local', groupInfo);
+        await startP2PSend('local', groupInfo);
       } else {
-        startP2PReceive(generateRoomCode(), 'local', groupInfo);
+        await startP2PReceive(generateRoomCode(), 'local', groupInfo);
       }
     } catch (err) {
       showToast('Could not connect over Wi-Fi Direct: ' + err.message, 'error');
@@ -1434,10 +1452,18 @@ function App() {
 
     conn.on('data', (data) => {
       if (data.type !== 'resume') return;
-      if (peerState.openTimer) {
-        clearTimeout(peerState.openTimer);
-        peerState.openTimer = null;
-      }
+      // The 150ms openTimer above may have already lost the race and started
+      // a fresh batch-start + stream before this 'resume' arrived (common on
+      // a jittery Wi-Fi Direct link). Starting a second concurrent stream on
+      // top of that would interleave two chunk sequences into the same
+      // receiver buffers — corrupting the file and desyncing receivedBytes
+      // from the real byte count (seen as >100% progress / negative ETA).
+      // Once the timer's already fired there's no safe way to un-send the
+      // batch-start it issued, so just let that fresh batch run instead of
+      // racing a second one.
+      if (!peerState.openTimer) return;
+      clearTimeout(peerState.openTimer);
+      peerState.openTimer = null;
       peerState.resumed = true;
 
       const files = sendQueueRef.current;
@@ -1478,6 +1504,54 @@ function App() {
     });
   };
 
+  // Local-LAN fallback for the "Nearby on this Wi-Fi" list (feature #2):
+  // while a cloud room is advertised over NSD, also listen for direct
+  // offline connections on the LocalSignaling socket (the same plugin Wi-Fi
+  // Direct uses, but dialed at this device's regular Wi-Fi IP instead of a
+  // Wi-Fi Direct group address) so a same-network receiver can connect
+  // without ever reaching PeerJS's cloud broker. Unlike establishLocalConnection
+  // (one-shot: resolves once and stops the server), this keeps the server
+  // running and wires up every receiver that connects while the room stays
+  // open, same as the PeerJS 'connection' event does for the cloud path.
+  const startLocalRoomHost = (code) => {
+    const pcsByConnId = new Map();
+
+    const offMessage = onLocalSignalingMessage(async (connId, msg) => {
+      if (msg.type === 'offer') {
+        const pc = createLocalPeerConnection();
+        pcsByConnId.set(connId, pc);
+        pc.onicecandidate = (e) => {
+          if (e.candidate) localSignalingSend(connId, { type: 'ice', candidate: e.candidate.toJSON() });
+        };
+        try {
+          const channelPromise = waitForRemoteChannel(pc);
+          const answerSdp = await createAnswerFromOffer(pc, msg.sdp);
+          localSignalingSend(connId, { type: 'answer', sdp: answerSdp });
+          const channel = await waitForChannelOpen(await channelPromise);
+          const conn = new PeerJsCompatDataConnection(channel, `lan-${connId}`);
+          pcsByConnId.delete(connId);
+          handleIncomingReceiverConnection(conn, code);
+        } catch {
+          pcsByConnId.delete(connId);
+        }
+      } else if (msg.type === 'ice') {
+        const pc = pcsByConnId.get(connId);
+        if (pc) await addRemoteIceCandidate(pc, msg.candidate);
+      }
+    });
+
+    localSignalingStartServer().catch(() => {
+      // No native LocalSignaling support (web/desktop) — receivers on this
+      // list transparently fall back to the cloud path below.
+    });
+
+    return () => {
+      offMessage();
+      localSignalingStopServer();
+      pcsByConnId.forEach((pc) => { try { pc.close(); } catch { /* already closed */ } });
+    };
+  };
+
   // transportMode: 'cloud' (default, PeerJS broker — works cross-network as
   // long as both sides can reach the internet) or 'local' (Wi-Fi Direct, zero
   // internet/router needed — see establishLocalConnection above). groupInfo
@@ -1485,8 +1559,7 @@ function App() {
   const startP2PSend = (transportMode = 'cloud', groupInfo = null) => {
     if (!selectedFiles || selectedFiles.length === 0) return;
     cleanup();
-    setTransferState('preparing');
-    setMode('p2p-send');
+    senderTransportRef.current = transportMode;
     setIsPaused(false);
     isPausedRef.current = false;
     sendQueueRef.current = selectedFiles;
@@ -1505,7 +1578,12 @@ function App() {
       // way it destroys a real Peer.
       peerRef.current = { destroy: () => { wifiDirectRemoveGroup(); } };
 
-      establishLocalConnection({
+      // Stays on the home screen (no setMode/setTransferState here) until the
+      // handshake actually completes — the Wi-Fi Direct group forming just
+      // means both devices tapped connect, not that the other side is ready
+      // to receive; jumping to a "connecting" screen before that point is
+      // what looked like it skipped waiting for the other person entirely.
+      return establishLocalConnection({
         isGroupOwner: groupInfo.isGroupOwner,
         groupOwnerAddress: groupInfo.groupOwnerAddress,
         roomCode: code,
@@ -1513,20 +1591,18 @@ function App() {
       })
         .then(({ conn, roomCode: agreedCode }) => {
           setRoomCode(agreedCode);
+          setMode('p2p-send');
           setTransferState('waiting');
           showToast('Offline Wi-Fi Direct link ready!', 'success');
           handleIncomingReceiverConnection(conn, agreedCode);
         })
         .catch((err) => {
-          setTransferState((prev) => {
-            if (prev === 'complete') return 'complete';
-            showToast('Offline connection failed: ' + err.message, 'error');
-            setErrorMsg(err.message || 'Could not establish an offline Wi-Fi Direct connection.');
-            return 'error';
-          });
+          showToast('Offline connection failed: ' + err.message, 'error');
         });
-      return;
     }
+
+    setTransferState('preparing');
+    setMode('p2p-send');
 
     const attemptConnection = (retryCount = 0) => {
       if (retryCount > 5) {
@@ -1593,7 +1669,7 @@ function App() {
     const speed = elapsed > 0 ? slowest.totalBytesSent / elapsed : 0;
     setTransferSpeed(formatSpeed(speed));
 
-    const remaining = totalQueueBytesRef.current - slowest.totalBytesSent;
+    const remaining = Math.max(0, totalQueueBytesRef.current - slowest.totalBytesSent);
     setTimeRemaining(formatTime(speed > 0 ? remaining / speed : 0));
 
     const files = sendQueueRef.current;
@@ -1743,13 +1819,20 @@ function App() {
     }
 
     cleanup();
-    setTransferState('preparing');
-    setMode('p2p-receive');
     setTargetPeerId(code);
     reconnectAttemptRef.current = 0;
     currentFileIndexRef.current = 0;
 
-    connectToSender(code, false, transportMode, groupInfo);
+    // 'local' (Wi-Fi Direct) stays on the home screen until the handshake
+    // actually completes — see connectToSender's 'local' branch. Every other
+    // transport still gets the immediate "connecting" screen since there's
+    // no second person's action being waited on for those.
+    if (transportMode !== 'local') {
+      setTransferState('preparing');
+      setMode('p2p-receive');
+    }
+
+    return connectToSender(code, false, transportMode, groupInfo);
   }
 
   // Handles every 'data' message from the sender — shared by the initial
@@ -1815,7 +1898,11 @@ function App() {
         const speed = elapsed > 0 ? (receivedBytes.current / elapsed) : 0;
         setTransferSpeed(formatSpeed(speed));
 
-        const remaining = totalSize - receivedBytes.current;
+        // Clamped at 0: extra/duplicate chunks (e.g. from a stream race, see
+        // the resume-guard above) can push receivedBytes past totalSize —
+        // without this an unclamped `remaining` goes negative and produces
+        // a negative ETA that counts down below zero forever.
+        const remaining = Math.max(0, totalSize - receivedBytes.current);
         const eta = speed > 0 ? (remaining / speed) : 0;
         setTimeRemaining(formatTime(eta));
 
@@ -1955,7 +2042,7 @@ function App() {
       peerRef.current = { destroy: () => { wifiDirectRemoveGroup(); } };
       if (!isResume) showToast('Connecting over Wi-Fi Direct...', 'info');
 
-      establishLocalConnection({
+      return establishLocalConnection({
         isGroupOwner: groupInfo.isGroupOwner,
         groupOwnerAddress: groupInfo.groupOwnerAddress,
         roomCode: code,
@@ -1963,6 +2050,10 @@ function App() {
       })
         .then(({ conn, roomCode: agreedCode }) => {
           setTargetPeerId(agreedCode);
+          // First connection only stays on the home screen (see
+          // startP2PReceive) until this resolves — a mid-transfer resume
+          // is already on the transfer screen, so no mode change needed.
+          if (!isResume) setMode('p2p-receive');
           computeSecurityCode(agreedCode, conn.peer).then(setMySecurityCode);
           wireReceiverConnection(conn, agreedCode, isResume);
         })
@@ -1971,12 +2062,34 @@ function App() {
             scheduleReconnectRetry(code);
             return;
           }
-          setTransferState((prev) => {
-            if (prev === 'complete') return 'complete';
-            showToast('Offline connection failed: ' + err.message, 'error');
-            setErrorMsg(err.message || 'Could not establish an offline Wi-Fi Direct connection.');
-            return 'error';
-          });
+          // Never left home for the initial attempt — just report it there
+          // instead of transitioning to a dedicated error screen.
+          showToast('Offline connection failed: ' + err.message, 'error');
+        });
+    }
+
+    if (transportMode === 'lan') {
+      peerRef.current = { destroy: () => {} };
+      if (!isResume) showToast('Trying a direct local connection...', 'info');
+
+      // Short timeout — this is a same-network peer discovered via NSD, not
+      // a Wi-Fi Direct group with a guaranteed direct route, so a failed
+      // attempt (different subnet, client isolation, sender not hosting a
+      // local listener) should fall back to cloud quickly rather than making
+      // the user wait out the full 30s establishLocalConnection budget.
+      establishLocalConnection({
+        isGroupOwner: false,
+        groupOwnerAddress: groupInfo.host,
+        roomCode: code,
+        deviceName: getDeviceLabel()
+      }, 4000)
+        .then(({ conn, roomCode: agreedCode }) => {
+          setTargetPeerId(agreedCode);
+          computeSecurityCode(agreedCode, conn.peer).then(setMySecurityCode);
+          wireReceiverConnection(conn, agreedCode, isResume);
+        })
+        .catch(() => {
+          connectToSender(code, isResume, 'cloud', null);
         });
       return;
     }
@@ -2475,7 +2588,13 @@ function App() {
                         key={peer.roomCode}
                         type="button"
                         className="relative overflow-hidden flex items-center gap-3 bg-[rgba(125,211,255,0.08)] border border-[rgba(125,211,255,0.3)] rounded-xl py-[0.6rem] px-[0.8rem] text-left cursor-pointer transition-all duration-200 hover:bg-[rgba(125,211,255,0.15)]"
-                        onClick={(e) => rippleTap(e, () => { setTargetPeerId(peer.roomCode); startP2PReceive(peer.roomCode); })}
+                        onClick={(e) => rippleTap(e, () => {
+                          setTargetPeerId(peer.roomCode);
+                          // Try connecting straight to the sender's LAN IP first (no
+                          // internet needed); startP2PReceive/connectToSender falls
+                          // back to the PeerJS cloud room transparently if that fails.
+                          startP2PReceive(peer.roomCode, peer.host ? 'lan' : 'cloud', peer.host ? { host: peer.host } : null);
+                        })}
                       >
                         <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(125,211,255,0.15)] text-accent-cyan">
                           <Laptop size={16} />
@@ -2533,11 +2652,18 @@ function App() {
                           <div className="flex-1 min-w-0 flex flex-col">
                             <span className="text-[0.85rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{peer.deviceName}</span>
                             <span className="text-[0.72rem] text-text-muted">
-                              {wifiDirectConnecting === peer.deviceAddress ? 'Connecting…' : 'No internet needed — tap to connect'}
+                              {wifiDirectConnecting === peer.deviceAddress ? 'Waiting for them to tap too…' : 'No internet needed — tap to connect'}
                             </span>
                           </div>
                         </button>
                       ))}
+                    </div>
+                  )}
+
+                  {wifiDirectConnecting && (
+                    <div className="flex items-center gap-2 text-[0.75rem] text-accent-purple py-2 px-1">
+                      <RefreshCw size={13} className="animate-[spin_1.1s_linear_infinite] flex-shrink-0" />
+                      <span>Connecting requires both devices to tap — ask the other person to tap your device in their "Find devices" list too.</span>
                     </div>
                   )}
                 </div>

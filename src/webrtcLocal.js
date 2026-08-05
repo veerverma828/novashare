@@ -88,9 +88,21 @@ export class PeerJsCompatDataConnection {
     // 'open' is tracked as state, not just an event, and replayed to late
     // subscribers instead of relying on event-timing to line up.
     this._isOpen = dataChannel.readyState === 'open';
+    // Some WebViews flip readyState to 'open' a tick before actually
+    // dispatching the 'open' event — so even though _isOpen is already true
+    // here, dataChannel.onopen below can still fire once for real shortly
+    // after construction. Without this flag that fires 'open' to every
+    // subscriber a second time (this app resends the whole batch on each
+    // 'open', so a receiver gets the file twice) — this makes that redundant
+    // real event a no-op since the state was already caught above.
+    const openAlreadyObservedAtConstruction = this._isOpen;
 
     dataChannel.binaryType = 'arraybuffer';
-    dataChannel.onopen = () => { this._isOpen = true; this._emit('open'); };
+    dataChannel.onopen = () => {
+      if (openAlreadyObservedAtConstruction) return;
+      this._isOpen = true;
+      this._emit('open');
+    };
     dataChannel.onclose = () => this._emit('close');
     dataChannel.onerror = (e) => this._emit('error', e.error || new Error('Local data channel error'));
     dataChannel.onmessage = (e) => this._handleMessage(e.data);
