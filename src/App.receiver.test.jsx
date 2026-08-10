@@ -82,6 +82,7 @@ vi.mock('peerjs', () => ({
 
 vi.mock('./native', () => ({
   triggerHaptic: vi.fn(),
+  triggerSuccessHaptic: vi.fn(),
   listInstalledApps: vi.fn(() => Promise.resolve([])),
   getAppIcon: vi.fn(() => Promise.resolve(null)),
   getAppApkFile: vi.fn(),
@@ -103,9 +104,19 @@ vi.mock('./native', () => ({
   wifiDirectInitialize: vi.fn(() => Promise.resolve()),
   wifiDirectDiscoverPeers: vi.fn(() => Promise.resolve()),
   wifiDirectStopDiscovery: vi.fn(() => Promise.resolve()),
+  wifiDirectIsLocationEnabled: vi.fn(() => Promise.resolve(true)),
+  wifiDirectOpenLocationSettings: vi.fn(() => Promise.resolve()),
+  wifiDirectIsWifiEnabled: vi.fn(() => Promise.resolve(true)),
+  wifiDirectOpenWifiSettings: vi.fn(() => Promise.resolve()),
   wifiDirectConnect: vi.fn(() => Promise.resolve()),
   wifiDirectRequestGroupInfo: vi.fn(() => Promise.resolve({ groupFormed: false, isGroupOwner: false, groupOwnerAddress: '' })),
   wifiDirectRemoveGroup: vi.fn(() => Promise.resolve()),
+  isHotspotSupported: vi.fn(() => Promise.resolve(false)),
+  hotspotStart: vi.fn(() => Promise.reject(new Error('not supported'))),
+  hotspotStop: vi.fn(() => Promise.resolve()),
+  hotspotJoin: vi.fn(() => Promise.reject(new Error('not supported'))),
+  hotspotLeave: vi.fn(() => Promise.resolve()),
+  onHotspotLost: vi.fn(() => () => {}),
   onWifiDirectPeersChanged: vi.fn(() => () => {}),
   onWifiDirectConnectionChanged: vi.fn(() => () => {}),
   localSignalingStartServer: vi.fn(() => Promise.reject(new Error('not supported'))),
@@ -119,6 +130,7 @@ vi.mock('./native', () => ({
   startFlexibleAppUpdate: vi.fn(() => Promise.resolve({ accepted: false })),
   completeFlexibleAppUpdate: vi.fn(() => Promise.resolve()),
   onAppUpdateStateChanged: vi.fn(() => () => {}),
+  getBatteryInfo: vi.fn(() => Promise.resolve({ batteryLevel: null, isCharging: false })),
 }));
 
 vi.mock('canvas-confetti', () => ({
@@ -149,6 +161,7 @@ vi.mock('./history', async () => {
 
 import App from './App.jsx';
 import { addHistoryEntry } from './history';
+import { recordReceived } from './receivedIndex';
 
 // jsdom doesn't implement these — stub so saveReceivedFile()'s <a download>
 // click path doesn't throw.
@@ -162,6 +175,7 @@ beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:fake-url');
   URL.revokeObjectURL = vi.fn();
   HTMLAnchorElement.prototype.click = vi.fn();
+  localStorage.clear();
   vi.clearAllMocks();
 });
 
@@ -297,6 +311,21 @@ describe('App receiver flow (cloud/PeerJS)', () => {
         files: expect.arrayContaining([expect.objectContaining({ name: 'greeting.txt', size: totalSize })]),
       })
     );
+
+    // Persistent clipboard channel (feature): connection to the sender is
+    // still open after batch-complete — a snippet sent from here should go
+    // out on it, and one arriving from the sender should render too.
+    const clipInput = screen.getByPlaceholderText(/Send a quick note or link/i);
+    await user.type(clipInput, 'thanks!');
+    await user.click(screen.getByRole('button', { name: /^Send$/i }));
+
+    await waitFor(() => expect(conn.sent.some((m) => m.type === 'clip' && m.text === 'thanks!')).toBe(true));
+    expect(await screen.findByText('thanks!')).toBeInTheDocument();
+
+    await act(async () => {
+      conn.emit('data', { type: 'clip', text: 'one more thing' });
+    });
+    expect(await screen.findByText('one more thing')).toBeInTheDocument();
   });
 
   it('tracks a second file in sequence without leftover state from the first', async () => {
@@ -388,6 +417,49 @@ describe('App receiver flow (cloud/PeerJS)', () => {
     const resumeMsg = newConn.sent.find((m) => m.type === 'resume');
     expect(resumeMsg).toBeTruthy();
     expect(resumeMsg.offset).toBe(chunk.byteLength);
+  });
+
+  it('skips a file already in the received index instead of downloading it again', async () => {
+    recordReceived({ hash: 'dup-hash', size: 12, name: 'previously.txt' });
+
+    const user = userEvent.setup();
+    render(<App />);
+    await enterRoomCodeAndConnect(user);
+
+    const peer = createdPeers[0];
+    await act(async () => { peer.emit('open'); });
+    const conn = createdConns[0];
+    await act(async () => { conn.emit('open'); });
+
+    await act(async () => {
+      conn.emit('data', { type: 'batch-start' });
+      conn.emit('data', {
+        type: 'metadata',
+        fileIndex: 0,
+        totalFiles: 1,
+        name: 'greeting.txt',
+        size: 12,
+        mime: 'text/plain',
+        sha256: 'dup-hash',
+      });
+    });
+
+    const skipMsg = conn.sent.find((m) => m.type === 'skip-duplicate');
+    expect(skipMsg).toEqual({ type: 'skip-duplicate', fileIndex: 0 });
+
+    // A chunk that still arrives (sender hadn't reacted yet) must not be
+    // treated as real data for this file.
+    await act(async () => {
+      conn.emit('data', { type: 'chunk', chunk: textEncode('should be ignored'), done: true });
+      conn.emit('data', { type: 'batch-complete' });
+    });
+
+    expect(await screen.findByText(/already had this file, skipped/i)).toBeInTheDocument();
+    expect(addHistoryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        files: expect.arrayContaining([expect.objectContaining({ name: 'greeting.txt', skipped: true })]),
+      })
+    );
   });
 
   it('ignores unrecognized message types without crashing', async () => {

@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.net.wifi.WifiManager
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pDeviceList
@@ -14,7 +16,9 @@ import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -44,6 +48,7 @@ class WifiDirectPlugin : Plugin() {
     private var channel: WifiP2pManager.Channel? = null
     private var receiver: BroadcastReceiver? = null
     private var intentFilter: IntentFilter? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     override fun load() {
         manager = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
@@ -138,7 +143,37 @@ class WifiDirectPlugin : Plugin() {
         // so RECEIVER_NOT_EXPORTED is correct (no other app should trigger them).
         ContextCompat.registerReceiver(context, br, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
+        // Chrome/WebView conceal local ICE host candidates behind mDNS
+        // hostnames by default (privacy feature), and Android silently drops
+        // multicast packets — which mDNS resolution depends on — over the
+        // Wi-Fi Direct interface unless something explicitly holds this lock.
+        // Without it, the WFD group forms fine (that's plain Wi-Fi P2P, no
+        // mDNS involved) but the WebRTC data channel negotiated on top of it
+        // can hang indefinitely: candidates get exchanged over the TCP
+        // signaling pipe, but neither side can ever resolve the other's
+        // "*.local" candidate name, so connectivity checks never succeed and
+        // establishLocalConnection's 30s timeout is all that ever fires.
+        acquireMulticastLock()
+
         call.resolve()
+    }
+
+    private fun acquireMulticastLock() {
+        releaseMulticastLock()
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return
+        try {
+            val lock = wifiManager.createMulticastLock("novashare-wfd-mdns")
+            lock.setReferenceCounted(false)
+            lock.acquire()
+            multicastLock = lock
+        } catch (e: Exception) { /* best-effort — mDNS candidates just won't resolve without it */ }
+    }
+
+    private fun releaseMulticastLock() {
+        multicastLock?.let {
+            try { if (it.isHeld) it.release() } catch (e: Exception) { /* already released */ }
+        }
+        multicastLock = null
     }
 
     @PluginMethod
@@ -153,6 +188,20 @@ class WifiDirectPlugin : Plugin() {
             call.reject("Missing discovery permission")
             return
         }
+        // discoverPeers() itself always "succeeds" (it only confirms the scan
+        // request was accepted) even when system Location is off — but Android
+        // has required Location Services to be enabled for Wi-Fi P2P peer
+        // discovery to actually return results since API 26, regardless of
+        // whether NEARBY_WIFI_DEVICES/ACCESS_FINE_LOCATION is granted. Without
+        // this check the peer list just silently never populates.
+        if (!isWifiEnabledInternal()) {
+            call.reject("Turn on Wi-Fi in your phone's system settings to discover nearby devices")
+            return
+        }
+        if (!isLocationEnabledInternal()) {
+            call.reject("Turn on Location in your phone's system settings to discover nearby devices")
+            return
+        }
         try {
             mgr.discoverPeers(ch, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() { mainHandler.post { call.resolve() } }
@@ -160,6 +209,69 @@ class WifiDirectPlugin : Plugin() {
             })
         } catch (e: SecurityException) {
             call.reject("Missing permission for discoverPeers: " + e.message, e)
+        }
+    }
+
+    // Wi-Fi Direct rides on the same radio as regular Wi-Fi, so toggling
+    // Wi-Fi off (which many people do to save battery or "go offline",
+    // not realizing WFD needs zero internet/AP but still needs the radio
+    // on) kills discovery entirely — discoverPeers() then fails with no
+    // useful signal to the user unless we check this proactively.
+    private fun isWifiEnabledInternal(): Boolean {
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        return wifiManager?.isWifiEnabled ?: true
+    }
+
+    // Standalone check so JS can poll this directly, same pattern as
+    // isLocationEnabled below.
+    @PluginMethod
+    fun isWifiEnabled(call: PluginCall) {
+        val result = JSObject()
+        result.put("enabled", isWifiEnabledInternal())
+        call.resolve(result)
+    }
+
+    // One-tap fix: jumps to the system Wi-Fi toggle screen.
+    @PluginMethod
+    fun openWifiSettings(call: PluginCall) {
+        try {
+            val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            call.resolve()
+        } catch (e: Exception) {
+            call.reject("Could not open Wi-Fi settings: " + e.message, e)
+        }
+    }
+
+    private fun isLocationEnabledInternal(): Boolean {
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        return locationManager == null || LocationManagerCompat.isLocationEnabled(locationManager)
+    }
+
+    // Standalone check so JS can poll this directly (e.g. to show a "turn on
+    // Location" banner and auto-resume once it's on) without needing to
+    // attempt — and get rejected by — a real discoverPeers() call each time.
+    @PluginMethod
+    fun isLocationEnabled(call: PluginCall) {
+        val result = JSObject()
+        result.put("enabled", isLocationEnabledInternal())
+        call.resolve(result)
+    }
+
+    // One-tap fix for the above: jumps straight to the system Location
+    // toggle instead of making the user hunt through Settings themselves.
+    @PluginMethod
+    fun openLocationSettings(call: PluginCall) {
+        try {
+            val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            call.resolve()
+        } catch (e: Exception) {
+            call.reject("Could not open Location settings: " + e.message, e)
         }
     }
 
@@ -239,6 +351,7 @@ class WifiDirectPlugin : Plugin() {
 
     @PluginMethod
     fun removeGroup(call: PluginCall) {
+        releaseMulticastLock()
         val mgr = manager
         val ch = channel
         if (mgr == null || ch == null) {
@@ -298,6 +411,7 @@ class WifiDirectPlugin : Plugin() {
 
     override fun handleOnDestroy() {
         unregisterReceiverInternal()
+        releaseMulticastLock()
         val mgr = manager
         val ch = channel
         if (mgr != null && ch != null) {

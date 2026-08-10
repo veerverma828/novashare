@@ -4,7 +4,6 @@ import { createPortal } from 'react-dom';
 import Peer from 'peerjs';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  Share2,
   Download,
   UploadCloud,
   ShieldCheck,
@@ -28,30 +27,26 @@ import {
   Pause,
   Play,
   Smartphone,
-  Search,
   Check,
   Users,
   History as HistoryIcon,
   Type,
   FolderUp,
-  Folder,
   ChevronDown,
-  ChevronRight,
   Gauge,
   Radar,
   ShieldQuestion,
   ClipboardCopy,
-  Trash2
+  MessageCircle,
+  Paperclip,
+  Send
 } from 'lucide-react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const NotifyDownload = registerPlugin('NotifyDownload');
 import {
   triggerHaptic,
-  listInstalledApps,
-  getAppIcon,
-  getAppApkFile,
-  clearApkCache,
+  triggerSuccessHaptic,
   getPendingSharedFiles,
   onSharedFilesReceived,
   sharedEntryToFile,
@@ -69,142 +64,55 @@ import {
   wifiDirectInitialize,
   wifiDirectDiscoverPeers,
   wifiDirectStopDiscovery,
+  wifiDirectIsLocationEnabled,
+  wifiDirectOpenLocationSettings,
+  wifiDirectIsWifiEnabled,
+  wifiDirectOpenWifiSettings,
   wifiDirectConnect,
   wifiDirectRequestGroupInfo,
   wifiDirectRemoveGroup,
   onWifiDirectPeersChanged,
   onWifiDirectConnectionChanged,
-  localSignalingStartServer,
-  localSignalingStopServer,
-  localSignalingConnect,
-  localSignalingSend,
-  localSignalingClose,
-  onLocalSignalingMessage,
-  onLocalSignalingPeerConnected,
+  isHotspotSupported,
+  hotspotStart,
+  hotspotStop,
+  hotspotJoin,
+  hotspotLeave,
   checkForAppUpdate,
   startFlexibleAppUpdate,
   completeFlexibleAppUpdate,
-  onAppUpdateStateChanged
+  onAppUpdateStateChanged,
+  getBatteryInfo
 } from './native';
-import { addHistoryEntry, getHistory, clearHistory } from './history';
+import { addHistoryEntry, clearHistory } from './history';
 import { computeSecurityCode } from './security';
+import { isOnline, subscribeConnectivity } from './connectivity';
+import { saveCheckpoint, getCheckpoint, clearCheckpoint } from './transferState';
+import { hasReceived, recordReceived } from './receivedIndex';
+import { addClip } from './clipboardSync';
+import { recordError } from './crashLog';
 import {
   RATE_PRESETS,
   arrayBufferToBase64,
-  mapWithConcurrency,
+  computeFileHash,
   formatBytes,
   formatSpeed,
   formatTime,
   getFileType,
   generateRoomCode,
-  extractRoomCode
+  extractRoomCode,
+  extractHotspotCredentials
 } from './transferUtils';
-import {
-  createLocalPeerConnection,
-  createOfferAndChannel,
-  waitForRemoteChannel,
-  createAnswerFromOffer,
-  applyRemoteAnswer,
-  addRemoteIceCandidate,
-  waitForChannelOpen,
-  PeerJsCompatDataConnection
-} from './webrtcLocal';
-
-const LOCAL_SIGNALING_PORT = 8916;
-
-// Fully offline handshake: negotiates a manual WebRTC data channel over the
-// Wi-Fi Direct link's local signaling pipe (LocalSignaling native plugin)
-// instead of PeerJS's cloud broker — no internet involved at any point.
-// Whichever device is NOT the Wi-Fi Direct group owner already knows the
-// owner's address, so it connects to the signaling socket and sends the SDP
-// offer immediately; the group owner starts the socket and waits, then
-// answers. Resolves with a PeerJsCompatDataConnection once the resulting
-// RTCDataChannel is open, so callers can treat it exactly like a PeerJS conn.
-// Resolves with { conn, roomCode, deviceName }, not just conn — the group
-// owner side doesn't generate its own roomCode, it learns the offerer's
-// via the offer message, so both ends converge on one canonical value
-// (required for computeSecurityCode(roomCode, ...) to match on both sides).
-async function establishLocalConnection({ isGroupOwner, groupOwnerAddress, roomCode, deviceName }, timeoutMs = 30000) {
-  const pc = createLocalPeerConnection();
-  let signalConnId = null;
-  let settled = false;
-
-  const sendSignal = (msg) => {
-    if (signalConnId == null) return;
-    localSignalingSend(signalConnId, msg);
-  };
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate) sendSignal({ type: 'ice', candidate: e.candidate.toJSON() });
-  };
-
-  let resolvedRoomCode = roomCode;
-  let resolvedDeviceName = deviceName;
-
-  const offMessage = onLocalSignalingMessage(async (connId, msg) => {
-    if (signalConnId != null && connId !== signalConnId) return;
-    if (msg.type === 'offer') {
-      resolvedRoomCode = msg.roomCode || resolvedRoomCode;
-      resolvedDeviceName = msg.deviceName || resolvedDeviceName;
-      const answerSdp = await createAnswerFromOffer(pc, msg.sdp);
-      sendSignal({ type: 'answer', sdp: answerSdp });
-    } else if (msg.type === 'answer') {
-      await applyRemoteAnswer(pc, msg.sdp);
-    } else if (msg.type === 'ice') {
-      await addRemoteIceCandidate(pc, msg.candidate);
-    }
-  });
-  const offConnected = onLocalSignalingPeerConnected((connId) => { signalConnId = connId; });
-
-  const cleanupSignal = () => {
-    offMessage();
-    offConnected();
-    if (isGroupOwner) {
-      localSignalingStopServer();
-    } else if (signalConnId != null) {
-      localSignalingClose(signalConnId);
-    }
-  };
-
-  try {
-    const channel = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        reject(new Error('Timed out negotiating a local Wi-Fi Direct connection'));
-      }, timeoutMs);
-
-      const finish = (ch) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        waitForChannelOpen(ch, timeoutMs).then(resolve).catch(reject);
-      };
-
-      if (isGroupOwner) {
-        waitForRemoteChannel(pc).then(finish);
-        localSignalingStartServer().catch((err) => {
-          if (!settled) { settled = true; clearTimeout(timer); reject(err); }
-        });
-      } else {
-        (async () => {
-          try {
-            signalConnId = await localSignalingConnect(groupOwnerAddress, LOCAL_SIGNALING_PORT);
-            const { channel: ch, sdp } = await createOfferAndChannel(pc);
-            sendSignal({ type: 'offer', sdp, roomCode, deviceName });
-            finish(ch);
-          } catch (err) {
-            if (!settled) { settled = true; clearTimeout(timer); reject(err); }
-          }
-        })();
-      }
-    });
-    const peerId = groupOwnerAddress || 'wifi-direct-peer';
-    return { conn: new PeerJsCompatDataConnection(channel, peerId), roomCode: resolvedRoomCode, deviceName: resolvedDeviceName };
-  } finally {
-    cleanupSignal();
-  }
-}
+import { establishLocalSocketConnection, startLocalSocketRoomHost } from './localSocketTransport';
+import { rippleTap, BTN_PRIMARY, BTN_SECONDARY } from './uiHelpers';
+import { playCompletionChime } from './completionChime';
+import { FileThumbnail } from './components/FileThumbnail';
+import { RoomCodeFlap } from './components/RoomCodeFlap';
+import { SwipeableFileRow } from './components/SwipeableFileRow';
+import { FolderQueueRow } from './components/FolderQueueRow';
+import { AppsPanel } from './components/AppsPanel';
+import { HistoryPanel } from './components/HistoryPanel';
+import { TransferRing } from './components/TransferRing';
 
 // Marks a queued File as a text snippet (feature: send text/clipboard
 // content through the same P2P pipeline as real files) rather than a user
@@ -218,7 +126,9 @@ const TEXT_SNIPPET_MIME = 'text/x-novashare-snippet';
 const sentFilesMemory = new Map();
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for P2P WebRTC
-const FLAP_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+// Left-right order the Home/Apps/History tabs cycle through on a swipe.
+const HOME_TAB_ORDER = ['home', 'apps', 'history'];
 
 // STUN-only fails behind carrier-grade / symmetric NAT (common on mobile
 // data) — TURN relay is the fallback for those cases. Open Relay Project
@@ -233,514 +143,17 @@ const ICE_SERVERS = {
   ]
 };
 
-// Reusable Tailwind class strings for the two button variants used all over
-// the app — kept as constants instead of @apply so JSX stays the source of
-// truth for styling, while avoiding retyping this string 30+ times.
-const BTN_PRIMARY = 'relative overflow-hidden flex items-center justify-center gap-2 bg-accent-purple text-[#06222c] border-0 font-heading text-[0.95rem] font-semibold py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 hover:-translate-y-px hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed';
-const BTN_SECONDARY = 'relative overflow-hidden flex items-center justify-center gap-2 bg-transparent border border-border text-text-primary font-heading text-[0.95rem] font-medium py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary disabled:opacity-50 disabled:cursor-not-allowed';
-
-// Spawns a ripple span inside whatever element was tapped, and gives it a
-// light haptic tick on-device. Purely a feedback layer; never blocks the
-// actual click handler.
-function rippleTap(e, handler) {
-  const el = e.currentTarget;
-  const rect = el.getBoundingClientRect();
-  const size = Math.max(rect.width, rect.height) * 1.6;
-  const span = document.createElement('span');
-  span.className = 'ripple';
-  span.style.width = span.style.height = `${size}px`;
-  const x = (e.clientX ?? rect.left + rect.width / 2) - rect.left - size / 2;
-  const y = (e.clientY ?? rect.top + rect.height / 2) - rect.top - size / 2;
-  span.style.left = `${x}px`;
-  span.style.top = `${y}px`;
-  el.appendChild(span);
-  span.addEventListener('animationend', () => span.remove());
-  triggerHaptic();
-  if (handler) handler(e);
-}
-
-// Split-flap style reveal for the freshly generated room code: each
-// character scrambles briefly before settling, staggered left to right.
-export function RoomCodeFlap({ code }) {
-  const [display, setDisplay] = useState(code.split(''));
-
-  useEffect(() => {
-    const target = code.split('');
-    const timers = [];
-    target.forEach((ch, i) => {
-      let ticks = 0;
-      const maxTicks = 5 + i * 2;
-      const iv = setInterval(() => {
-        ticks += 1;
-        setDisplay((prev) => {
-          const next = [...prev];
-          next[i] = ticks >= maxTicks ? ch : FLAP_CHARS[Math.floor(Math.random() * FLAP_CHARS.length)];
-          return next;
-        });
-        if (ticks >= maxTicks) clearInterval(iv);
-      }, 45);
-      timers.push(iv);
-    });
-    return () => timers.forEach(clearInterval);
-  }, [code]);
-
-  return (
-    <div className="flex gap-[0.3rem] font-[Georgia,serif] text-[1.1rem] max-[380px]:text-[0.95rem] tracking-[0.02em] text-accent-cyan [font-variant-numeric:lining-nums_tabular-nums]">
-      {display.map((ch, i) => (
-        <span key={i} className="bg-[rgba(125,211,255,0.08)] rounded-md px-[0.4rem] py-[0.1rem] [font-variant-numeric:tabular-nums]">{ch}</span>
-      ))}
-    </div>
-  );
-}
-
-// One row in the multi-file send queue: drag/swipe left (or tap the X) to
-// drop a file before the transfer starts. Pointer Events cover mouse,
-// touch, and pen with one handler set.
-export function SwipeableFileRow({ file, sizeLabel, onRemove }) {
-  const [dragX, setDragX] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const startXRef = useRef(0);
-  const removedRef = useRef(false);
-
-  const REMOVE_THRESHOLD = -72;
-
-  const onPointerDown = (e) => {
-    startXRef.current = e.clientX;
-    setDragging(true);
-  };
-
-  const onPointerMove = (e) => {
-    if (!dragging) return;
-    const delta = Math.min(0, e.clientX - startXRef.current);
-    setDragX(delta);
-  };
-
-  const finishDrag = () => {
-    setDragging(false);
-    if (dragX < REMOVE_THRESHOLD && !removedRef.current) {
-      removedRef.current = true;
-      onRemove();
-    } else {
-      setDragX(0);
-    }
-  };
-
-  const dragProgress = dragX < 0 ? Math.min(1, dragX / REMOVE_THRESHOLD) : 0;
-
-  return (
-    <div
-      className="relative flex items-center gap-[0.7rem] bg-[rgba(30,41,59,0.5)] border border-border rounded-xl py-[0.65rem] px-[0.8rem] [touch-action:pan-y] cursor-grab flex-shrink-0"
-      style={{
-        transform: `translateX(${dragX}px)`,
-        opacity: 1 - dragProgress * 0.5,
-        borderColor: dragProgress > 0
-          ? `rgba(248,113,113, ${0.25 + dragProgress * 0.75})`
-          : undefined,
-        background: dragProgress > 0
-          ? `rgba(248,113,113, ${dragProgress * 0.22})`
-          : undefined,
-        transition: dragging ? 'none' : 'transform 0.25s ease'
-      }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={finishDrag}
-      onPointerLeave={() => dragging && finishDrag()}
-    >
-      <span className="w-2 h-2 rounded-full bg-accent-purple shadow-[0_0_6px_var(--color-accent-purple)] flex-shrink-0" />
-      <span className="text-[0.85rem] text-text-primary flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: dragProgress > 0 ? 'var(--color-accent-pink)' : undefined }}>{file.name}</span>
-      <span className="text-[0.72rem] text-text-muted flex-shrink-0">{sizeLabel}</span>
-      <button
-        type="button"
-        className="relative overflow-hidden w-[22px] h-[22px] rounded-full bg-[rgba(248,113,113,0.15)] text-accent-pink border-0 flex items-center justify-center flex-shrink-0 cursor-pointer"
-        onClick={(e) => { e.stopPropagation(); rippleTap(e, onRemove); }}
-        aria-label={`Remove ${file.name}`}
-      >
-        <X size={12} />
-      </button>
-    </div>
-  );
-}
-
-// A picked folder's files ride in the same flat selectedFiles queue as loose
-// files (webkitRelativePath is how we tell them apart), but shown flat that
-// queue turns into a wall of individual filenames for a big folder. This
-// collapses a folder's files behind one row — tap to expand and browse what's
-// actually going to send, tap X to drop the whole folder at once.
-export function FolderQueueRow({ name, entries, formatBytes, onRemoveAll, onRemoveOne }) {
-  const [open, setOpen] = useState(false);
-  const totalSize = entries.reduce((sum, { file }) => sum + file.size, 0);
-
-  return (
-    <div className="rounded-xl border border-border bg-[rgba(30,41,59,0.5)] overflow-hidden flex-shrink-0">
-      <div
-        className="relative flex items-center gap-[0.7rem] py-[0.65rem] px-[0.8rem] cursor-pointer"
-        onClick={() => setOpen((o) => !o)}
-      >
-        {open ? <ChevronDown size={14} className="text-text-muted flex-shrink-0" /> : <ChevronRight size={14} className="text-text-muted flex-shrink-0" />}
-        <Folder size={16} className="text-accent-cyan flex-shrink-0" />
-        <span className="text-[0.85rem] text-text-primary flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{name}</span>
-        <span className="text-[0.72rem] text-text-muted flex-shrink-0">{entries.length} file{entries.length === 1 ? '' : 's'} &middot; {formatBytes(totalSize)}</span>
-        <button
-          type="button"
-          className="relative overflow-hidden w-[22px] h-[22px] rounded-full bg-[rgba(248,113,113,0.15)] text-accent-pink border-0 flex items-center justify-center flex-shrink-0 cursor-pointer"
-          onClick={(e) => { e.stopPropagation(); rippleTap(e, onRemoveAll); }}
-          aria-label={`Remove folder ${name}`}
-        >
-          <X size={12} />
-        </button>
-      </div>
-      {open && (
-        <div className="flex flex-col gap-[0.4rem] p-[0.5rem] pt-0 pl-8">
-          {entries.map(({ file, index }) => (
-            <SwipeableFileRow
-              key={`${file.name}-${file.size}-${index}`}
-              file={file}
-              sizeLabel={formatBytes(file.size)}
-              onRemove={() => onRemoveOne(index)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Module-scope cache so re-mounting the Apps tab doesn't refetch icons
-// already fetched over the native bridge this session.
-const appIconCache = new Map();
-
-export function AppIcon({ packageName }) {
-  const [icon, setIcon] = useState(appIconCache.get(packageName) || null);
-
-  useEffect(() => {
-    if (icon) return;
-    let cancelled = false;
-    getAppIcon(packageName)
-      .then((src) => {
-        if (cancelled || !src) return;
-        appIconCache.set(packageName, src);
-        setIcon(src);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [packageName, icon]);
-
-  return icon
-    ? <img src={icon} alt="" className="w-9 h-9 rounded-[9px] flex-shrink-0 object-cover" />
-    : <div className="w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center bg-[rgba(125,211,255,0.15)] text-accent-purple"><Smartphone size={18} /></div>;
-}
-
-// Wraps the substring of `text` matching `query` (case-insensitive) in a
-// highlighted <mark> — used to show which part of an app name matched search.
-export function HighlightMatch({ text, query }) {
-  const q = query.trim();
-  if (!q) return text;
-
-  const idx = text.toLowerCase().indexOf(q.toLowerCase());
-  if (idx === -1) return text;
-
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark className="bg-accent-purple/30 text-accent-purple rounded-[3px] px-[1px]">
-        {text.slice(idx, idx + q.length)}
-      </mark>
-      {text.slice(idx + q.length)}
-    </>
-  );
-}
-
-// Runs `worker` over `items` with at most `limit` in flight at once, resolving
-// to results in original item order regardless of completion order.
-// Installed-apps browser for the "Apps" home tab: lists user-installed
-// packages (native bridge only), lets the user search and multi-select, and
-// hands back ready-to-send Files built from each APK's bytes so they drop
-// straight into the same selectedFiles queue the file dropzone uses.
-export function AppsPanel({ onSelectApps, formatBytes }) {
-  const [apps, setApps] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState(() => new Set());
-  const [preparing, setPreparing] = useState(null); // { index, total }
-
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    listInstalledApps()
-      .then((list) => {
-        if (cancelled) return;
-        setApps([...list].sort((a, b) => a.appName.localeCompare(b.appName)));
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message || 'Could not load installed apps.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  const filtered = query.trim()
-    ? apps.filter((a) => a.appName.toLowerCase().includes(query.toLowerCase()))
-    : apps;
-
-  const toggleSelected = (packageName) => {
-    if (preparing) return;
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(packageName)) next.delete(packageName);
-      else next.add(packageName);
-      return next;
-    });
-  };
-
-  const handleShareSelected = async () => {
-    if (preparing || selected.size === 0) return;
-    const picked = apps.filter((a) => selected.has(a.packageName));
-    setError('');
-    let completed = 0;
-    setPreparing({ index: 0, total: picked.length });
-    try {
-      // A few APK cache-copy+fetch calls run concurrently — each is now a
-      // plain native file copy rather than a heavy base64 bridge payload, so
-      // parallelizing a handful at a time is safe and meaningfully faster
-      // than preparing them one at a time.
-      // Each app is prepped independently — one failure (over the size cap,
-      // uninstalled mid-scan, etc.) must not drop the rest of the selection.
-      const failed = [];
-      const results = await mapWithConcurrency(picked, 3, async (app) => {
-        try {
-          const file = await getAppApkFile(app.packageName, app.appName, app.versionName);
-          return file;
-        } catch (err) {
-          console.error(`Failed to prepare ${app.packageName}:`, err);
-          failed.push(app.appName || app.packageName);
-          return null;
-        } finally {
-          completed += 1;
-          setPreparing({ index: completed, total: picked.length });
-        }
-      });
-      const files = results.filter(Boolean);
-
-      if (failed.length > 0) {
-        setError(`Could not prepare: ${failed.join(', ')}${files.length > 0 ? ' — sending the rest.' : ''}`);
-      }
-      if (files.length > 0) onSelectApps(files);
-    } catch (err) {
-      setError(err.message || 'Could not prepare the selected apps.');
-    } finally {
-      setPreparing(null);
-      clearApkCache();
-    }
-  };
-
-  if (!Capacitor.isNativePlatform()) {
-    return (
-      <div className="flex flex-col items-center gap-3 text-text-muted text-center px-4 py-10">
-        <Smartphone size={28} />
-        <p>App sharing is only available in the installed NovaShare app.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="apps-panel flex-1 min-h-0 flex flex-col gap-4">
-      <div className="relative flex items-center gap-[0.4rem] flex-shrink-0">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center"><Search size={16} /></div>
-        <input
-          type="text"
-          className="flex-1 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(125,211,255,0.12)]"
-          placeholder="Search installed apps..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </div>
-
-      {loading && (
-        <div className="flex items-center justify-center gap-[0.6rem] text-text-muted text-[0.85rem] py-8">
-          <RefreshCw size={22} className="text-accent-purple drop-shadow-[0_0_10px_rgba(125,211,255,0.5)] animate-[spin_1.1s_linear_infinite]" />
-          <span>Loading installed apps&hellip;</span>
-        </div>
-      )}
-
-      {!loading && error && (
-        <div className="flex items-center gap-2 text-text-secondary text-[0.9rem] px-2 py-8 text-center justify-center"><AlertCircle size={16} /> {error}</div>
-      )}
-
-      {!loading && !error && filtered.length === 0 && (
-        <p className="text-[0.85rem] text-text-muted text-center">
-          {apps.length === 0 ? 'No user-installed apps found.' : `No apps match "${query}".`}
-        </p>
-      )}
-
-      {!loading && filtered.length > 0 && (
-        // Responsive tile grid (was a vertical list): auto-fill sizes each
-        // tile to a ~92px minimum and lets the track add/remove columns as
-        // the panel width changes, so it self-adjusts across phone sizes
-        // (and the wider modal/desktop width) with no manual breakpoints.
-        // Behavior below (click-to-toggle, checkbox state, search highlight,
-        // AppsPanel state/handlers) is unchanged from the list version.
-        <div className="apps-list flex-1 min-h-0 grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] auto-rows-max gap-2.5 content-start overflow-y-auto pb-1 pr-[0.4rem]">
-          {filtered.map((app) => {
-            const isChecked = selected.has(app.packageName);
-            return (
-              <div
-                key={app.packageName}
-                title={`${app.packageName}${app.versionName ? ` · v${app.versionName}` : ''} · ${formatBytes(app.apkSize)}`}
-                className={`relative flex flex-col items-center gap-1.5 rounded-xl py-3 px-2 cursor-pointer transition-[background-color,border-color] duration-150 ease-linear border text-center ${isChecked ? 'bg-[rgba(125,211,255,0.14)] border-accent-purple' : 'bg-[rgba(30,41,59,0.4)] border-border hover:bg-[rgba(30,41,59,0.65)] hover:border-accent-purple'}`}
-                onClick={() => toggleSelected(app.packageName)}
-              >
-                <span className={`absolute top-1.5 right-1.5 w-5 h-5 flex-shrink-0 rounded-md border-[1.5px] flex items-center justify-center text-white transition-all duration-150 ${isChecked ? 'bg-accent-purple border-accent-purple !text-[#06222c]' : 'border-border bg-[rgba(8,12,20,0.5)]'}`}>
-                  {isChecked && <Check size={13} strokeWidth={3} />}
-                </span>
-                <AppIcon packageName={app.packageName} />
-                <div className="w-full min-w-0 flex flex-col items-center">
-                  <span className="w-full text-[0.78rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis"><HighlightMatch text={app.appName} query={query} /></span>
-                  <span className="w-full text-[0.65rem] text-text-muted whitespace-nowrap overflow-hidden text-ellipsis">
-                    {app.versionName ? `v${app.versionName} · ` : ''}{formatBytes(app.apkSize)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {selected.size > 0 && (
-        <button
-          type="button"
-          className={BTN_PRIMARY}
-          disabled={!!preparing}
-          onClick={(e) => rippleTap(e, handleShareSelected)}
-        >
-          {preparing
-            ? <><RefreshCw size={16} className="animate-[spin_1.1s_linear_infinite]" /> Preparing {preparing.index}/{preparing.total}&hellip;</>
-            : <><Share2 size={16} /> Share {selected.size} {selected.size === 1 ? 'App' : 'Apps'}</>}
-        </button>
-      )}
-    </div>
-  );
-}
-
-// Past sent/received transfers (feature #3), read fresh from localStorage
-// each time it mounts (parent remounts it via a `key` bump). Re-send only
-// works for "sent" entries whose File objects are still alive in
-// sentFilesMemory (this session only) — otherwise it prompts to reselect.
-export function HistoryPanel({ formatBytes, onResend, onClear, now }) {
-  const entries = getHistory();
-
-  if (entries.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-3 text-text-muted text-center px-4 py-10">
-        <HistoryIcon size={28} />
-        <p>No transfers yet — sent and received files will show up here.</p>
-      </div>
-    );
-  }
-
-  // `now` is captured by the caller (at the moment the History tab was
-  // opened, in an event handler) rather than read here via Date.now() —
-  // component render must stay pure/idempotent.
-  const formatWhen = (ts) => {
-    const diff = now - ts;
-    if (diff < 60000) return 'just now';
-    if (diff < 3600000) return `${Math.round(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
-    return new Date(ts).toLocaleDateString();
-  };
-
-  return (
-    <div className="flex-1 min-h-0 flex flex-col gap-3">
-      <div className="flex items-center justify-between flex-shrink-0">
-        <span className="text-[0.8rem] text-text-muted">{entries.length} transfer{entries.length === 1 ? '' : 's'}</span>
-        <button
-          type="button"
-          className="relative overflow-hidden flex items-center gap-1 bg-transparent border-0 text-text-muted text-[0.78rem] cursor-pointer py-1 px-2 rounded-md hover:text-accent-pink hover:bg-[rgba(248,113,113,0.1)]"
-          onClick={(e) => rippleTap(e, onClear)}
-        >
-          <Trash2 size={13} /> Clear
-        </button>
-      </div>
-      <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pr-[0.4rem]">
-        {entries.map((entry) => {
-          const totalSize = entry.files.reduce((sum, f) => sum + (f.size || 0), 0);
-          const label = entry.files.length > 1
-            ? `${entry.files.length} ${entry.kind === 'text' ? 'text snippets' : 'files'}`
-            : (entry.files[0]?.name || 'Unknown');
-          return (
-            <div key={entry.id} className="flex items-center gap-3 bg-[rgba(30,41,59,0.4)] border border-border rounded-xl py-[0.6rem] px-[0.8rem]">
-              <div className={`w-9 h-9 rounded-[9px] flex-shrink-0 flex items-center justify-center ${entry.direction === 'sent' ? 'bg-[rgba(125,211,255,0.15)] text-accent-purple' : 'bg-[rgba(125,211,255,0.15)] text-accent-cyan'}`}>
-                {entry.direction === 'sent' ? <UploadCloud size={16} /> : <Download size={16} />}
-              </div>
-              <div className="flex-1 min-w-0 flex flex-col">
-                <span className="text-[0.85rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{label}</span>
-                <span className="text-[0.72rem] text-text-muted whitespace-nowrap overflow-hidden text-ellipsis">
-                  {entry.direction === 'sent' ? 'Sent' : 'Received'} · {formatBytes(totalSize)} · {formatWhen(entry.timestamp)} · room {entry.roomCode}
-                </span>
-              </div>
-              {entry.direction === 'sent' && (
-                <button
-                  type="button"
-                  className="relative overflow-hidden flex-shrink-0 bg-transparent border border-border text-text-secondary cursor-pointer flex items-center gap-1 py-[0.4rem] px-[0.6rem] rounded-lg text-[0.75rem] transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
-                  onClick={(e) => rippleTap(e, () => onResend(entry))}
-                  title="Re-send"
-                >
-                  <RefreshCw size={13} /> Re-send
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// Circular transfer progress — reads the same speed/ETA lines the linear
-// bar used to, just given a shape that matches the round dropzone/radar
-// motifs already in the app.
-const RING_RADIUS = 52;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-
-export function TransferRing({ progress, gradientId = 'ringGrad' }) {
-  const offset = RING_CIRCUMFERENCE - (Math.min(100, Math.max(0, progress)) / 100) * RING_CIRCUMFERENCE;
-  return (
-    <svg className="w-[130px] h-[130px]" viewBox="0 0 120 120" role="img" aria-label={`Transfer ${Math.round(progress)}% complete`}>
-      <circle cx="60" cy="60" r={RING_RADIUS} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
-      <circle
-        cx="60"
-        cy="60"
-        r={RING_RADIUS}
-        fill="none"
-        stroke={`url(#${gradientId})`}
-        strokeWidth="8"
-        strokeLinecap="round"
-        strokeDasharray={RING_CIRCUMFERENCE}
-        strokeDashoffset={offset}
-        transform="rotate(-90 60 60)"
-        className="transition-[stroke-dashoffset] duration-200 ease-out"
-      />
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="var(--color-accent-purple)" />
-          <stop offset="100%" stopColor="var(--color-accent-cyan)" />
-        </linearGradient>
-      </defs>
-      <text x="60" y="66" textAnchor="middle" className="font-heading text-[1.35rem] font-bold fill-text-primary [font-variant-numeric:tabular-nums]">{Math.round(progress)}%</text>
-    </svg>
-  );
-}
+// How long the cloud broker gets to complete its initial handshake before the
+// automatic picker concludes the internet isn't usable and tries an offline
+// link instead. Generous enough for a slow mobile network's TLS + WebSocket
+// setup, short enough that a dead broker doesn't read as a hung app.
+const CLOUD_OPEN_TIMEOUT_MS = 8000;
 
 function App() {
   // Navigation & Mode States
   const [mode, setMode] = useState('home'); // 'home' | 'p2p-send' | 'p2p-receive'
   const [homeTab, setHomeTab] = useState('home'); // 'home' | 'apps'
+  const homeTabSwipeRef = useRef({ x: 0, y: 0, active: false });
 
   // File States
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -817,13 +230,33 @@ function App() {
   const [wifiDirectAvailable, setWifiDirectAvailable] = useState(false);
   const [wifiDirectBrowsing, setWifiDirectBrowsing] = useState(false);
   const [wifiDirectPeers, setWifiDirectPeers] = useState([]);
+  // True while system Location is off — Wi-Fi P2P discovery silently finds
+  // nothing in that state (not an error), so this drives a persistent
+  // "turn on Location" prompt instead of a one-shot toast, and the
+  // discovery effect below polls until it's resolved and auto-resumes.
+  const [wifiDirectLocationOff, setWifiDirectLocationOff] = useState(false);
+  const [wifiDirectWifiOff, setWifiDirectWifiOff] = useState(false);
   const [wifiDirectConnecting, setWifiDirectConnecting] = useState(null); // deviceAddress mid-connect, or null
+
+  // Hotspot fallback (feature: Wi-Fi Direct → hotspot when WFD connect
+  // fails) — host side only; the joining side never shows UI for this, it's
+  // transparently detected from the QR payload (see the scanner's data
+  // handler). null once not hosting a fallback hotspot.
+  const [hotspotSupported, setHotspotSupported] = useState(false);
+  const [hotspotCredentials, setHotspotCredentials] = useState(null); // { ssid, passphrase } | null
+  const [hotspotStarting, setHotspotStarting] = useState(false);
 
   // Transfer history tab — bumped to force a re-read from localStorage.
   // historyOpenedAt is captured once (in the tab-click handler) rather than
   // read fresh during HistoryPanel's render, keeping render pure.
   const [historyVersion, setHistoryVersion] = useState(0);
   const [historyOpenedAt, setHistoryOpenedAt] = useState(0);
+
+  // A receive checkpoint found on cold start (feature: resume after app
+  // restart) — null once dismissed/resumed/absent. Distinct from the live
+  // 'reconnecting' transferState, which only handles a WebRTC drop while the
+  // process stays alive.
+  const [interruptedTransfer, setInterruptedTransfer] = useState(null);
 
   // Verified-handshake security codes (feature #4): sender keeps one per
   // connected receiver id, receiver keeps its own single code.
@@ -837,11 +270,61 @@ function App() {
   // the normal completed-file list: { name, text, size }
   const [receivedTexts, setReceivedTexts] = useState([]);
 
+  // Persistent clipboard channel (feature): once a transfer finishes, the
+  // underlying DataConnection is still open (cleanup() only runs on a fresh
+  // send/receive or resetToHome) — this reuses it for ad hoc text snippets
+  // instead of a one-shot send. Session-scoped: { text, direction, peerLabel }.
+  const [sessionClips, setSessionClips] = useState([]);
+  const [clipDraft, setClipDraft] = useState('');
+
+  // Chat section (feature): a persistent thread over the same live
+  // connection the clipboard channel above already rides — but for files and
+  // installed apps too, not just text, sent/received any time after
+  // connecting, not only from the pre-send queue. Deliberately a separate,
+  // lightweight wire protocol ('chat-meta'/'chunk'+chatId/'chat-done') from
+  // the main batch transfer above — reusing batch-start would reset
+  // receivedFilesRef/completedFiles and wipe whatever the main screen is
+  // already showing, which a "send one more thing" chat message shouldn't do.
+  const [chatMessages, setChatMessages] = useState([]); // { id, direction, kind: 'file'|'app', name, size, status, progress, ts, url? }
+  const [showChat, setShowChat] = useState(false);
+  const [showChatApps, setShowChatApps] = useState(false);
+  const [showChatAttach, setShowChatAttach] = useState(false);
+  const [chatDraft, setChatDraft] = useState('');
+  const chatBuffersRef = useRef(new Map()); // chatId -> { chunks: ArrayBuffer[], received: number, meta }
+  const chatFileInputRef = useRef(null);
+
   // Bandwidth throttle (feature #8) — 0 = unlimited, else target KB/s per peer.
   const [maxRateKBps, setMaxRateKBps] = useState(0);
   const [showRateMenu, setShowRateMenu] = useState(false);
   const maxRateRef = useRef(0);
   useEffect(() => { maxRateRef.current = maxRateKBps; }, [maxRateKBps]);
+
+  // Battery-aware throttle (feature): auto-caps outgoing bandwidth if this
+  // device's battery is low and not charging, so a big send doesn't drain it
+  // dry. Only kicks in from "Unlimited" — an explicit rate the user already
+  // picked is left alone — and only once per transfer, so overriding it back
+  // up doesn't get immediately re-clamped. Re-checked periodically since a
+  // long transfer can cross the threshold partway through.
+  const batteryThrottleAppliedRef = useRef(false);
+  useEffect(() => {
+    if (mode !== 'p2p-send' || transferState !== 'transferring') {
+      batteryThrottleAppliedRef.current = false;
+      return;
+    }
+    const checkBattery = async () => {
+      if (batteryThrottleAppliedRef.current) return;
+      const { batteryLevel, isCharging } = await getBatteryInfo();
+      if (batteryLevel == null || isCharging) return;
+      if (batteryLevel <= 0.15 && maxRateRef.current === 0) {
+        batteryThrottleAppliedRef.current = true;
+        setMaxRateKBps(512);
+        showToast('Low battery — capped transfer speed to save power. Tap the speed limit button to change it.', 'info');
+      }
+    };
+    checkBattery();
+    const interval = setInterval(checkBattery, 60000);
+    return () => clearInterval(interval);
+  }, [mode, transferState]);
 
   // Receiver-side buffer for reconstructing a text snippet's chunks into a
   // string once fully received (parallel to the native/web file-save path).
@@ -860,6 +343,11 @@ function App() {
   // append calls so out-of-order bridge resolution can't corrupt the file.
   const incomingFileIdRef = useRef('');
   const writeChainRef = useRef(Promise.resolve());
+  // Set for the current file when the receiver already has identical content
+  // (feature: duplicate-file skip / delta folder sync) — the chunk handler
+  // discards anything that arrives for this file instead of writing it,
+  // since the sender may not react to 'skip-duplicate' instantly.
+  const skippingCurrentFileRef = useRef(false);
   const fileInputRef = useRef(null);
   const scanVideoRef = useRef(null);
   const scanCanvasRef = useRef(null);
@@ -880,6 +368,7 @@ function App() {
   // reconnect attempts we've burned after an unexpected mid-transfer drop
   const currentFileIndexRef = useRef(0);
   const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef(null);
   // Active receiver transport, so a mid-transfer reconnect (scheduleReconnectRetry)
   // retries over the same transport it was using rather than defaulting to cloud.
   const receiverTransportRef = useRef({ mode: 'cloud', groupInfo: null });
@@ -888,9 +377,27 @@ function App() {
   // for 'cloud' sends — a 'local' Wi-Fi Direct send already owns the same
   // native LocalSignaling server for its own handshake).
   const senderTransportRef = useRef('cloud');
+  // Watchdog for the cloud broker's initial handshake (feature: automatic
+  // online/offline transport selection). PeerJS surfaces an unreachable
+  // broker as a socket that just never opens rather than a prompt error, so
+  // without a timer a device with no route to 0.peerjs.com sits on
+  // "preparing" indefinitely instead of degrading to an offline link.
+  const cloudOpenWatchdogRef = useRef(null);
+  // Unsubscribe handle for a pending "retry once the internet is back" hook,
+  // so cleanup() can cancel it and a second arm can replace the first rather
+  // than both firing.
+  const connectivityRetryRef = useRef(null);
   // Throttles the background transfer notification to a few updates/sec
   // instead of firing on every 64KB chunk
   const notifyThrottleRef = useRef(0);
+  // Same idea for the resume checkpoint (feature: resume after app restart) —
+  // written every ~2s during an active receive instead of on every chunk, to
+  // keep localStorage write pressure low.
+  const checkpointThrottleRef = useRef(0);
+  // Sender-side: caches each queued file's SHA-256 (as a Promise, so a
+  // broadcast to several receivers hashes each file once instead of once per
+  // peer) for the integrity check in the 'metadata' message.
+  const fileHashCacheRef = useRef(new Map());
   // Pause/resume refs (avoid stale closures inside the send loop)
   const isPausedRef = useRef(false);
 
@@ -939,7 +446,7 @@ function App() {
       } else if (updateAvailable && flexibleAllowed && !appUpdateDismissedRef.current) {
         setAppUpdate((prev) => prev ?? { status: 'available', progress: 0 });
       }
-    }).catch(() => {});
+    }).catch((err) => console.warn('runUpdateCheck: update check failed', err));
   };
 
   // Check once on mount, then again whenever the app returns to the
@@ -952,6 +459,58 @@ function App() {
     });
     return () => { handle.remove(); };
   }, []);
+
+  // Resume-after-restart (feature: cross-process-kill transfer resume) — on
+  // cold start, check for a receive checkpoint from an interrupted transfer.
+  // Only offer to resume if its native temp file is still actually on disk;
+  // Android can (and does) clear app cache independently of localStorage.
+  useEffect(() => {
+    const checkpoint = getCheckpoint();
+    if (!checkpoint) return;
+    if (!Capacitor.isNativePlatform() || !checkpoint.incomingFileId) {
+      clearCheckpoint();
+      return;
+    }
+    NotifyDownload.getPartialInfo({ fileId: checkpoint.incomingFileId })
+      .then(({ exists }) => {
+        if (exists) setInterruptedTransfer(checkpoint);
+        else clearCheckpoint();
+      })
+      .catch(() => clearCheckpoint());
+  }, []);
+
+  const resumeInterruptedTransfer = () => {
+    const checkpoint = interruptedTransfer;
+    if (!checkpoint) return;
+    setInterruptedTransfer(null);
+    reconnectAttemptRef.current = 0;
+    currentFileIndexRef.current = checkpoint.fileIndex;
+    receivedBytes.current = checkpoint.offset;
+    incomingFileIdRef.current = checkpoint.incomingFileId;
+    writeChainRef.current = Promise.resolve();
+    incomingFileRef.current = checkpoint.currentFile;
+    setIncomingFile(checkpoint.currentFile);
+    setReceiveFileIndex(checkpoint.fileIndex);
+    setReceiveFileCount(checkpoint.totalFiles || 1);
+    setTargetPeerId(checkpoint.roomCode);
+    setMode('p2p-receive');
+    setTransferState('reconnecting');
+    transferStartTime.current = Date.now();
+    // isResume=true: same path a live mid-transfer drop already uses — sends
+    // { type: 'resume', fileIndex, offset } once connected, and the sender's
+    // room only needs to still be open (this doesn't help if the sender's
+    // app also restarted, same as any other reconnect).
+    connectToSender(checkpoint.roomCode, true, checkpoint.transportMode, checkpoint.groupInfo);
+  };
+
+  const discardInterruptedTransfer = () => {
+    const checkpoint = interruptedTransfer;
+    setInterruptedTransfer(null);
+    clearCheckpoint();
+    if (checkpoint?.incomingFileId && Capacitor.isNativePlatform()) {
+      NotifyDownload.discardPartial({ fileId: checkpoint.incomingFileId }).catch(() => {});
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAppUpdateStateChanged(({ status, bytesDownloaded, totalBytesToDownload }) => {
@@ -998,7 +557,23 @@ function App() {
   const homeTabRef = useRef(homeTab);
   const showQrZoomRef = useRef(showQrZoom);
   const showScannerRef = useRef(showScanner);
+  // Also read by the connectivity-triggered rejoin (feature: automatic
+  // transport selection), which fires long after its closure was created and
+  // must not resume a join the user has since moved on from.
+  const transferStateRef = useRef(transferState);
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { transferStateRef.current = transferState; }, [transferState]);
+
+  // The automatic-transport watchdog and the "retry when the internet is
+  // back" listener are both armed from event handlers rather than owned by an
+  // effect, so nothing else would release them if the app unmounts mid-attempt.
+  useEffect(() => () => {
+    clearCloudOpenWatchdog();
+    if (connectivityRetryRef.current) {
+      connectivityRetryRef.current();
+      connectivityRetryRef.current = null;
+    }
+  }, []);
   useEffect(() => { homeTabRef.current = homeTab; }, [homeTab]);
   useEffect(() => { showQrZoomRef.current = showQrZoom; }, [showQrZoom]);
   useEffect(() => { showScannerRef.current = showScanner; }, [showScanner]);
@@ -1123,6 +698,7 @@ function App() {
   // entirely rather than showing a toggle that will always fail.
   useEffect(() => {
     isWifiDirectSupported().then(setWifiDirectAvailable);
+    isHotspotSupported().then(setHotspotSupported);
   }, []);
 
   // Wi-Fi Direct discovery: fully offline, no router/shared-Wi-Fi/internet
@@ -1136,24 +712,75 @@ function App() {
     const browsing = wifiDirectBrowsing && onHomeScreen;
     if (!browsing) {
       setWifiDirectPeers([]);
+      setWifiDirectLocationOff(false);
+      setWifiDirectWifiOff(false);
       wifiDirectStopDiscovery();
       return;
     }
 
     let cancelled = false;
-    wifiDirectInitialize()
-      .then(() => { if (!cancelled) wifiDirectDiscoverPeers(); })
-      .catch((err) => {
-        if (!cancelled) {
-          setWifiDirectBrowsing(false);
-          showToast('Could not start Wi-Fi Direct discovery: ' + err.message, 'error');
+    let initialized = false;
+
+    // Single recurring tick does four things: (1) checks the Wi-Fi radio
+    // itself, since Wi-Fi Direct needs zero internet/router but still rides
+    // the Wi-Fi radio — toggling Wi-Fi off (which people do thinking it's
+    // unrelated to an "offline" transfer) silently kills discovery; (2)
+    // checks system Location, since Wi-Fi P2P discovery silently finds
+    // nothing while it's off, independent of the app's own permission
+    // grant; (3) initializes once both are confirmed on; (4) re-triggers
+    // discoverPeers() every tick, since it's a single ~12s scan+listen
+    // cycle, not continuous discovery — Android stops actively scanning
+    // once it completes. Merging all of this into one interval means
+    // turning Wi-Fi/Location back on mid-session auto-resumes discovery
+    // without the user re-toggling "Find devices".
+    const tick = async () => {
+      if (cancelled) return;
+      const wifiEnabled = await wifiDirectIsWifiEnabled();
+      if (cancelled) return;
+
+      if (!wifiEnabled) {
+        setWifiDirectWifiOff(true);
+        setWifiDirectLocationOff(false);
+        setWifiDirectPeers([]);
+        return;
+      }
+      setWifiDirectWifiOff(false);
+
+      const locationEnabled = await wifiDirectIsLocationEnabled();
+      if (cancelled) return;
+
+      if (!locationEnabled) {
+        setWifiDirectLocationOff(true);
+        setWifiDirectPeers([]);
+        return;
+      }
+      setWifiDirectLocationOff(false);
+
+      if (!initialized) {
+        try {
+          await wifiDirectInitialize();
+          initialized = true;
+        } catch (err) {
+          if (!cancelled) {
+            setWifiDirectBrowsing(false);
+            showToast('Could not start Wi-Fi Direct discovery: ' + err.message, 'error');
+          }
+          return;
         }
-      });
+      }
+      if (!cancelled) {
+        wifiDirectDiscoverPeers().catch(() => { /* transient busy — next tick retries */ });
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 5000);
 
     const offPeers = onWifiDirectPeersChanged((peers) => setWifiDirectPeers(peers));
 
     return () => {
       cancelled = true;
+      clearInterval(interval);
       offPeers();
       wifiDirectStopDiscovery();
     };
@@ -1203,7 +830,7 @@ function App() {
         reject(new Error('Timed out waiting for the Wi-Fi Direct connection'));
       }, timeoutMs);
       const off = onWifiDirectConnectionChanged(finish);
-      wifiDirectRequestGroupInfo().then(finish).catch(() => {});
+      wifiDirectRequestGroupInfo().then(finish).catch((err) => console.warn('wifiDirectRequestGroupInfo failed, waiting on connection-changed event instead', err));
     });
   };
 
@@ -1221,8 +848,10 @@ function App() {
       // forms — the group forming just means both sides tapped connect, not
       // that the peer-to-peer link is actually ready yet.
       if (selectedFiles.length > 0) {
+        showToast(`Sending ${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'}…`, 'info');
         await startP2PSend('local', groupInfo);
       } else {
+        showToast('Connecting to receive…', 'info');
         await startP2PReceive(generateRoomCode(), 'local', groupInfo);
       }
     } catch (err) {
@@ -1232,8 +861,170 @@ function App() {
     }
   };
 
+  // Passive side of a Wi-Fi Direct connection: connectToWifiDirectPeer above
+  // only runs on the device that taps "Connect" — the other device (just
+  // sitting in the peer list, discoverable) never subscribed to
+  // connectionChanged itself, so its native side would form the group and
+  // fire the broadcast into the void. The initiator would then be the only
+  // one to ever start the local-socket handshake, with nobody on this end
+  // listening/dialing back — which is exactly why a connect attempt sat on
+  // "Sending…" and then failed with a timeout instead of connecting. Answer
+  // automatically as the receiver whenever a group forms that this device
+  // didn't itself initiate.
+  useEffect(() => {
+    if (!wifiDirectAvailable) return;
+    let lastGroupFormed = false;
+    const off = onWifiDirectConnectionChanged((info) => {
+      if (!info.groupFormed) {
+        lastGroupFormed = false;
+        return;
+      }
+      if (lastGroupFormed || wifiDirectConnecting) return;
+      lastGroupFormed = true;
+      setWifiDirectBrowsing(false);
+      showToast('Connecting to receive…', 'info');
+      startP2PReceive(generateRoomCode(), 'local', info);
+    });
+    return off;
+  }, [wifiDirectAvailable, wifiDirectConnecting]);
+
+  // Hotspot fallback host side (feature: Wi-Fi Direct → hotspot when WFD
+  // connect fails/isn't available). Opens a LocalOnlyHotspot, then reuses the
+  // exact same 'local' transport startP2PSend already uses for Wi-Fi Direct —
+  // the only difference is how the two devices got IP connectivity in the
+  // first place. groupInfo.kind: 'hotspot' tells startP2PSend/connectToSender
+  // to tear down via hotspotStop/hotspotLeave instead of wifiDirectRemoveGroup.
+  const startHotspotFallbackSend = async () => {
+    if (selectedFiles.length === 0) {
+      showToast('Select a file to send first.', 'error');
+      return;
+    }
+    setHotspotStarting(true);
+    try {
+      const { ssid, passphrase } = await hotspotStart();
+      setHotspotCredentials({ ssid, passphrase });
+      showToast('Hotspot ready — have the other device scan the QR code below', 'info');
+      await startP2PSend('local', { isGroupOwner: true, groupOwnerAddress: null, kind: 'hotspot' });
+    } catch (err) {
+      setHotspotCredentials(null);
+      showToast('Could not start hotspot fallback: ' + err.message, 'error');
+    } finally {
+      setHotspotStarting(false);
+    }
+  };
+
+  // Single entry point for "Send" — picks the transport itself instead of
+  // making the user classify their own network first (feature: automatic
+  // online/offline transport selection).
+  //
+  // The cheap negative is taken up front: navigator.onLine === false means no
+  // interface is up at all, so a cloud attempt is guaranteed to waste the
+  // user's time and we go straight to hotspot. Everything else optimistically
+  // starts the cloud room *immediately* — no probe latency on the happy path
+  // — and leans on the watchdog inside attemptConnection to degrade if the
+  // broker turns out to be unreachable. That covers the case navigator.onLine
+  // gets wrong (on a hotspot or in a Wi-Fi Direct group: interface up, no
+  // internet), which is precisely the case this app hits most.
+  //
+  // Note the cloud path is not exclusive: while a cloud room is open, the
+  // advertise effect above also runs startLocalRoomHost, so a same-Wi-Fi
+  // receiver still connects over the direct LAN socket and never touches the
+  // broker. "Online" here only decides whether the *broker* is worth trying.
+  const startAutoSend = async () => {
+    if (selectedFiles.length === 0) {
+      showToast('Select a file to send first.', 'error');
+      return;
+    }
+    const definitelyOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (definitelyOffline && hotspotSupported) {
+      showToast('No internet — starting an offline link instead…', 'info');
+      return startHotspotFallbackSend();
+    }
+    return startP2PSend('cloud');
+  };
+
+  // Hotspot fallback join side — triggered automatically when a scanned QR
+  // carries ssid/pass (see openScanner's tick() below), not from a dedicated
+  // button: the existing "Scan QR Code" entry point already covers it.
+  const joinHotspotFallback = async (roomFromScan, { ssid, passphrase }) => {
+    cleanup();
+    setTargetPeerId(roomFromScan);
+    setMode('p2p-receive');
+    setTransferState('preparing');
+    showToast('Joining hotspot…', 'info');
+    try {
+      const { gatewayIp } = await hotspotJoin(ssid, passphrase);
+      if (!gatewayIp) throw new Error('Could not determine the host device\'s address');
+      await startP2PReceive(roomFromScan, 'local', { isGroupOwner: false, groupOwnerAddress: gatewayIp, kind: 'hotspot' });
+    } catch (err) {
+      setTransferState('error');
+      setErrorMsg('Could not join hotspot: ' + err.message);
+    }
+  };
+
+  // Shared by both QR spots (waiting-screen QR + zoom modal) — carries
+  // ssid/pass alongside the room code while hosting a hotspot fallback, so
+  // the scanning device can join programmatically instead of needing a plain
+  // Wi-Fi Direct proximity tap. Falls back to the bare room code otherwise
+  // (unchanged from before this feature).
+  const buildQrPayload = () => {
+    if (!hotspotCredentials) return roomCode;
+    const params = new URLSearchParams({
+      room: roomCode,
+      ssid: hotspotCredentials.ssid,
+      pass: hotspotCredentials.passphrase
+    });
+    return `https://novashare.app/?${params.toString()}`;
+  };
+
   // Cleanup active peer/connections
+  function clearCloudOpenWatchdog() {
+    if (cloudOpenWatchdogRef.current) {
+      clearTimeout(cloudOpenWatchdogRef.current);
+      cloudOpenWatchdogRef.current = null;
+    }
+  }
+
+  // Automatic offline degrade (feature: automatic transport selection).
+  // Deliberately re-probes rather than trusting the failure that got us here:
+  // a broker that is up but rejected us is a real error the user should see,
+  // not a reason to drop their Wi-Fi and bring up a hotspot. Only a confirmed
+  // lack of internet justifies taking over the radio.
+  async function degradeToOfflineSend(reason) {
+    const online = await isOnline({ force: true });
+    if (online || !hotspotSupported) {
+      setTransferState((prev) => {
+        if (prev === 'complete') return 'complete';
+        showToast(reason, 'error');
+        setErrorMsg(
+          hotspotSupported
+            ? reason
+            : `${reason} This device can't host an offline hotspot, so an internet connection is required.`
+        );
+        return 'error';
+      });
+      return;
+    }
+    showToast('No internet — switching to an offline link…', 'info');
+    // startHotspotFallbackSend routes through startP2PSend, whose cleanup()
+    // tears down the stranded Peer so it stops retrying in the background.
+    await startHotspotFallbackSend();
+  }
+
   function cleanup() {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    clearCloudOpenWatchdog();
+    if (connectivityRetryRef.current) {
+      connectivityRetryRef.current();
+      connectivityRetryRef.current = null;
+    }
+    // Set past the retry cap first so a 'close'/'error' event fired
+    // synchronously by connRef.current.close() below can't re-arm a new
+    // reconnect timer right after this one was just cleared.
+    reconnectAttemptRef.current = MAX_RECONNECT_ATTEMPTS + 1;
     if (connRef.current) {
       try { connRef.current.close(); } catch { /* ignore */ }
       connRef.current = null;
@@ -1283,6 +1074,14 @@ function App() {
     setIsPeerPaused(false);
     setConnectedCount(0);
     setReceivedTexts([]);
+    setHotspotCredentials(null);
+    setSessionClips([]);
+    setClipDraft('');
+    setChatMessages([]);
+    setChatDraft('');
+    setShowChat(false);
+    setShowChatAttach(false);
+    chatBuffersRef.current.clear();
 
     // Clear URL search params without page reload
     window.history.pushState({}, document.title, window.location.pathname);
@@ -1346,6 +1145,52 @@ function App() {
 
   const triggerFileInput = () => {
     fileInputRef.current.click();
+  };
+
+  // Whole-card swipe gesture, active across every screen:
+  // - In Home mode (Home/Apps/History tabs, no files queued yet): left/right
+  //   swipe cycles tabs in the same order as the tab bar. Disabled once files
+  //   are queued so it doesn't fight with each row's own swipe-to-remove.
+  // - In the P2P send/receive screens: a right swipe (the standard mobile
+  //   "back" gesture) acts like tapping the Back/Leave button.
+  // A mostly-vertical drag (list scrolling) is ignored via the
+  // horizontal-dominance check so it never hijacks normal scrolling.
+  const SWIPE_TAB_THRESHOLD = 60;
+
+  const onCardSwipeStart = (e) => {
+    // Swiping over an *unfocused* text field (e.g. the apps search bar)
+    // should still switch tabs like anywhere else. Only once it's focused —
+    // meaning the drag is placing the cursor or selecting text — does the
+    // gesture belong to the field instead of the tab swipe.
+    const target = e.target.closest && e.target.closest('input, textarea, [contenteditable="true"]');
+    const isEditingText = target && document.activeElement === target;
+    homeTabSwipeRef.current = { x: e.clientX, y: e.clientY, active: !isEditingText };
+  };
+
+  const onCardSwipeEnd = (e) => {
+    const start = homeTabSwipeRef.current;
+    homeTabSwipeRef.current = { ...start, active: false };
+    if (!start.active) return;
+
+    const deltaX = e.clientX - start.x;
+    const deltaY = e.clientY - start.y;
+    if (Math.abs(deltaX) < SWIPE_TAB_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
+
+    if (mode !== 'home') {
+      if (deltaX > 0) { rippleTap(e, resetToHome); }
+      return;
+    }
+
+    if (selectedFiles.length > 0) return;
+
+    const currentIndex = HOME_TAB_ORDER.indexOf(homeTab);
+    const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1);
+    if (nextIndex < 0 || nextIndex >= HOME_TAB_ORDER.length) return;
+
+    const nextTab = HOME_TAB_ORDER[nextIndex];
+    setHomeTab(nextTab);
+    if (nextTab === 'history') { setHistoryVersion((v) => v + 1); setHistoryOpenedAt(Date.now()); }
+    triggerHaptic();
   };
 
   // Folder picker (feature #6): each File from a webkitdirectory input
@@ -1420,7 +1265,11 @@ function App() {
       totalBytesSent: 0,
       pendingSendNext: null,
       resumed: false,
-      openTimer: null
+      openTimer: null,
+      // Set by a 'skip-duplicate' reply (feature: duplicate-file skip) —
+      // streamChunksForPeer's sendNext() checks this and abandons the
+      // current file mid-stream instead of sending bytes nobody wants.
+      skipCurrentFile: false
     };
     connsRef.current = [...connsRef.current, peerState];
     setConnectedCount(connsRef.current.length);
@@ -1445,12 +1294,46 @@ function App() {
       // connection just falls through once the timer fires.
       peerState.openTimer = setTimeout(() => {
         if (peerState.resumed) return;
-        conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length });
+        conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length, totalBytes: totalQueueBytesRef.current });
         sendNextQueuedFileForPeer(peerState);
       }, 150);
     });
 
     conn.on('data', (data) => {
+      if (data.type === 'chat-meta' || data.type === 'chat-done' || (data.type === 'chunk' && data.chatId)) {
+        handleChatData(data, conn.peer);
+        return;
+      }
+      if (data.type === 'abort') {
+        // Receiver pre-flight-rejected the batch (e.g. not enough free
+        // storage) — report why instead of the generic "disconnected"
+        // message dropPeer's close-handling toast would otherwise show.
+        showToast(
+          `Receiver stopped the transfer: ${data.reason === 'insufficient-space' ? 'not enough storage space' : (data.reason || 'unknown reason')}`,
+          'error'
+        );
+        return;
+      }
+      if (data.type === 'clip') {
+        // Persistent clipboard channel (feature) — this can arrive any time
+        // the connection is alive, not just mid-batch, since it rides the
+        // same conn a completed transfer leaves open.
+        const entry = { text: data.text, direction: 'received', peerLabel: conn.peer, sortTs: Date.now() };
+        setSessionClips((prev) => [...prev, entry]);
+        addClip(entry);
+        showToast('New clip received', 'info');
+        return;
+      }
+      if (data.type === 'skip-duplicate') {
+        // Receiver already has this exact content (feature: duplicate-file
+        // skip / delta folder sync) — only honor it for whichever file the
+        // receiver was actually just told about, in case this arrives late
+        // after the queue already moved on.
+        if (data.fileIndex === peerState.queueIndex) {
+          peerState.skipCurrentFile = true;
+        }
+        return;
+      }
       if (data.type !== 'resume') return;
       // The 150ms openTimer above may have already lost the race and started
       // a fresh batch-start + stream before this 'resume' arrived (common on
@@ -1509,56 +1392,29 @@ function App() {
   // offline connections on the LocalSignaling socket (the same plugin Wi-Fi
   // Direct uses, but dialed at this device's regular Wi-Fi IP instead of a
   // Wi-Fi Direct group address) so a same-network receiver can connect
-  // without ever reaching PeerJS's cloud broker. Unlike establishLocalConnection
-  // (one-shot: resolves once and stops the server), this keeps the server
-  // running and wires up every receiver that connects while the room stays
-  // open, same as the PeerJS 'connection' event does for the cloud path.
-  const startLocalRoomHost = (code) => {
-    const pcsByConnId = new Map();
-
-    const offMessage = onLocalSignalingMessage(async (connId, msg) => {
-      if (msg.type === 'offer') {
-        const pc = createLocalPeerConnection();
-        pcsByConnId.set(connId, pc);
-        pc.onicecandidate = (e) => {
-          if (e.candidate) localSignalingSend(connId, { type: 'ice', candidate: e.candidate.toJSON() });
-        };
-        try {
-          const channelPromise = waitForRemoteChannel(pc);
-          const answerSdp = await createAnswerFromOffer(pc, msg.sdp);
-          localSignalingSend(connId, { type: 'answer', sdp: answerSdp });
-          const channel = await waitForChannelOpen(await channelPromise);
-          const conn = new PeerJsCompatDataConnection(channel, `lan-${connId}`);
-          pcsByConnId.delete(connId);
-          handleIncomingReceiverConnection(conn, code);
-        } catch {
-          pcsByConnId.delete(connId);
-        }
-      } else if (msg.type === 'ice') {
-        const pc = pcsByConnId.get(connId);
-        if (pc) await addRemoteIceCandidate(pc, msg.candidate);
-      }
-    });
-
-    localSignalingStartServer().catch(() => {
-      // No native LocalSignaling support (web/desktop) — receivers on this
-      // list transparently fall back to the cloud path below.
-    });
-
-    return () => {
-      offMessage();
-      localSignalingStopServer();
-      pcsByConnId.forEach((pc) => { try { pc.close(); } catch { /* already closed */ } });
-    };
-  };
+  // without ever reaching PeerJS's cloud broker. Unlike
+  // establishLocalSocketConnection (one-shot: resolves once and stops the
+  // server), this keeps the server running and wires up every receiver that
+  // connects while the room stays open, same as the PeerJS 'connection'
+  // event does for the cloud path.
+  const startLocalRoomHost = (code) => startLocalSocketRoomHost(code, handleIncomingReceiverConnection);
 
   // transportMode: 'cloud' (default, PeerJS broker — works cross-network as
   // long as both sides can reach the internet) or 'local' (Wi-Fi Direct, zero
-  // internet/router needed — see establishLocalConnection above). groupInfo
+  // internet/router needed — see establishLocalSocketConnection above). groupInfo
   // is required for 'local' and comes from a completed WifiDirect connection.
   const startP2PSend = (transportMode = 'cloud', groupInfo = null) => {
-    if (!selectedFiles || selectedFiles.length === 0) return;
+    if (!selectedFiles || selectedFiles.length === 0) {
+      showToast('Select a file to send first.', 'error');
+      return;
+    }
     cleanup();
+    // Stale hotspot-fallback QR text shouldn't linger into an unrelated
+    // cloud or plain-Wi-Fi-Direct send — only startHotspotFallbackSend's own
+    // call (which sets hotspotCredentials right before this) should keep it.
+    if (!(transportMode === 'local' && groupInfo?.kind === 'hotspot')) {
+      setHotspotCredentials(null);
+    }
     senderTransportRef.current = transportMode;
     setIsPaused(false);
     isPausedRef.current = false;
@@ -1574,16 +1430,37 @@ function App() {
       const code = generateRoomCode();
       setRoomCode(code);
       // No PeerJS Peer exists on this path — a thin stand-in gives cleanup()
-      // an object shaped like one so it can tear down Wi-Fi Direct the same
-      // way it destroys a real Peer.
-      peerRef.current = { destroy: () => { wifiDirectRemoveGroup(); } };
+      // an object shaped like one so it can tear down the underlying link the
+      // same way it destroys a real Peer. groupInfo.kind distinguishes a
+      // hotspot-fallback link (feature: Wi-Fi Direct → hotspot) from a plain
+      // Wi-Fi Direct one, since they need different native teardown calls.
+      peerRef.current = {
+        destroy: () => {
+          if (groupInfo?.kind === 'hotspot') {
+            if (groupInfo.isGroupOwner) hotspotStop(); else hotspotLeave();
+          } else {
+            wifiDirectRemoveGroup();
+          }
+        }
+      };
 
       // Stays on the home screen (no setMode/setTransferState here) until the
       // handshake actually completes — the Wi-Fi Direct group forming just
       // means both devices tapped connect, not that the other side is ready
       // to receive; jumping to a "connecting" screen before that point is
       // what looked like it skipped waiting for the other person entirely.
-      return establishLocalConnection({
+      //
+      // Hotspot fallback is the opposite: unlike Wi-Fi Direct, nobody has
+      // found anybody yet at this point — the QR code on the waiting screen
+      // is what the other device needs to scan to join at all. Staying on
+      // the home screen here would mean the QR never renders and the
+      // handshake this promise is waiting on can never happen.
+      if (groupInfo?.kind === 'hotspot') {
+        setMode('p2p-send');
+        setTransferState('waiting');
+      }
+
+      return establishLocalSocketConnection({
         isGroupOwner: groupInfo.isGroupOwner,
         groupOwnerAddress: groupInfo.groupOwnerAddress,
         roomCode: code,
@@ -1593,11 +1470,20 @@ function App() {
           setRoomCode(agreedCode);
           setMode('p2p-send');
           setTransferState('waiting');
-          showToast('Offline Wi-Fi Direct link ready!', 'success');
+          showToast(groupInfo?.kind === 'hotspot' ? 'Hotspot link ready!' : 'Offline Wi-Fi Direct link ready!', 'success');
           handleIncomingReceiverConnection(conn, agreedCode);
         })
         .catch((err) => {
           showToast('Offline connection failed: ' + err.message, 'error');
+          // Hotspot fallback already jumped to the waiting/QR screen above
+          // (unlike Wi-Fi Direct, which never left home on failure) — back
+          // out of it on failure instead of leaving the user stuck looking
+          // at a QR code that can no longer connect.
+          if (groupInfo?.kind === 'hotspot') {
+            setMode('home');
+            setTransferState('idle');
+            setHotspotCredentials(null);
+          }
         });
     }
 
@@ -1626,7 +1512,19 @@ function App() {
 
       peerRef.current = peer;
 
+      // An unreachable broker doesn't error — the socket just never opens
+      // (see cloudOpenWatchdogRef). This is what catches the case
+      // navigator.onLine reports as online: a live Wi-Fi interface with no
+      // route out, which startAutoSend can't detect up front without making
+      // every online send pay for a probe first.
+      clearCloudOpenWatchdog();
+      cloudOpenWatchdogRef.current = setTimeout(() => {
+        cloudOpenWatchdogRef.current = null;
+        degradeToOfflineSend('Could not reach the signaling server.');
+      }, CLOUD_OPEN_TIMEOUT_MS);
+
       peer.on('open', () => {
+        clearCloudOpenWatchdog();
         setTransferState('waiting');
         showToast('Direct P2P Room Ready!', 'success');
       });
@@ -1635,9 +1533,23 @@ function App() {
 
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
+          // Still mid-handshake with a fresh code — the watchdog is re-armed
+          // by the retry, so drop the current one rather than letting it fire
+          // against an attempt that has already been superseded.
+          clearCloudOpenWatchdog();
           peer.destroy();
           attemptConnection(retryCount + 1);
         } else {
+          clearCloudOpenWatchdog();
+          // 'network' / 'server-error' / 'socket-error' all mean the broker
+          // itself is unreachable, which is exactly the offline case — hand
+          // those to the degrade path instead of dead-ending on an error
+          // screen. Anything else is a genuine peer-level fault.
+          const brokerUnreachable = ['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type);
+          if (brokerUnreachable) {
+            degradeToOfflineSend('Could not reach the signaling server.');
+            return;
+          }
           setTransferState((prev) => {
             if (prev === 'complete') return 'complete';
             showToast('P2P Error: ' + err.message, 'error');
@@ -1681,7 +1593,7 @@ function App() {
     );
   };
 
-  const sendNextQueuedFileForPeer = (peerState) => {
+  const sendNextQueuedFileForPeer = async (peerState) => {
     const idx = peerState.queueIndex;
     const files = sendQueueRef.current;
 
@@ -1691,6 +1603,8 @@ function App() {
       if (connsRef.current.length > 0 && connsRef.current.every((p) => p.queueIndex >= files.length)) {
         setTransferState('complete');
         import('canvas-confetti').then(({ default: confetti }) => confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } }));
+        playCompletionChime();
+        triggerSuccessHaptic();
         showToast('Transfer completed!', 'success');
         const record = addHistoryEntry({
           direction: 'sent',
@@ -1707,6 +1621,22 @@ function App() {
     }
 
     const file = files[idx];
+
+    // SHA-256 for end-to-end integrity verification, cached as a Promise per
+    // File so a broadcast to several receivers only hashes each file once
+    // (each peer awaits the same in-flight Promise instead of re-hashing).
+    // null on failure/no-SubtleCrypto — the receiver treats a null hash as
+    // "skip verification" rather than failing the transfer.
+    let hashPromise = fileHashCacheRef.current.get(file);
+    if (!hashPromise) {
+      hashPromise = computeFileHash(file).catch(() => null);
+      fileHashCacheRef.current.set(file, hashPromise);
+    }
+    const sha256 = await hashPromise;
+
+    // The peer may have dropped while we were hashing.
+    if (!connsRef.current.includes(peerState)) return;
+
     try {
       peerState.conn.send({
         type: 'metadata',
@@ -1719,7 +1649,8 @@ function App() {
         // webkitRelativePath, e.g. "myFolder/sub" — empty for a plain file.
         relPath: file.webkitRelativePath
           ? file.webkitRelativePath.split('/').slice(0, -1).join('/')
-          : ''
+          : '',
+        sha256
       });
     } catch {
       return;
@@ -1735,6 +1666,19 @@ function App() {
     const sendNext = () => {
       // Peer disconnected mid-stream — stop, dropPeer already handled cleanup
       if (!connsRef.current.includes(peerState)) return;
+
+      // Receiver already has this file (feature: duplicate-file skip) —
+      // abandon it wherever we are in the stream and move on, rather than
+      // waiting for `offset >= file.size` to notice naturally.
+      if (peerState.skipCurrentFile) {
+        peerState.skipCurrentFile = false;
+        const skippedSize = file.size - offset;
+        peerState.totalBytesSent += skippedSize;
+        peerState.queueIndex += 1;
+        updateAggregateStats();
+        sendNextQueuedFileForPeer(peerState);
+        return;
+      }
 
       // Paused: stash this peer's continuation, togglePauseTransfer resumes it
       if (isPausedRef.current) {
@@ -1835,13 +1779,47 @@ function App() {
     return connectToSender(code, false, transportMode, groupInfo);
   }
 
+  // Snapshot of enough state to reconnect and resend a 'resume' message after
+  // an app restart — see saveCheckpoint calls below and resumeInterruptedTransfer.
+  // Native-only: the web receive path buffers chunks in memory (receivedChunks),
+  // which is gone on reload regardless of what we persist here.
+  const buildCheckpoint = () => ({
+    direction: 'receive',
+    fileIndex: currentFileIndexRef.current,
+    offset: receivedBytes.current,
+    incomingFileId: incomingFileIdRef.current,
+    currentFile: incomingFileRef.current,
+    totalFiles: incomingFileRef.current?.totalFiles || 1,
+    roomCode: receiverTransportRef.current.roomCode,
+    transportMode: receiverTransportRef.current.mode,
+    groupInfo: receiverTransportRef.current.groupInfo
+  });
+
   // Handles every 'data' message from the sender — shared by the initial
   // connection and any resumed reconnection, since a resume just continues
   // feeding this same handler mid-batch instead of starting over.
   const handleReceiverData = (data) => {
+    if (data.type === 'chat-meta' || data.type === 'chat-done' || (data.type === 'chunk' && data.chatId)) {
+      handleChatData(data, targetPeerId);
+      return;
+    }
     if (data.type === 'batch-start') {
       receivedFilesRef.current = [];
       setCompletedFiles([]);
+      // Disk-space pre-check: reject the whole batch upfront with a clear
+      // reason instead of letting appendChunk/finishReceive fail partway
+      // through on a real ENOSPC. 10MB safety margin for filesystem overhead.
+      if (Capacitor.isNativePlatform() && data.totalBytes) {
+        NotifyDownload.checkFreeSpace().then(({ freeBytes }) => {
+          const margin = 10 * 1024 * 1024;
+          if (freeBytes < data.totalBytes + margin) {
+            setTransferState('error');
+            setErrorMsg(`Not enough storage space — need ${formatBytes(data.totalBytes)}, only ${formatBytes(freeBytes)} free.`);
+            try { connRef.current?.send({ type: 'abort', reason: 'insufficient-space' }); } catch { /* ignore */ }
+            connRef.current?.close();
+          }
+        }).catch(() => { /* couldn't check — proceed optimistically rather than block on it */ });
+      }
     } else if (data.type === 'metadata') {
       currentFileIndexRef.current = data.fileIndex || 0;
       incomingFileRef.current = {
@@ -1849,7 +1827,9 @@ function App() {
         size: data.size,
         type: data.mime,
         relPath: data.relPath || '',
-        isText: data.mime === TEXT_SNIPPET_MIME
+        isText: data.mime === TEXT_SNIPPET_MIME,
+        sha256: data.sha256 || null,
+        totalFiles: data.totalFiles || 1
       };
       setIncomingFile(incomingFileRef.current);
       setReceiveFileIndex(data.fileIndex || 0);
@@ -1863,12 +1843,37 @@ function App() {
       incomingFileIdRef.current = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       writeChainRef.current = Promise.resolve();
       transferStartTime.current = Date.now();
+
+      // Duplicate-file skip / delta folder sync: an identical file (by hash
+      // + size) already sitting on this device doesn't need re-transferring.
+      // Checked synchronously (localStorage) so the reply goes out before
+      // the sender's first chunk in most cases, though not guaranteed — the
+      // chunk handler below discards anything that slips through regardless.
+      const isDuplicate = !data.isText && hasReceived(data.sha256, data.size);
+      skippingCurrentFileRef.current = isDuplicate;
+      if (isDuplicate) {
+        try { connRef.current?.send({ type: 'skip-duplicate', fileIndex: data.fileIndex || 0 }); } catch { /* ignore */ }
+        receivedFilesRef.current = [...receivedFilesRef.current, {
+          name: data.name, size: data.size, relPath: data.relPath || '', isText: false, skipped: true, verified: true
+        }];
+        setCompletedFiles(receivedFilesRef.current);
+        return;
+      }
+
+      if (Capacitor.isNativePlatform()) {
+        checkpointThrottleRef.current = Date.now();
+        saveCheckpoint(buildCheckpoint());
+      }
     } else if (data.type === 'control') {
       setIsPeerPaused(data.action === 'pause');
     } else if (data.type === 'room-full') {
       setTransferState('error');
       setErrorMsg('This room already has the maximum number of receivers.');
     } else if (data.type === 'chunk') {
+      // The sender may not have reacted to our 'skip-duplicate' reply yet —
+      // discard anything that still arrives for this file rather than
+      // writing bytes nobody asked for.
+      if (skippingCurrentFileRef.current) return;
       if (Capacitor.isNativePlatform()) {
         // Stream this chunk to a temp file on the native side instead of
         // keeping it in JS memory — writeChain keeps appends in arrival
@@ -1887,6 +1892,14 @@ function App() {
         receivedTextChunksRef.current.push(data.chunk);
       }
       receivedBytes.current += data.chunk.byteLength;
+
+      if (Capacitor.isNativePlatform()) {
+        const now = Date.now();
+        if (now - checkpointThrottleRef.current > 2000) {
+          checkpointThrottleRef.current = now;
+          saveCheckpoint(buildCheckpoint());
+        }
+      }
 
       const totalSize = incomingFileRef.current ? incomingFileRef.current.size : 0;
 
@@ -1937,11 +1950,31 @@ function App() {
 
         if (Capacitor.isNativePlatform()) {
           const fileId = incomingFileIdRef.current;
+          const expectedHash = incomingFileRef.current ? incomingFileRef.current.sha256 : null;
           writeChainRef.current = writeChainRef.current.then(async () => {
             try {
-              await NotifyDownload.finishReceive({ fileId, fileName, mimeType, relPath });
-              receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, size: fileSize, relPath, isText }];
+              // Integrity check (feature: end-to-end verification) — the
+              // WebRTC DTLS layer protects the wire, but nothing else
+              // verifies the bytes that actually landed on disk match what
+              // the sender hashed before sending. A null expectedHash means
+              // the sender couldn't hash (no SubtleCrypto) — skip rather
+              // than fail a transfer we have no way to verify.
+              if (expectedHash) {
+                const { sha256: actualHash } = await NotifyDownload.hashFile({ fileId });
+                if (actualHash !== expectedHash) {
+                  await NotifyDownload.discardPartial({ fileId }).catch(() => {});
+                  clearCheckpoint();
+                  recordError('integrity-check', new Error(`Hash mismatch for ${fileName}: expected ${expectedHash}, got ${actualHash}`));
+                  receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, size: fileSize, relPath, isText, verified: false, failed: true }];
+                  setCompletedFiles(receivedFilesRef.current);
+                  showToast(`${fileName} failed to verify — please retry the transfer.`, 'error');
+                  return;
+                }
+              }
+              const { uri } = await NotifyDownload.finishReceive({ fileId, fileName, mimeType, relPath });
+              receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, size: fileSize, relPath, isText, uri, mimeType, verified: !!expectedHash }];
               setCompletedFiles(receivedFilesRef.current);
+              if (!isText && expectedHash) recordReceived({ hash: expectedHash, size: fileSize, name: fileName });
               showToast(isText ? 'Text snippet received' : `${fileName} saved to Downloads`, 'success');
             } catch (err) {
               showToast(`Could not save ${fileName}: ${err.message}`, 'error');
@@ -1953,8 +1986,18 @@ function App() {
           receivedFilesRef.current = [...receivedFilesRef.current, { name: fileName, url, size: fileSize, relPath, isText }];
           setCompletedFiles(receivedFilesRef.current);
           if (!isText) saveReceivedFile(blob, fileName, url);
+          const webExpectedHash = incomingFileRef.current ? incomingFileRef.current.sha256 : null;
+          if (!isText && webExpectedHash) recordReceived({ hash: webExpectedHash, size: fileSize, name: fileName });
         }
       }
+    } else if (data.type === 'clip') {
+      // Persistent clipboard channel (feature) — arrives any time the
+      // connection to the sender is still open, including well after
+      // batch-complete (see the Complete-state clipboard panel).
+      const entry = { text: data.text, direction: 'received', peerLabel: targetPeerId, sortTs: Date.now() };
+      setSessionClips((prev) => [...prev, entry]);
+      addClip(entry);
+      showToast('New clip received', 'info');
     } else if (data.type === 'batch-complete') {
       setTransferState('complete');
       import('canvas-confetti').then(({ default: confetti }) => confetti({
@@ -1962,14 +2005,17 @@ function App() {
         spread: 60,
         origin: { y: 0.6 }
       }));
+      playCompletionChime();
+      triggerSuccessHaptic();
       showToast('Transfer completed!', 'success');
+      clearCheckpoint();
       addHistoryEntry({
         direction: 'received',
         kind: receivedFilesRef.current.some((f) => f.isText) ? 'text' : 'file',
-        files: receivedFilesRef.current.map((f) => ({ name: f.name, size: f.size })),
+        files: receivedFilesRef.current.map((f) => ({ name: f.name, size: f.size, verified: f.verified, skipped: f.skipped })),
         peerLabel: targetPeerId,
         roomCode: targetPeerId,
-        status: 'complete'
+        status: receivedFilesRef.current.some((f) => f.failed) ? 'partial' : 'complete'
       });
       setHistoryVersion((v) => v + 1);
     }
@@ -2000,7 +2046,10 @@ function App() {
     }
     showToast(`Connection lost — reconnecting (attempt ${reconnectAttemptRef.current}/${MAX_RECONNECT_ATTEMPTS})…`, 'error');
     const { mode, groupInfo } = receiverTransportRef.current;
-    setTimeout(() => connectToSender(code, true, mode, groupInfo), reconnectAttemptRef.current * 1000);
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      connectToSender(code, true, mode, groupInfo);
+    }, reconnectAttemptRef.current * 1000);
   };
 
   // Shared by both transports once a live conn (PeerJS DataConnection or
@@ -2036,13 +2085,25 @@ function App() {
   // from, instead of restarting the whole batch. transportMode/groupInfo
   // select the offline Wi-Fi Direct path instead of the default PeerJS cloud.
   const connectToSender = (code, isResume, transportMode = 'cloud', groupInfo = null) => {
-    receiverTransportRef.current = { mode: transportMode, groupInfo };
+    // roomCode lives on this ref (not just the targetPeerId state) so the
+    // checkpoint-saving code below always reads the current value — a plain
+    // state closure captured when the connection was wired would go stale
+    // the moment setTargetPeerId fires later.
+    receiverTransportRef.current = { mode: transportMode, groupInfo, roomCode: code };
 
     if (transportMode === 'local') {
-      peerRef.current = { destroy: () => { wifiDirectRemoveGroup(); } };
-      if (!isResume) showToast('Connecting over Wi-Fi Direct...', 'info');
+      peerRef.current = {
+        destroy: () => {
+          if (groupInfo?.kind === 'hotspot') {
+            if (groupInfo.isGroupOwner) hotspotStop(); else hotspotLeave();
+          } else {
+            wifiDirectRemoveGroup();
+          }
+        }
+      };
+      if (!isResume) showToast(groupInfo?.kind === 'hotspot' ? 'Connecting over hotspot...' : 'Connecting over Wi-Fi Direct...', 'info');
 
-      return establishLocalConnection({
+      return establishLocalSocketConnection({
         isGroupOwner: groupInfo.isGroupOwner,
         groupOwnerAddress: groupInfo.groupOwnerAddress,
         roomCode: code,
@@ -2076,8 +2137,8 @@ function App() {
       // a Wi-Fi Direct group with a guaranteed direct route, so a failed
       // attempt (different subnet, client isolation, sender not hosting a
       // local listener) should fall back to cloud quickly rather than making
-      // the user wait out the full 30s establishLocalConnection budget.
-      establishLocalConnection({
+      // the user wait out the full 30s establishLocalSocketConnection budget.
+      establishLocalSocketConnection({
         isGroupOwner: false,
         groupOwnerAddress: groupInfo.host,
         roomCode: code,
@@ -2105,7 +2166,17 @@ function App() {
 
     peerRef.current = peer;
 
+    // Mirrors the sender's watchdog: an unreachable broker leaves the socket
+    // silently un-opened rather than erroring, so without this a receiver
+    // with no internet sits on "preparing" forever.
+    clearCloudOpenWatchdog();
+    cloudOpenWatchdogRef.current = setTimeout(() => {
+      cloudOpenWatchdogRef.current = null;
+      handleReceiverBrokerFailure(code, isResume);
+    }, CLOUD_OPEN_TIMEOUT_MS);
+
     peer.on('open', () => {
+      clearCloudOpenWatchdog();
       if (!isResume) showToast('Connecting to room ' + code + '...', 'info');
 
       computeSecurityCode(code, peer.id).then(setMySecurityCode);
@@ -2115,17 +2186,64 @@ function App() {
     });
 
     peer.on('error', () => {
-      if (isResume) {
-        scheduleReconnectRetry(code);
-        return;
-      }
+      clearCloudOpenWatchdog();
+      handleReceiverBrokerFailure(code, isResume);
+    });
+  };
+
+  // Receiver-side counterpart to degradeToOfflineSend. A receiver can't
+  // unilaterally switch transports the way a sender can — it has nothing to
+  // fall back *to* without a host to dial, since finding one offline needs
+  // either a QR scan (hotspot credentials) or an already-formed Wi-Fi Direct
+  // group. So instead of degrading, this distinguishes the two failures the
+  // old single error message conflated, and arms an automatic retry for the
+  // one that resolves itself.
+  const handleReceiverBrokerFailure = async (code, isResume) => {
+    if (isResume) {
+      scheduleReconnectRetry(code);
+      return;
+    }
+    const online = await isOnline({ force: true });
+    if (online) {
       setTransferState((prev) => {
         if (prev === 'complete') return 'complete';
         showToast('Could not reach signaling server.', 'error');
         setErrorMsg('Signaling server connection failed. Check the code or try again.');
         return 'error';
       });
+      return;
+    }
+    // Offline: the code is probably fine and the network is the problem, so
+    // say that and wait rather than blaming the code. awaitConnectivity below
+    // retries the join by itself the moment a route appears.
+    setTransferState((prev) => {
+      if (prev === 'complete') return 'complete';
+      showToast('No internet — waiting for a connection…', 'info');
+      setErrorMsg(
+        "You're offline, so this room code can't be looked up. Reconnect to the internet and this will retry automatically — or scan the sender's QR code to connect without any network."
+      );
+      return 'error';
     });
+    awaitConnectivityThenRejoin(code);
+  };
+
+  // Arms a one-shot rejoin for when connectivity comes back (feature:
+  // automatic transport selection). Unsubscribes itself on the first
+  // successful re-probe so a flapping interface can't stack up retries, and
+  // re-checks mode/transferState at fire time so a user who navigated away or
+  // connected some other way in the meantime isn't yanked back into a join.
+  const awaitConnectivityThenRejoin = (code) => {
+    if (connectivityRetryRef.current) connectivityRetryRef.current();
+    const off = subscribeConnectivity(async () => {
+      if (!(await isOnline({ force: true }))) return;
+      if (connectivityRetryRef.current !== off) return;
+      connectivityRetryRef.current = null;
+      off();
+      if (modeRef.current !== 'p2p-receive' || transferStateRef.current !== 'error') return;
+      showToast('Back online — retrying…', 'info');
+      connectToSender(code, false, 'cloud', null);
+    });
+    connectivityRetryRef.current = off;
   };
 
   // Web-only: a real browser's <a download> already writes to the Downloads
@@ -2145,6 +2263,160 @@ function App() {
       showToast(message, 'success');
     }).catch(() => {
       showToast('Failed to copy.', 'error');
+    });
+  };
+
+  // Persistent clipboard channel (feature): sends a text snippet over
+  // whichever DataConnection(s) are still open post-transfer — broadcasts to
+  // every connected receiver on the sender side, or the single sender
+  // connection on the receiver side. No-ops quietly if nothing's connected
+  // anymore (the panel that calls this is itself gated on a live connection).
+  const sendClip = () => {
+    const text = clipDraft.trim();
+    if (!text) return;
+    const targets = connsRef.current.length > 0 ? connsRef.current.map((p) => p.conn) : (connRef.current ? [connRef.current] : []);
+    if (targets.length === 0) {
+      showToast('No longer connected — nothing to send this to.', 'error');
+      return;
+    }
+    targets.forEach((conn) => {
+      try { conn.send({ type: 'clip', text }); } catch { /* that peer dropped, others may still get it */ }
+    });
+    const entry = { text, direction: 'sent', peerLabel: mode === 'p2p-send' ? `${targets.length} receiver${targets.length === 1 ? '' : 's'}` : targetPeerId, sortTs: Date.now() };
+    setSessionClips((prev) => [...prev, entry]);
+    addClip(entry);
+    setClipDraft('');
+  };
+
+  // Same broadcast-or-single-target resolution sendClip uses above, shared
+  // by the chat composer's text option so "Chat" and "Quick clipboard" stay
+  // one underlying channel instead of two competing ones.
+  const sendChatText = () => {
+    const text = chatDraft.trim();
+    if (!text) return;
+    const targets = connsRef.current.length > 0 ? connsRef.current.map((p) => p.conn) : (connRef.current ? [connRef.current] : []);
+    if (targets.length === 0) {
+      showToast('No longer connected — nothing to send this to.', 'error');
+      return;
+    }
+    targets.forEach((conn) => {
+      try { conn.send({ type: 'clip', text }); } catch { /* that peer dropped, others may still get it */ }
+    });
+    const entry = { text, direction: 'sent', peerLabel: mode === 'p2p-send' ? `${targets.length} receiver${targets.length === 1 ? '' : 's'}` : targetPeerId, sortTs: Date.now() };
+    setSessionClips((prev) => [...prev, entry]);
+    addClip(entry);
+    setChatDraft('');
+  };
+
+  // Named (not inlined in the attach menu's JSX) so the ref click below
+  // isn't read from inside a render-time array literal — same pattern
+  // triggerFileInput/triggerFolderInput already use for the pre-send menu.
+  const openChatFilePicker = () => {
+    setShowChatAttach(false);
+    chatFileInputRef.current?.click();
+  };
+  const openChatAppPicker = () => {
+    setShowChatAttach(false);
+    setShowChatApps(true);
+  };
+  const focusChatTextInput = () => {
+    setShowChatAttach(false);
+    document.getElementById('chat-text-input')?.focus();
+  };
+
+  const updateChatMessage = (id, patch) => {
+    setChatMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  };
+
+  // Chat file/app attachment (feature): a small, self-contained protocol
+  // riding the same live conn(s) sendClip/sendChatText use — deliberately
+  // NOT the main batch-start/metadata/chunk pipeline above (see the
+  // chatMessages state comment for why), so sending "one more file" mid- or
+  // post-transfer can never disturb the primary transfer's own progress/
+  // history/checkpoint state. No resume/pause/dedupe here on purpose — this
+  // is the lightweight side channel, not a replacement for the main pipeline.
+  const sendChatAttachment = async (file, isApp = false) => {
+    const targets = connsRef.current.length > 0 ? connsRef.current.map((p) => p.conn) : (connRef.current ? [connRef.current] : []);
+    if (targets.length === 0) {
+      showToast('No longer connected — nothing to send this to.', 'error');
+      return;
+    }
+    const chatId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setChatMessages((prev) => [...prev, {
+      id: chatId, direction: 'sent', kind: isApp ? 'app' : 'file',
+      name: file.name, size: file.size, status: 'sending', progress: 0, sortTs: Date.now()
+    }]);
+    targets.forEach((conn) => {
+      try { conn.send({ type: 'chat-meta', chatId, name: file.name, size: file.size, mime: file.type, isApp }); } catch { /* peer dropped, others may still get it */ }
+    });
+    let offset = 0;
+    while (offset < file.size) {
+      const slice = file.slice(offset, offset + CHUNK_SIZE);
+      const buf = await slice.arrayBuffer();
+      targets.forEach((conn) => {
+        try { conn.send({ type: 'chunk', chatId, chunk: buf }); } catch { /* peer dropped, others may still get it */ }
+      });
+      offset += buf.byteLength;
+      updateChatMessage(chatId, { progress: file.size ? offset / file.size : 1 });
+      // Same 1MB backpressure cap the main stream uses, checked against
+      // whichever peer's channel — good enough for this side channel's
+      // purpose (avoid unbounded buffering), not trying to be per-peer exact.
+      const primary = targets[0];
+      while (primary?.dataChannel && primary.dataChannel.bufferedAmount > 1024 * 1024) {
+        await new Promise((r) => setTimeout(r, 40));
+      }
+    }
+    targets.forEach((conn) => {
+      try { conn.send({ type: 'chat-done', chatId }); } catch { /* peer dropped, others may still get it */ }
+    });
+    updateChatMessage(chatId, { status: 'sent', progress: 1 });
+  };
+
+  // Shared by both the sender's per-peer data handler and the receiver's
+  // handleReceiverData below — chat is bidirectional, either side can send.
+  const handleChatData = (data, fromLabel) => {
+    if (data.type === 'chat-meta') {
+      chatBuffersRef.current.set(data.chatId, { chunks: [], received: 0, meta: data });
+      setChatMessages((prev) => [...prev, {
+        id: data.chatId, direction: 'received', kind: data.isApp ? 'app' : 'file',
+        name: data.name, size: data.size, status: 'receiving', progress: 0, sortTs: Date.now(), peerLabel: fromLabel
+      }]);
+    } else if (data.type === 'chunk' && data.chatId) {
+      const buf = chatBuffersRef.current.get(data.chatId);
+      if (!buf) return;
+      buf.chunks.push(data.chunk);
+      buf.received += data.chunk.byteLength;
+      updateChatMessage(data.chatId, { progress: buf.meta.size ? buf.received / buf.meta.size : 1 });
+    } else if (data.type === 'chat-done') {
+      const buf = chatBuffersRef.current.get(data.chatId);
+      if (!buf) return;
+      const blob = new Blob(buf.chunks, { type: buf.meta.mime || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      chatBuffersRef.current.delete(data.chatId);
+      updateChatMessage(data.chatId, { status: 'received', progress: 1, url });
+    }
+  };
+
+  // One merged, time-ordered timeline for the Chat overlay — text clips
+  // (sessionClips, the pre-existing "Quick clipboard" data) interleaved with
+  // file/app attachments (chatMessages, new). Kept as two separate pieces of
+  // state (so nothing about the existing clipboard panel had to change) and
+  // only merged here, at render time.
+  const unifiedChat = useMemo(() => {
+    const clips = sessionClips.map((c, i) => ({
+      id: `clip-${i}`, kind: 'text', direction: c.direction, text: c.text, peerLabel: c.peerLabel, sortTs: c.sortTs || 0
+    }));
+    return [...clips, ...chatMessages].sort((a, b) => (a.sortTs || 0) - (b.sortTs || 0));
+  }, [sessionClips, chatMessages]);
+
+  // Opens a just-received file in whatever app the device has for its type
+  // (gallery, PDF viewer, etc.) via the same content:// URI it was saved
+  // with — tapping a "File Received!" row just opens it, no re-navigating
+  // to Downloads.
+  const openReceivedFile = (f) => {
+    if (!f.uri) return;
+    NotifyDownload.openFile({ uri: f.uri, mimeType: f.mimeType || '*/*' }).catch(() => {
+      showToast('No app found to open this file.', 'error');
     });
   };
 
@@ -2193,9 +2465,16 @@ function App() {
           const code = jsQR(imageData.data, imageData.width, imageData.height);
           if (code && code.data) {
             const roomFromScan = extractRoomCode(code.data);
+            const hotspotCreds = extractHotspotCredentials(code.data);
             stopScanner();
-            setTargetPeerId(roomFromScan);
-            startP2PReceive(roomFromScan);
+            if (hotspotCreds) {
+              // Hotspot-fallback QR (feature: Wi-Fi Direct → hotspot) — the
+              // sender is hosting a LocalOnlyHotspot, not a plain cloud room.
+              joinHotspotFallback(roomFromScan, hotspotCreds);
+            } else {
+              setTargetPeerId(roomFromScan);
+              startP2PReceive(roomFromScan);
+            }
             return;
           }
         }
@@ -2226,6 +2505,13 @@ function App() {
       default: return <div className={wrapperClass}><FileIcon size={24} /></div>;
     }
   };
+
+  // Chat becomes reachable the moment there's a live conn to send/receive
+  // over — a connected receiver on the sender side, or an active/finished
+  // receive on the receiver side (the conn stays open past 'complete').
+  const chatAvailable = (mode === 'p2p-send' && connectedCount > 0) || (mode === 'p2p-receive' && (transferState === 'transferring' || transferState === 'complete'));
+  const chatPeerLabel = mode === 'p2p-send' ? `${connectedCount} receiver${connectedCount === 1 ? '' : 's'}` : (targetPeerId || 'sender');
+  const chatUnreadCount = chatMessages.filter((m) => m.direction === 'received').length;
 
   return (
     <div className="max-w-[1200px] w-full min-h-0 flex-1 mx-auto flex flex-col justify-start overflow-x-hidden gap-3 max-[640px]:gap-2 p-5 max-[640px]:p-3 max-[380px]:p-2 pt-[max(1.25rem,env(safe-area-inset-top))] max-[640px]:pt-[max(0.75rem,env(safe-area-inset-top))] max-[380px]:pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] max-[640px]:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-[380px]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
@@ -2313,6 +2599,34 @@ function App() {
         </div>
       )}
 
+      {/* RESUME INTERRUPTED TRANSFER BANNER (feature: resume after app restart) */}
+      {interruptedTransfer && (
+        <div className="fixed top-[max(1rem,calc(env(safe-area-inset-top)+0.75rem))] left-4 right-4 max-w-[460px] mx-auto bg-[rgba(15,23,42,0.92)] backdrop-blur-md border border-accent-purple rounded-[14px] px-4 py-3 flex items-center gap-3 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(125,211,255,0.2)] z-[9999] animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
+          <div className="flex-shrink-0 w-9 h-9 rounded-full bg-bg-tertiary flex items-center justify-center border border-border">
+            <Download size={17} className="text-accent-cyan" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold leading-tight">Interrupted transfer found</p>
+            <p className="text-xs text-text-secondary mt-0.5 truncate">
+              {interruptedTransfer.currentFile?.name || 'A file'} — {formatBytes(interruptedTransfer.offset)} of {formatBytes(interruptedTransfer.currentFile?.size || 0)} received
+            </p>
+          </div>
+          <button
+            className="flex-shrink-0 bg-accent-purple/15 border border-accent-purple text-accent-purple font-heading font-semibold py-1.5 px-3 rounded-[8px] text-[0.8rem] cursor-pointer transition-colors hover:bg-accent-purple/25"
+            onClick={resumeInterruptedTransfer}
+          >
+            Resume
+          </button>
+          <button
+            className="flex-shrink-0 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+            onClick={discardInterruptedTransfer}
+            aria-label="Discard interrupted transfer"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* TOAST POPUP */}
       {toast && (
         <div className="fixed bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1.5rem))] right-8 max-[640px]:left-4 max-[640px]:right-4 bg-[rgba(15,23,42,0.9)] backdrop-blur-md border border-accent-purple rounded-[14px] px-6 py-4 flex items-center gap-3 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(125,211,255,0.2)] z-[9999] animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
@@ -2325,13 +2639,15 @@ function App() {
 
       {/* MAIN LAYOUT CONTAINER */}
       <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2">
-        <div className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)]`}>
+        <div
+          className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 min-h-0 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)] overflow-y-auto touch-pan-y`}
+        >
 
           {/* ==================================================== */}
           {/* VIEW: HOME VIEW                                      */}
           {/* ==================================================== */}
           {mode === 'home' && (
-            <div className="flex-1 flex flex-col w-full">
+            <div className="flex-1 min-h-0 flex flex-col w-full">
               <div className="text-center mb-6 max-[640px]:mb-4 flex-shrink-0">
                 <h2 className="text-[1.85rem] max-[640px]:text-2xl max-[380px]:text-[1.3rem] leading-[1.2] mb-2 font-bold glow-text">Secure P2P File Sharing</h2>
                 <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem]">Transfer files directly browser-to-browser. Encrypted, private, with zero size limits.</p>
@@ -2339,7 +2655,11 @@ function App() {
 
               {/* TOP TAB SWITCHER: Home / Apps (hidden once a file is queued) */}
               {selectedFiles.length === 0 && (
-                <div className="flex flex-shrink-0 gap-[0.4rem] bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-[0.3rem] mb-6 max-[640px]:mb-4">
+                <div
+                  className="flex flex-shrink-0 gap-[0.4rem] bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-[0.3rem] mb-6 max-[640px]:mb-4"
+                  onPointerDown={onCardSwipeStart}
+                  onPointerUp={onCardSwipeEnd}
+                >
                   <button
                     type="button"
                     className={`flex-1 border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'home' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
@@ -2456,7 +2776,7 @@ function App() {
                 <div className="flex-1 min-h-0 flex flex-col">
                   {selectedFiles.length === 1 ? (
                     <div className="flex items-center gap-4 bg-[rgba(30,41,59,0.4)] border border-border rounded-2xl p-5 mb-8 max-[380px]:px-3 max-[380px]:py-4 max-[380px]:gap-3">
-                      {renderFileIconComponent(selectedFiles[0].name)}
+                      <FileThumbnail file={selectedFiles[0]} size="md" />
                       <div className="flex-grow min-w-0">
                         <h4 className="text-[0.95rem] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">{selectedFiles[0].name}</h4>
                         <p className="text-[0.8rem] text-text-secondary">{formatBytes(selectedFiles[0].size)}</p>
@@ -2543,7 +2863,7 @@ function App() {
                   />
 
                   <div className="flex flex-col gap-3 flex-shrink-0">
-                    <button className={BTN_PRIMARY} onClick={(e) => rippleTap(e, startP2PSend)}>
+                    <button className={BTN_PRIMARY} onClick={(e) => rippleTap(e, () => startAutoSend())}>
                       <Zap size={18} /> Start P2P Sharing Room
                     </button>
                     <button className={BTN_SECONDARY} onClick={(e) => rippleTap(e, () => setSelectedFiles([]))}>
@@ -2577,7 +2897,7 @@ function App() {
               )}
 
               {/* NEARBY DEVICES (feature #2): same-Wi-Fi senders discovered via NSD — tap to connect with no code entry */}
-              {selectedFiles.length === 0 && nearbyPeers.length > 0 && (
+              {selectedFiles.length === 0 && nearbyPeers.length > 0 && !wifiDirectConnecting && (
                 <div className="mt-5 mb-2 flex-shrink-0">
                   <div className="flex items-center gap-[0.4rem] text-[0.78rem] text-text-muted mb-2">
                     <Radar size={14} className="text-accent-cyan" /> Nearby on this Wi-Fi
@@ -2632,7 +2952,41 @@ function App() {
                     </button>
                   </div>
 
-                  {wifiDirectBrowsing && wifiDirectPeers.length === 0 && (
+                  {wifiDirectBrowsing && wifiDirectWifiOff && (
+                    <div className="flex items-center gap-2.5 bg-[rgba(248,113,113,0.08)] border border-[rgba(248,113,113,0.3)] rounded-xl py-2.5 px-3 my-1">
+                      <AlertCircle size={16} className="text-accent-pink flex-shrink-0" />
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-[0.78rem] text-text-primary font-semibold leading-tight">Wi-Fi is off</p>
+                        <p className="text-[0.72rem] text-text-muted leading-snug">Wi-Fi Direct needs the Wi-Fi radio on (no internet or router required) — this will resume automatically once it's on.</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="relative overflow-hidden flex-shrink-0 bg-accent-pink/15 border border-accent-pink text-accent-pink font-heading font-semibold py-1.5 px-3 rounded-lg text-[0.75rem] cursor-pointer hover:bg-accent-pink/25"
+                        onClick={(e) => rippleTap(e, wifiDirectOpenWifiSettings)}
+                      >
+                        Open Settings
+                      </button>
+                    </div>
+                  )}
+
+                  {wifiDirectBrowsing && !wifiDirectWifiOff && wifiDirectLocationOff && (
+                    <div className="flex items-center gap-2.5 bg-[rgba(248,113,113,0.08)] border border-[rgba(248,113,113,0.3)] rounded-xl py-2.5 px-3 my-1">
+                      <AlertCircle size={16} className="text-accent-pink flex-shrink-0" />
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-[0.78rem] text-text-primary font-semibold leading-tight">Location is off</p>
+                        <p className="text-[0.72rem] text-text-muted leading-snug">Android requires it to find nearby devices — this will resume automatically once it's on.</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="relative overflow-hidden flex-shrink-0 bg-accent-pink/15 border border-accent-pink text-accent-pink font-heading font-semibold py-1.5 px-3 rounded-lg text-[0.75rem] cursor-pointer hover:bg-accent-pink/25"
+                        onClick={(e) => rippleTap(e, wifiDirectOpenLocationSettings)}
+                      >
+                        Open Settings
+                      </button>
+                    </div>
+                  )}
+
+                  {wifiDirectBrowsing && !wifiDirectWifiOff && !wifiDirectLocationOff && wifiDirectPeers.length === 0 && (
                     <div className="text-[0.78rem] text-text-muted py-1">Searching nearby devices…</div>
                   )}
 
@@ -2642,7 +2996,7 @@ function App() {
                         <button
                           key={peer.deviceAddress}
                           type="button"
-                          disabled={wifiDirectConnecting === peer.deviceAddress}
+                          disabled={!!wifiDirectConnecting}
                           className="relative overflow-hidden flex items-center gap-3 bg-[rgba(125,211,255,0.08)] border border-[rgba(125,211,255,0.3)] rounded-xl py-[0.6rem] px-[0.8rem] text-left cursor-pointer transition-all duration-200 hover:bg-[rgba(125,211,255,0.15)] disabled:opacity-60 disabled:cursor-wait"
                           onClick={(e) => rippleTap(e, () => connectToWifiDirectPeer(peer))}
                         >
@@ -2666,22 +3020,44 @@ function App() {
                       <span>Connecting requires both devices to tap — ask the other person to tap your device in their "Find devices" list too.</span>
                     </div>
                   )}
+
+                  {/* HOTSPOT FALLBACK (feature: Wi-Fi Direct → hotspot) —
+                      manual escape hatch for when Wi-Fi Direct itself is
+                      flaky/unavailable on this hardware. Sender-only UI; the
+                      receiving device just scans the resulting QR code with
+                      the existing "Scan QR Code" button, which detects the
+                      hotspot credentials automatically. */}
+                  {hotspotSupported && selectedFiles.length > 0 && !wifiDirectConnecting && (
+                    <button
+                      type="button"
+                      disabled={hotspotStarting}
+                      className="relative overflow-hidden mt-2 w-full flex items-center justify-center gap-1.5 text-[0.72rem] font-semibold rounded-full cursor-pointer py-1.5 px-3 border border-border bg-transparent text-text-secondary transition-all duration-200 hover:bg-white/[0.04] hover:text-text-primary disabled:opacity-60 disabled:cursor-wait"
+                      onClick={(e) => rippleTap(e, startHotspotFallbackSend)}
+                      title="If Wi-Fi Direct isn't connecting, host a hotspot instead"
+                    >
+                      {hotspotStarting ? 'Starting hotspot…' : "Wi-Fi Direct not connecting? Try hotspot fallback"}
+                    </button>
+                  )}
                 </div>
               )}
 
-              {/* RECEIVE AREA (ONLY SHOW IF NO FILE CURRENTLY BEING SENT) */}
-              {selectedFiles.length === 0 && (
+              {/* RECEIVE AREA (ONLY SHOW IF NO FILE CURRENTLY BEING SENT). Hidden
+                  (not just disabled) while a Wi-Fi Direct handshake is pending —
+                  startP2PReceive's setTargetPeerId() would otherwise fill this
+                  box with the Wi-Fi Direct room code and make it look like a
+                  code got typed in on its own. */}
+              {selectedFiles.length === 0 && !wifiDirectConnecting && (
                 <div>
                   <div className="flex items-center text-center my-3 text-text-muted text-[0.8rem] before:content-[''] before:flex-1 before:border-b before:border-border before:mr-3 after:content-[''] after:flex-1 after:border-b after:border-border after:ml-3">or receive a file</div>
                   <div className="flex flex-col gap-3">
-                    <div className="relative flex items-center gap-[0.4rem] flex-shrink-0">
+                    <div className="relative flex items-center gap-[0.4rem] w-full min-w-0">
                       <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center">
                         <Download size={20} />
                       </div>
                       <input
                         type="text"
                         placeholder="Enter Room Code (e.g. 4D8G2X)"
-                        className="w-auto flex-1 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(125,211,255,0.12)]"
+                        className="w-auto flex-1 min-w-0 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(125,211,255,0.12)]"
                         value={targetPeerId}
                         onChange={(e) => setTargetPeerId(e.target.value.toUpperCase())}
                         onKeyDown={(e) => e.key === 'Enter' && startP2PReceive()}
@@ -2874,7 +3250,7 @@ function App() {
                         title="Tap to enlarge"
                       >
                         <QRCodeSVG
-                          value={roomCode}
+                          value={buildQrPayload()}
                           size={92}
                           bgColor={"#ffffff"}
                           fgColor={"#0b0e1c"}
@@ -2883,9 +3259,11 @@ function App() {
                         />
                       </div>
                       <div className="flex flex-col items-center gap-1 text-center max-w-[240px]">
-                        <b className="text-text-primary text-[0.8rem]">Scan to connect</b>
+                        <b className="text-text-primary text-[0.8rem]">{hotspotCredentials ? 'Scan to connect via hotspot' : 'Scan to connect'}</b>
                         <p className="text-[0.72rem] text-text-secondary leading-[1.5]">
-                          Keep this tab open &mdash; the file streams directly, peer to peer. Tap the QR code to enlarge.
+                          {hotspotCredentials
+                            ? 'No internet or Wi-Fi Direct needed — the other device joins your hotspot directly. Tap the QR code to enlarge.'
+                            : 'Keep this tab open — the file streams directly, peer to peer. Tap the QR code to enlarge.'}
                         </p>
                       </div>
                     </div>
@@ -2944,6 +3322,34 @@ function App() {
                   <button className={`${BTN_SECONDARY} w-full justify-center`} onClick={(e) => rippleTap(e, togglePauseTransfer)}>
                     {isPaused ? <><Play size={16} /> Resume</> : <><Pause size={16} /> Pause</>}
                   </button>
+
+                  {/* BANDWIDTH THROTTLE (feature #8) — also shown mid-transfer
+                      (not just on the waiting screen) so the manual override
+                      mentioned in the battery-auto-throttle toast is actually
+                      reachable while a transfer is running. */}
+                  <div className="relative w-full flex justify-center">
+                    <button
+                      type="button"
+                      className="relative overflow-hidden flex items-center gap-2 bg-transparent border border-border text-text-secondary text-[0.78rem] cursor-pointer py-[0.35rem] px-3 rounded-lg hover:bg-white/5 hover:text-text-primary"
+                      onClick={(e) => rippleTap(e, () => setShowRateMenu((v) => !v))}
+                    >
+                      <Gauge size={14} /> Speed limit: {RATE_PRESETS.find((r) => r.kbps === maxRateKBps)?.label || 'Unlimited'}
+                    </button>
+                    {showRateMenu && (
+                      <div className="absolute bottom-full mb-1 z-10 bg-bg-secondary border border-border rounded-xl p-1 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.4)] flex flex-col min-w-[140px]">
+                        {RATE_PRESETS.map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            className={`text-left text-[0.8rem] py-[0.4rem] px-3 rounded-lg border-0 cursor-pointer ${maxRateKBps === preset.kbps ? 'bg-[rgba(125,211,255,0.15)] text-accent-purple' : 'bg-transparent text-text-secondary hover:bg-white/5'}`}
+                            onClick={() => { setMaxRateKBps(preset.kbps); setShowRateMenu(false); }}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -2959,6 +3365,47 @@ function App() {
                       {sendFileCount > 1 ? `Your ${sendFileCount} files were shared directly and securely.` : 'Your file was shared directly and securely.'}
                     </p>
                   </div>
+
+                  {/* PERSISTENT CLIPBOARD CHANNEL (feature) — the connection
+                      from this transfer is still open; send another quick
+                      snippet without starting a whole new transfer. */}
+                  <div className="w-full bg-white/[0.03] border border-border rounded-2xl p-3 flex flex-col gap-2 text-left">
+                    <div className="flex items-center gap-1.5 text-[0.72rem] text-text-muted uppercase tracking-wide">
+                      <ClipboardCopy size={12} /> Quick clipboard
+                    </div>
+                    {sessionClips.length > 0 && (
+                      <div className="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto">
+                        {sessionClips.map((c, i) => (
+                          <div key={i} className="flex items-center gap-2 bg-[rgba(125,211,255,0.06)] border border-[rgba(125,211,255,0.2)] rounded-lg px-2.5 py-1.5">
+                            <span className="flex-1 min-w-0 text-[0.8rem] text-text-primary truncate">{c.text}</span>
+                            <span className="text-[0.68rem] text-text-muted flex-shrink-0">{c.direction === 'sent' ? 'Sent' : 'Received'}</span>
+                            <button type="button" className="flex-shrink-0 bg-transparent border-0 text-text-muted hover:text-accent-cyan cursor-pointer p-0.5" onClick={() => copyToClipboard(c.text)} title="Copy">
+                              <Copy size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={clipDraft}
+                        onChange={(e) => setClipDraft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') sendClip(); }}
+                        placeholder="Send a quick note or link…"
+                        className="flex-1 min-w-0 bg-[rgba(8,12,20,0.5)] border border-border rounded-lg px-3 py-2 text-[0.85rem] text-text-primary outline-none focus:border-accent-purple"
+                      />
+                      <button
+                        type="button"
+                        className="flex-shrink-0 bg-accent-purple/15 border border-accent-purple text-accent-purple font-heading font-semibold py-2 px-3 rounded-lg text-[0.8rem] cursor-pointer hover:bg-accent-purple/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!clipDraft.trim()}
+                        onClick={(e) => rippleTap(e, sendClip)}
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
+
                   <button className={`${BTN_PRIMARY} w-full`} onClick={(e) => rippleTap(e, resetToHome)}>
                     Share Another File
                   </button>
@@ -2976,7 +3423,7 @@ function App() {
                     <p className="text-accent-pink text-[0.9rem]">{errorMsg}</p>
                   </div>
                   <div className="flex flex-col gap-3 w-full">
-                    <button className={BTN_PRIMARY} onClick={(e) => rippleTap(e, startP2PSend)}>
+                    <button className={BTN_PRIMARY} onClick={(e) => rippleTap(e, () => startAutoSend())}>
                       Retry Transfer
                     </button>
                     <button className={BTN_SECONDARY} onClick={(e) => rippleTap(e, resetToHome)}>
@@ -3123,18 +3570,33 @@ function App() {
                   {completedFiles.filter((f) => !f.isText).length > 0 && (
                     <div className="flex flex-col gap-2 w-full">
                       {completedFiles.filter((f) => !f.isText).map((f, i) => (
-                        Capacitor.isNativePlatform() ? (
+                        f.skipped ? (
+                          // Duplicate-file skip / delta folder sync: already had
+                          // this exact content, so there's nothing new to open.
                           <div
                             key={i}
-                            className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl flex items-center justify-center gap-3 shadow-[0_4px_20px_rgba(52,211,153,0.4)] w-full mt-4"
+                            className="flex items-center gap-3 bg-white/[0.03] border border-border rounded-2xl py-3 px-4 text-left w-full"
+                          >
+                            <Check size={16} className="text-text-muted flex-shrink-0" />
+                            <span className="text-[0.85rem] text-text-secondary">
+                              {f.relPath ? `${f.relPath}/${f.name}` : f.name} — already had this file, skipped
+                            </span>
+                          </div>
+                        ) : Capacitor.isNativePlatform() ? (
+                          <button
+                            key={i}
+                            type="button"
+                            className="relative overflow-hidden bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl cursor-pointer flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_4px_20px_rgba(52,211,153,0.4)] w-full mt-4 hover:scale-[1.02] hover:shadow-[0_8px_30px_rgba(52,211,153,0.6)] hover:from-[#34d399] hover:to-[#047857]"
+                            onClick={(e) => rippleTap(e, () => openReceivedFile(f))}
                           >
                             <Download size={16} /> {f.relPath ? `${f.relPath}/${f.name}` : f.name}
-                          </div>
+                          </button>
                         ) : (
                           <a
                             key={i}
                             href={f.url}
-                            download={f.name}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="bg-gradient-to-br from-accent-green to-[#059669] text-[#080c14] border-0 font-heading font-bold text-[0.85rem] py-[1.2rem] px-8 rounded-2xl cursor-pointer flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_4px_20px_rgba(52,211,153,0.4)] no-underline w-full mt-4 hover:scale-[1.02] hover:shadow-[0_8px_30px_rgba(52,211,153,0.6)] hover:from-[#34d399] hover:to-[#047857]"
                           >
                             <Download size={16} /> {f.name}
@@ -3143,6 +3605,46 @@ function App() {
                       ))}
                     </div>
                   )}
+
+                  {/* PERSISTENT CLIPBOARD CHANNEL (feature) — the connection
+                      back to the sender is still open; send a quick snippet
+                      without starting a whole new transfer. */}
+                  <div className="w-full bg-white/[0.03] border border-border rounded-2xl p-3 flex flex-col gap-2 text-left">
+                    <div className="flex items-center gap-1.5 text-[0.72rem] text-text-muted uppercase tracking-wide">
+                      <ClipboardCopy size={12} /> Quick clipboard
+                    </div>
+                    {sessionClips.length > 0 && (
+                      <div className="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto">
+                        {sessionClips.map((c, i) => (
+                          <div key={i} className="flex items-center gap-2 bg-[rgba(125,211,255,0.06)] border border-[rgba(125,211,255,0.2)] rounded-lg px-2.5 py-1.5">
+                            <span className="flex-1 min-w-0 text-[0.8rem] text-text-primary truncate">{c.text}</span>
+                            <span className="text-[0.68rem] text-text-muted flex-shrink-0">{c.direction === 'sent' ? 'Sent' : 'Received'}</span>
+                            <button type="button" className="flex-shrink-0 bg-transparent border-0 text-text-muted hover:text-accent-cyan cursor-pointer p-0.5" onClick={() => copyToClipboard(c.text)} title="Copy">
+                              <Copy size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={clipDraft}
+                        onChange={(e) => setClipDraft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') sendClip(); }}
+                        placeholder="Send a quick note or link…"
+                        className="flex-1 min-w-0 bg-[rgba(8,12,20,0.5)] border border-border rounded-lg px-3 py-2 text-[0.85rem] text-text-primary outline-none focus:border-accent-purple"
+                      />
+                      <button
+                        type="button"
+                        className="flex-shrink-0 bg-accent-purple/15 border border-accent-purple text-accent-purple font-heading font-semibold py-2 px-3 rounded-lg text-[0.8rem] cursor-pointer hover:bg-accent-purple/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!clipDraft.trim()}
+                        onClick={(e) => rippleTap(e, sendClip)}
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
 
                   <button className={`${BTN_SECONDARY} w-full mt-2`} onClick={(e) => rippleTap(e, resetToHome)}>
                     Close & Return
@@ -3192,7 +3694,7 @@ function App() {
             </div>
             <div className="bg-white p-4 rounded-2xl flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
               <QRCodeSVG
-                value={roomCode}
+                value={buildQrPayload()}
                 size={240}
                 bgColor={"#ffffff"}
                 fgColor={"#0b0e1c"}
@@ -3206,6 +3708,176 @@ function App() {
               ))}
             </div>
           </div>
+        </div>,
+        document.body
+      )}
+
+      {/* CHAT LAUNCHER (feature): floating entry point into the chat
+          section, visible any time there's a live connection to use it on —
+          purely additive, doesn't change what the Waiting/Transferring/
+          Complete screens already show. */}
+      {chatAvailable && !showChat && createPortal(
+        <button
+          type="button"
+          className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-[1900] w-14 h-14 rounded-full bg-accent-purple text-[#06222c] shadow-[0_10px_24px_-6px_rgba(125,211,255,0.55)] flex items-center justify-center cursor-pointer border-0"
+          onClick={(e) => rippleTap(e, () => setShowChat(true))}
+          title="Open chat"
+        >
+          <MessageCircle size={24} />
+          {chatUnreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-accent-pink text-white text-[0.68rem] font-bold flex items-center justify-center border-2 border-bg-primary">
+              {chatUnreadCount}
+            </span>
+          )}
+        </button>,
+        document.body
+      )}
+
+      {/* CHAT OVERLAY (feature): a persistent thread over the same live
+          conn(s) — text (reusing the existing clipboard channel), files and
+          installed apps, sendable any time after connecting, not just from
+          the pre-send queue. See sendChatAttachment/handleChatData above for
+          why this rides its own small protocol instead of the main one. */}
+      {showChat && createPortal(
+        <div className="fixed inset-0 bg-bg-primary z-[2000] flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-shrink-0">
+            <button
+              className="bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-1.5 rounded-md hover:bg-white/5 hover:text-text-primary"
+              onClick={(e) => rippleTap(e, () => setShowChat(false))}
+              title="Close chat"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="font-heading font-semibold text-[0.95rem] text-text-primary truncate">{chatPeerLabel}</div>
+              <div className="text-[0.72rem] text-accent-green flex items-center gap-1.5">
+                <span className="w-[6px] h-[6px] rounded-full bg-accent-green inline-block" />
+                Connected — files, apps or a note, anytime
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-2.5">
+            {unifiedChat.length === 0 && (
+              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center text-text-muted text-[0.85rem] px-8">
+                <MessageCircle size={28} className="opacity-50" />
+                Say hi, or use the paperclip to send a file, an app, or a note.
+              </div>
+            )}
+            {unifiedChat.map((m) => {
+              const mine = m.direction === 'sent';
+              return (
+                <div key={m.id} className={`flex flex-col max-w-[78%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
+                  {m.kind === 'text' ? (
+                    <div className={`rounded-2xl px-3 py-2 text-[0.85rem] leading-snug ${mine ? 'bg-[rgba(125,211,255,0.14)] border border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border border-border rounded-bl-[6px]'}`}>
+                      {m.text}
+                    </div>
+                  ) : (
+                    <div className={`flex items-center gap-2.5 rounded-2xl px-3 py-2.5 min-w-[190px] ${mine ? 'bg-[rgba(125,211,255,0.14)] border border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border border-border rounded-bl-[6px]'}`}>
+                      <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 ${mine ? 'bg-[rgba(125,211,255,0.18)] text-accent-purple' : 'bg-white/[0.06] text-text-secondary'}`}>
+                        {m.kind === 'app' ? <Smartphone size={17} /> : <FileIcon size={17} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[0.8rem] font-semibold text-text-primary truncate">{m.name}</div>
+                        <div className="text-[0.7rem] text-text-muted">
+                          {formatBytes(m.size)} · {m.status === 'sending' ? `sending ${Math.round((m.progress || 0) * 100)}%` : m.status === 'receiving' ? `receiving ${Math.round((m.progress || 0) * 100)}%` : mine ? 'delivered' : 'received'}
+                        </div>
+                      </div>
+                      {!mine && m.status === 'received' && m.url && (
+                        <a
+                          href={m.url}
+                          download={m.name}
+                          className="flex-shrink-0 text-[0.72rem] font-semibold text-accent-purple bg-[rgba(125,211,255,0.12)] border border-[rgba(125,211,255,0.3)] rounded-lg px-2.5 py-1.5 no-underline"
+                        >
+                          Open
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="relative flex items-center gap-2 px-3 py-2.5 border-t border-border flex-shrink-0 bg-bg-secondary">
+            {showChatAttach && (
+              <div className="absolute bottom-full left-2 mb-2 bg-bg-secondary border border-border rounded-2xl p-1.5 flex gap-1 shadow-[0_12px_30px_-8px_rgba(0,0,0,0.6)]">
+                {[
+                  { label: 'File', icon: <UploadCloud size={18} />, tint: 'text-accent-purple bg-[rgba(125,211,255,0.14)]', onClick: openChatFilePicker },
+                  { label: 'App', icon: <Smartphone size={18} />, tint: 'text-accent-green bg-[rgba(52,211,153,0.14)]', onClick: openChatAppPicker },
+                  { label: 'Text', icon: <Type size={18} />, tint: 'text-accent-pink bg-[rgba(248,113,113,0.13)]', onClick: focusChatTextInput }
+                ].map((opt) => (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    className="w-[68px] flex flex-col items-center gap-1.5 py-2.5 px-1 rounded-xl border-0 bg-transparent cursor-pointer hover:bg-white/5"
+                    onClick={opt.onClick}
+                  >
+                    <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${opt.tint}`}>{opt.icon}</span>
+                    <span className="text-[0.66rem] font-semibold text-text-secondary">{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              className={`flex-shrink-0 w-9 h-9 rounded-full border flex items-center justify-center cursor-pointer transition-transform duration-150 ${showChatAttach ? 'bg-accent-purple text-[#06222c] border-transparent rotate-45' : 'bg-white/[0.05] border-border text-text-secondary'}`}
+              onClick={(e) => rippleTap(e, () => setShowChatAttach((v) => !v))}
+              title="Attach"
+            >
+              <Paperclip size={16} />
+            </button>
+            <input
+              id="chat-text-input"
+              type="text"
+              value={chatDraft}
+              onChange={(e) => setChatDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') sendChatText(); }}
+              placeholder="Send a note…"
+              className="flex-1 min-w-0 bg-[rgba(8,12,20,0.5)] border border-border rounded-full px-4 py-2 text-[0.85rem] text-text-primary outline-none focus:border-accent-purple"
+            />
+            <button
+              type="button"
+              className="flex-shrink-0 w-9 h-9 rounded-full bg-accent-purple text-[#06222c] flex items-center justify-center cursor-pointer border-0 disabled:opacity-40"
+              disabled={!chatDraft.trim()}
+              onClick={(e) => rippleTap(e, sendChatText)}
+            >
+              <Send size={15} />
+            </button>
+            <input
+              type="file"
+              className="hidden"
+              ref={chatFileInputRef}
+              multiple
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                files.forEach((f) => sendChatAttachment(f, false));
+                e.target.value = '';
+              }}
+            />
+          </div>
+
+          {showChatApps && (
+            <div className="fixed inset-0 bg-[rgba(4,6,12,0.85)] backdrop-blur-sm flex items-center justify-center z-[2100] p-5" onClick={(e) => rippleTap(e, () => setShowChatApps(false))}>
+              <div className="bg-bg-secondary border border-border rounded-[20px] p-4 w-full max-w-[360px] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_8px_10px_-6px_rgba(0,0,0,0.3)] has-[.apps-panel]:max-h-[80vh] has-[.apps-panel]:flex has-[.apps-panel]:flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3 font-heading font-semibold">
+                  <span className="flex items-center gap-[0.4rem]">
+                    <Smartphone size={16} /> Send an app
+                  </span>
+                  <button className="relative overflow-hidden bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-[0.4rem] rounded-md transition-all duration-200 hover:bg-white/5 hover:text-text-primary" onClick={(e) => rippleTap(e, () => setShowChatApps(false))} title="Close">
+                    <X size={18} />
+                  </button>
+                </div>
+                <AppsPanel
+                  formatBytes={formatBytes}
+                  onSelectApps={(files) => {
+                    files.forEach((f) => sendChatAttachment(f, true));
+                    setShowChatApps(false);
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>,
         document.body
       )}

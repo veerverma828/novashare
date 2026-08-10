@@ -13,6 +13,8 @@ import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
 import java.io.File
 import java.io.FileOutputStream
+import java.security.DigestOutputStream
+import java.security.MessageDigest
 
 // Android WebView ignores <input webkitdirectory> (it falls back to a plain
 // file/content picker with no folder-tree browsing), so real folder
@@ -74,9 +76,13 @@ class FolderPickerPlugin : Plugin() {
 
         val name = doc.name ?: return
         val destFile = File(destDir, relPath.replace("/", "_"))
+        // SHA-256 computed inline via DigestOutputStream during the same copy
+        // pass — feeds duplicate-skip/delta-sync (feature #7) without a
+        // second read of every file.
+        val digest = MessageDigest.getInstance("SHA-256")
         try {
             context.contentResolver.openInputStream(doc.uri)?.use { input ->
-                FileOutputStream(destFile).use { output -> input.copyTo(output) }
+                DigestOutputStream(FileOutputStream(destFile), digest).use { output -> input.copyTo(output) }
             }
         } catch (e: Exception) {
             return
@@ -88,6 +94,7 @@ class FolderPickerPlugin : Plugin() {
         entry.put("relativePath", relPath)
         entry.put("size", destFile.length())
         entry.put("mimeType", doc.type ?: "application/octet-stream")
+        entry.put("hash", digest.digest().joinToString("") { "%02x".format(it) })
         out.put(entry)
     }
 }

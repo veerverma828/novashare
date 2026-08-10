@@ -1,14 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {
-  RoomCodeFlap,
-  SwipeableFileRow,
-  FolderQueueRow,
-  AppIcon,
-  HighlightMatch,
-  TransferRing
-} from './App';
+import { RoomCodeFlap } from './components/RoomCodeFlap';
+import { SwipeableFileRow } from './components/SwipeableFileRow';
+import { FolderQueueRow } from './components/FolderQueueRow';
+import { AppIcon } from './components/AppIcon';
+import { HighlightMatch } from './components/HighlightMatch';
+import { TransferRing } from './components/TransferRing';
 
 describe('RoomCodeFlap', () => {
   it('renders one flap per character of a 6-char code', () => {

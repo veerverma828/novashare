@@ -1,0 +1,22 @@
+{
+  "0": "WifiDirectPlugin",
+  "1": "LocalSignalingServerPlugin",
+  "2": "NearbyDiscoveryPlugin",
+  "3": "JSObject",
+  "4": "AppUpdatePlugin",
+  "5": "InstalledAppsPlugin",
+  "6": ".folderPickerResult",
+  "7": "IncomingSharePlugin",
+  "8": "MainActivity",
+  "9": "TransferForegroundService",
+  "10": "TransferNotificationPlugin",
+  "11": "ExampleInstrumentedTest.java",
+  "12": "ExampleUnitTest.java",
+  "13": "gradlew",
+  "14": "app/build.gradle",
+  "15": "capacitor.build.gradle",
+  "16": "build.gradle",
+  "17": "capacitor.settings.gradle",
+  "18": "settings.gradle",
+  "19": "variables.gradle"
+}

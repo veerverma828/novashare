@@ -22,6 +22,32 @@ export function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
+// Inverse of arrayBufferToBase64 — used on the receiving end of the raw
+// local-socket transport (localSocketTransport.js), where a chunk frame
+// crosses the Capacitor JS bridge as base64 and needs to become the
+// ArrayBuffer the rest of the transfer pipeline (App.jsx, PeerJsCompatDataConnection)
+// already expects.
+export function base64ToArrayBuffer(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+// Full SHA-256 digest of a File/Blob, hex-encoded — used for end-to-end
+// integrity verification (distinct from security.js's computeSecurityCode,
+// which truncates to 4 bytes for a human-eyeballed peer-safety code, not
+// file content). Falls back to null when SubtleCrypto is unavailable; callers
+// treat a null hash as "skip verification" rather than failing the transfer.
+export async function computeFileHash(file) {
+  if (!window.crypto?.subtle) return null;
+  const buffer = await file.arrayBuffer();
+  const digest = await window.crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 // Runs `worker` over `items` with at most `limit` in flight at once,
 // preserving input order in the returned results array.
 export async function mapWithConcurrency(items, limit, worker) {
@@ -94,4 +120,20 @@ export function extractRoomCode(text) {
     // Not a URL, fall through to treat as a bare code
   }
   return text.trim().toUpperCase();
+}
+
+// Hotspot-fallback QR codes carry ssid/pass alongside the room code (see
+// buildQrPayload in App.jsx) — a plain cloud-room QR has neither, so this
+// returns null for those and callers fall through to the normal cloud/local
+// flow unchanged.
+export function extractHotspotCredentials(text) {
+  try {
+    const url = new URL(text);
+    const ssid = url.searchParams.get('ssid');
+    const passphrase = url.searchParams.get('pass');
+    if (ssid && passphrase) return { ssid, passphrase };
+  } catch {
+    // Not a URL — no hotspot credentials possible.
+  }
+  return null;
 }

@@ -1,6 +1,9 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+import { Share } from '@capacitor/share';
+import { Device } from '@capacitor/device';
+import { arrayBufferToBase64, base64ToArrayBuffer } from './transferUtils';
 
 const InstalledApps = registerPlugin('InstalledApps');
 const IncomingShare = registerPlugin('IncomingShare');
@@ -8,6 +11,7 @@ const TransferNotification = registerPlugin('TransferNotification');
 const NearbyDiscovery = registerPlugin('NearbyDiscovery');
 const FolderPicker = registerPlugin('FolderPicker');
 const WifiDirect = registerPlugin('WifiDirect');
+const Hotspot = registerPlugin('Hotspot');
 const LocalSignaling = registerPlugin('LocalSignaling');
 const AppUpdate = registerPlugin('AppUpdate');
 
@@ -15,6 +19,13 @@ const AppUpdate = registerPlugin('AppUpdate');
 export function triggerHaptic(style = ImpactStyle.Light) {
   if (!Capacitor.isNativePlatform()) return;
   Haptics.impact({ style }).catch(() => {});
+}
+
+// The heavier "something finished" haptic pattern — used for transfer
+// completion, distinct from the light tap feedback everywhere else.
+export function triggerSuccessHaptic() {
+  if (!Capacitor.isNativePlatform()) return;
+  Haptics.notification({ type: NotificationType.Success }).catch(() => {});
 }
 
 // Lists user-installed (non-system) packages via the native InstalledApps
@@ -163,6 +174,19 @@ export function getDeviceLabel() {
   return match ? match[1] : 'NovaShare device';
 }
 
+// Opens the native share sheet with plain text (used for sending an error
+// report to us). Falls back to the Web Share API, then the clipboard, so it
+// still works in a browser tab during development.
+export async function shareText(text, title) {
+  if (Capacitor.isNativePlatform()) {
+    await Share.share({ title, text });
+  } else if (navigator.share) {
+    await navigator.share({ title, text });
+  } else {
+    await navigator.clipboard.writeText(text);
+  }
+}
+
 // --- Wi-Fi Direct (fully offline device-to-device: no router, no internet,
 // no pre-existing shared network needed — one phone becomes the group owner
 // at a fixed local IP, the other joins directly). Pairs with LocalSignaling
@@ -190,6 +214,44 @@ export async function wifiDirectDiscoverPeers() {
 export async function wifiDirectStopDiscovery() {
   if (!Capacitor.isNativePlatform()) return;
   await WifiDirect.stopDiscovery().catch(() => {});
+}
+
+// Wi-Fi P2P peer discovery silently returns nothing (not an error) while
+// system Location is off, regardless of the app's own permission grant —
+// callers use this to show a clear "turn on Location" prompt and poll for
+// it turning back on, instead of a discoverPeers() call quietly rejecting.
+export async function wifiDirectIsLocationEnabled() {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    const { enabled } = await WifiDirect.isLocationEnabled();
+    return !!enabled;
+  } catch {
+    return true;
+  }
+}
+
+export async function wifiDirectOpenLocationSettings() {
+  if (!Capacitor.isNativePlatform()) return;
+  await WifiDirect.openLocationSettings().catch(() => {});
+}
+
+// Wi-Fi Direct rides the same radio as regular Wi-Fi — it needs zero
+// internet/router, but the Wi-Fi toggle itself must be on. People often
+// switch Wi-Fi off thinking that's unrelated ("I'm not using the internet"),
+// which silently kills discovery. Same poll-and-banner pattern as Location.
+export async function wifiDirectIsWifiEnabled() {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    const { enabled } = await WifiDirect.isWifiEnabled();
+    return !!enabled;
+  } catch {
+    return true;
+  }
+}
+
+export async function wifiDirectOpenWifiSettings() {
+  if (!Capacitor.isNativePlatform()) return;
+  await WifiDirect.openWifiSettings().catch(() => {});
 }
 
 export async function wifiDirectConnect(deviceAddress) {
@@ -230,6 +292,53 @@ export function onWifiDirectConnectionChanged(callback) {
   return () => handle?.remove();
 }
 
+// --- Hotspot fallback (for when Wi-Fi Direct's WifiP2pManager connect fails
+// outright — known-flaky on several OEMs). One device opens a LocalOnlyHotspot
+// and the other joins it programmatically; both ends then talk over
+// LocalSignaling exactly as the Wi-Fi Direct path does, just addressed at the
+// resolved hotspot gateway IP instead of Wi-Fi Direct's fixed group-owner
+// address. See HotspotPlugin.kt for the native implementation notes and the
+// "not verified on real hardware" caveat. ---
+export async function isHotspotSupported() {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    const { supported } = await Hotspot.isSupported();
+    return !!supported;
+  } catch {
+    return false;
+  }
+}
+
+export async function hotspotStart() {
+  if (!Capacitor.isNativePlatform()) throw new Error('Hotspot fallback requires native platform');
+  return Hotspot.startHotspot();
+}
+
+export async function hotspotStop() {
+  if (!Capacitor.isNativePlatform()) return;
+  await Hotspot.stopHotspot().catch(() => {});
+}
+
+export async function hotspotJoin(ssid, passphrase) {
+  if (!Capacitor.isNativePlatform()) throw new Error('Hotspot fallback requires native platform');
+  return Hotspot.joinHotspot({ ssid, passphrase });
+}
+
+export async function hotspotLeave() {
+  if (!Capacitor.isNativePlatform()) return;
+  await Hotspot.leaveHotspot().catch(() => {});
+}
+
+// Fires if the OS tears down a hotspot this device is hosting or has joined
+// outside of our own stopHotspot()/leaveHotspot() calls (e.g. the user
+// manually disables Wi-Fi). Returns an unsubscribe function.
+export function onHotspotLost(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  Hotspot.addListener('hotspotStopped', () => callback()).then((h) => { handle = h; });
+  return () => handle?.remove();
+}
+
 // --- Local signaling (raw socket byte-pipe over the Wi-Fi Direct link) ---
 // Carries exactly one WebRTC SDP offer/answer plus trickle ICE candidates
 // between the two devices with no internet-reachable broker involved. The
@@ -253,6 +362,23 @@ export async function localSignalingConnect(ip, port) {
 export async function localSignalingSend(connectionId, message) {
   if (!Capacitor.isNativePlatform()) return;
   await LocalSignaling.send({ connectionId, json: JSON.stringify(message) });
+}
+
+// Same as localSignalingSend, but for a caller that already has the JSON
+// string in hand (LocalSocketChannel.send, mirroring RTCDataChannel.send()'s
+// string-or-ArrayBuffer contract) — skips a pointless parse/re-stringify.
+export async function localSignalingSendRaw(connectionId, jsonString) {
+  if (!Capacitor.isNativePlatform()) return;
+  await LocalSignaling.send({ connectionId, json: jsonString });
+}
+
+// Raw file-chunk bytes over the same socket connection, tagged as a binary
+// frame on the native side (see LocalSignalingServerPlugin's frame format) —
+// this is the actual transfer path for Wi-Fi Direct/hotspot sends now, not
+// just SDP/ICE signaling (see localSocketTransport.js).
+export async function localSignalingSendBinary(connectionId, arrayBuffer) {
+  if (!Capacitor.isNativePlatform()) return;
+  await LocalSignaling.sendBinary({ connectionId, data: arrayBufferToBase64(arrayBuffer) });
 }
 
 export async function localSignalingClose(connectionId) {
@@ -289,6 +415,16 @@ export function onLocalSignalingPeerDisconnected(callback) {
   return () => handle?.remove();
 }
 
+// Fires with (connectionId, ArrayBuffer) as binary chunk frames arrive.
+export function onLocalSignalingBinaryMessage(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  LocalSignaling.addListener('binaryMessage', (data) => {
+    callback(data.connectionId, base64ToArrayBuffer(data.data));
+  }).then((h) => { handle = h; });
+  return () => handle?.remove();
+}
+
 // --- In-app update (Play Core flexible flow) ---
 // Reads Play Store's cached update info; cheap enough to call on every
 // foreground. downloadedPending covers the case where a flexible download
@@ -321,6 +457,19 @@ export function onAppUpdateStateChanged(callback) {
   let handle;
   AppUpdate.addListener('downloadStateChanged', (data) => callback(data)).then((h) => { handle = h; });
   return () => handle?.remove();
+}
+
+// Battery-aware throttle (feature): batteryLevel is 0-1 (null if the
+// platform can't report it, e.g. desktop web) — callers treat null as
+// "unknown, don't auto-throttle" rather than assuming 0%.
+export async function getBatteryInfo() {
+  if (!Capacitor.isNativePlatform()) return { batteryLevel: null, isCharging: false };
+  try {
+    const { batteryLevel, isCharging } = await Device.getBatteryInfo();
+    return { batteryLevel: typeof batteryLevel === 'number' ? batteryLevel : null, isCharging: !!isCharging };
+  } catch {
+    return { batteryLevel: null, isCharging: false };
+  }
 }
 
 export function initNative() {

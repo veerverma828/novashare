@@ -2,13 +2,16 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   RATE_PRESETS,
   arrayBufferToBase64,
+  base64ToArrayBuffer,
+  computeFileHash,
   mapWithConcurrency,
   formatBytes,
   formatSpeed,
   formatTime,
   getFileType,
   generateRoomCode,
-  extractRoomCode
+  extractRoomCode,
+  extractHotspotCredentials
 } from './transferUtils';
 
 describe('RATE_PRESETS', () => {
@@ -42,6 +45,51 @@ describe('arrayBufferToBase64', () => {
     const decoded = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     expect(decoded.length).toBe(bytes.length);
     expect(Array.from(decoded)).toEqual(Array.from(bytes));
+  });
+});
+
+describe('base64ToArrayBuffer', () => {
+  it('round-trips arrayBufferToBase64 output back to the original bytes', () => {
+    const bytes = new Uint8Array([0, 1, 2, 250, 251, 252, 253, 254, 255]);
+    const roundTripped = new Uint8Array(base64ToArrayBuffer(arrayBufferToBase64(bytes.buffer)));
+    expect(Array.from(roundTripped)).toEqual(Array.from(bytes));
+  });
+
+  it('handles an empty string', () => {
+    expect(base64ToArrayBuffer('').byteLength).toBe(0);
+  });
+});
+
+describe('computeFileHash', () => {
+  it('produces the known SHA-256 hex digest for a given file', async () => {
+    // SHA-256("hello world") — verified against a reference implementation.
+    const file = new File(['hello world'], 'greeting.txt', { type: 'text/plain' });
+    const hash = await computeFileHash(file);
+    expect(hash).toBe('b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9');
+  });
+
+  it('produces different hashes for different content', async () => {
+    const a = await computeFileHash(new File(['content-a'], 'a.txt'));
+    const b = await computeFileHash(new File(['content-b'], 'b.txt'));
+    expect(a).not.toBe(b);
+  });
+
+  it('produces the same hash for the same content regardless of file name', async () => {
+    const a = await computeFileHash(new File(['same bytes'], 'a.txt'));
+    const b = await computeFileHash(new File(['same bytes'], 'b.txt'));
+    expect(a).toBe(b);
+  });
+
+  it('returns null when SubtleCrypto is unavailable', async () => {
+    // window.crypto.subtle is a getter-only property (jsdom), so stub the
+    // getter itself rather than assigning over it.
+    const spy = vi.spyOn(window.crypto, 'subtle', 'get').mockReturnValue(undefined);
+    try {
+      const hash = await computeFileHash(new File(['x'], 'x.txt'));
+      expect(hash).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
@@ -188,5 +236,25 @@ describe('extractRoomCode', () => {
 
   it('falls back to the trimmed/uppercased text when the URL has no room param', () => {
     expect(extractRoomCode('https://novashare.app/')).toBe('HTTPS://NOVASHARE.APP/');
+  });
+});
+
+describe('extractHotspotCredentials', () => {
+  it('extracts ssid/pass from a hotspot-fallback QR URL', () => {
+    const url = 'https://novashare.app/?room=ABC123&ssid=NovaShare-1234&pass=s3cr3tpass';
+    expect(extractHotspotCredentials(url)).toEqual({ ssid: 'NovaShare-1234', passphrase: 's3cr3tpass' });
+  });
+
+  it('returns null for a plain room-code URL with no ssid/pass', () => {
+    expect(extractHotspotCredentials('https://novashare.app/?room=ABC123')).toBeNull();
+  });
+
+  it('returns null for a bare room code (not a URL)', () => {
+    expect(extractHotspotCredentials('ABC123')).toBeNull();
+  });
+
+  it('decodes URL-encoded special characters in the passphrase', () => {
+    const url = 'https://novashare.app/?room=ABC123&ssid=NovaShare&pass=' + encodeURIComponent('a&b c');
+    expect(extractHotspotCredentials(url)).toEqual({ ssid: 'NovaShare', passphrase: 'a&b c' });
   });
 });

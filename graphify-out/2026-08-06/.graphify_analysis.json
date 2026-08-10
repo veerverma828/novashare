@@ -1,0 +1,267 @@
+{
+  "communities": {
+    "0": [
+      "cross_env",
+      "eslint",
+      "eslint_js",
+      "eslint_plugin_react_hooks",
+      "eslint_plugin_react_refresh",
+      "globals",
+      "package_devdependencies",
+      "package_devdependencies_cross_env",
+      "package_devdependencies_eslint",
+      "package_devdependencies_eslint_js",
+      "package_devdependencies_eslint_plugin_react_hooks",
+      "package_devdependencies_eslint_plugin_react_refresh",
+      "package_devdependencies_globals",
+      "package_devdependencies_sharp",
+      "package_devdependencies_types_react",
+      "package_devdependencies_types_react_dom",
+      "package_devdependencies_vite",
+      "package_devdependencies_vitejs_plugin_react",
+      "sharp",
+      "types_react",
+      "types_react_dom",
+      "vite",
+      "vitejs_plugin_react"
+    ],
+    "1": [
+      "package",
+      "package_name",
+      "package_private",
+      "package_scripts",
+      "package_scripts_build",
+      "package_scripts_build_app",
+      "package_scripts_dev",
+      "package_scripts_lint",
+      "package_scripts_preview",
+      "package_type",
+      "package_version"
+    ],
+    "2": [
+      "scripts_gen_icons",
+      "scripts_gen_icons_adaptivesizes",
+      "scripts_gen_icons_legacysizes",
+      "scripts_gen_icons_marksvg",
+      "scripts_gen_icons_res",
+      "scripts_gen_icons_run"
+    ],
+    "3": [
+      "android_app_src_androidtest_java_com_getcapacitor_myapp_exampleinstrumentedtest",
+      "android_app_src_androidtest_java_com_getcapacitor_myapp_exampleinstrumentedtest_exampleinstrumentedtest",
+      "android_app_src_androidtest_java_com_getcapacitor_myapp_exampleinstrumentedtest_exampleinstrumentedtest_useappcontext",
+      "android_app_src_androidtest_java_com_getcapacitor_myapp_exampleinstrumentedtest_java_test",
+      "runwith"
+    ],
+    "4": [
+      "capacitor_core",
+      "capacitor_filesystem",
+      "package_dependencies",
+      "package_dependencies_capacitor_core",
+      "package_dependencies_capacitor_filesystem"
+    ],
+    "5": [
+      "src_app",
+      "src_app_app",
+      "src_main",
+      "src_native",
+      "src_native_initnative"
+    ],
+    "6": [
+      "android_app_src_test_java_com_getcapacitor_myapp_exampleunittest",
+      "android_app_src_test_java_com_getcapacitor_myapp_exampleunittest_exampleunittest",
+      "android_app_src_test_java_com_getcapacitor_myapp_exampleunittest_exampleunittest_addition_iscorrect",
+      "android_app_src_test_java_com_getcapacitor_myapp_exampleunittest_java_test"
+    ],
+    "7": [
+      "android_gradlew",
+      "android_gradlew__entry",
+      "android_gradlew_die",
+      "android_gradlew_warn"
+    ],
+    "8": [
+      "android_app_src_main_java_com_veer_novashare_mainactivity",
+      "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
+      "bridgeactivity"
+    ],
+    "9": [
+      "capacitor_android",
+      "package_dependencies_capacitor_android"
+    ],
+    "10": [
+      "capacitor_app",
+      "package_dependencies_capacitor_app"
+    ],
+    "11": [
+      "capacitor_cli",
+      "package_dependencies_capacitor_cli"
+    ],
+    "12": [
+      "canvas_confetti",
+      "package_dependencies_canvas_confetti"
+    ],
+    "13": [
+      "capacitor_splash_screen",
+      "package_dependencies_capacitor_splash_screen"
+    ],
+    "14": [
+      "capacitor_status_bar",
+      "package_dependencies_capacitor_status_bar"
+    ],
+    "15": [
+      "jsqr",
+      "package_dependencies_jsqr"
+    ],
+    "16": [
+      "lucide_react",
+      "package_dependencies_lucide_react"
+    ],
+    "17": [
+      "package_dependencies_peerjs",
+      "peerjs"
+    ],
+    "18": [
+      "package_dependencies_qrcode_react",
+      "qrcode_react"
+    ],
+    "19": [
+      "package_dependencies_react",
+      "react"
+    ],
+    "20": [
+      "package_dependencies_react_dom",
+      "react_dom"
+    ],
+    "21": [
+      "vite_config",
+      "vite_config_getlocalip"
+    ],
+    "22": [
+      "android_app_build"
+    ],
+    "23": [
+      "android_app_capacitor_build"
+    ],
+    "24": [
+      "android_build"
+    ],
+    "25": [
+      "android_capacitor_settings"
+    ],
+    "26": [
+      "android_settings"
+    ],
+    "27": [
+      "android_variables"
+    ],
+    "28": [
+      "eslint_config"
+    ]
+  },
+  "cohesion": {
+    "0": 0.08695652173913043,
+    "1": 0.18181818181818182,
+    "2": 0.4,
+    "3": 0.6,
+    "4": 0.4,
+    "5": 0.6,
+    "6": 0.6666666666666666,
+    "7": 0.8333333333333334,
+    "8": 1.0,
+    "9": 1.0,
+    "10": 1.0,
+    "11": 1.0,
+    "12": 1.0,
+    "13": 1.0,
+    "14": 1.0,
+    "15": 1.0,
+    "16": 1.0,
+    "17": 1.0,
+    "18": 1.0,
+    "19": 1.0,
+    "20": 1.0,
+    "21": 1.0,
+    "22": 1.0,
+    "23": 1.0,
+    "24": 1.0,
+    "25": 1.0,
+    "26": 1.0,
+    "27": 1.0,
+    "28": 1.0
+  },
+  "gods": [
+    {
+      "id": "package_scripts",
+      "label": "scripts",
+      "degree": 6
+    },
+    {
+      "id": "android_app_src_androidtest_java_com_getcapacitor_myapp_exampleinstrumentedtest_exampleinstrumentedtest",
+      "label": "ExampleInstrumentedTest",
+      "degree": 3
+    },
+    {
+      "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
+      "label": "MainActivity",
+      "degree": 2
+    },
+    {
+      "id": "android_app_src_test_java_com_getcapacitor_myapp_exampleunittest_exampleunittest",
+      "label": "ExampleUnitTest",
+      "degree": 2
+    },
+    {
+      "id": "package_dependencies_capacitor_android",
+      "label": "@capacitor/android",
+      "degree": 2
+    },
+    {
+      "id": "package_dependencies_capacitor_app",
+      "label": "@capacitor/app",
+      "degree": 2
+    },
+    {
+      "id": "package_dependencies_capacitor_cli",
+      "label": "@capacitor/cli",
+      "degree": 2
+    },
+    {
+      "id": "package_dependencies_capacitor_core",
+      "label": "@capacitor/core",
+      "degree": 2
+    },
+    {
+      "id": "package_dependencies_capacitor_filesystem",
+      "label": "@capacitor/filesystem",
+      "degree": 2
+    },
+    {
+      "id": "package_dependencies_capacitor_splash_screen",
+      "label": "@capacitor/splash-screen",
+      "degree": 2
+    }
+  ],
+  "surprises": [],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `dependencies` connect `dependencies` to `package.json`, `@capacitor/android`, `@capacitor/app`, `@capacitor/cli`, `canvas-confetti`, `@capacitor/splash-screen`, `@capacitor/status-bar`, `jsqr`, `lucide-react`, `peerjs`, `qrcode.react`, `react`, `react-dom`?",
+      "why": "High betweenness centrality (0.277) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `devDependencies` connect `devDependencies` to `package.json`?",
+      "why": "High betweenness centrality (0.231) - this node is a cross-community bridge."
+    },
+    {
+      "type": "isolated_nodes",
+      "question": "What connects `name`, `private`, `version` to the rest of the system?",
+      "why": "37 weakly-connected nodes found - possible documentation gaps or missing edges."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `devDependencies` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.08695652173913043 - nodes in this community are weakly interconnected."
+    }
+  ]
+}

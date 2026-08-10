@@ -15,8 +15,8 @@
     "semantic_hash": ""
   },
   "android/app/capacitor.build.gradle": {
-    "mtime": 1785865573.4105854,
-    "ast_hash": "5b7212fd295a0d57d21afc4da01ab520",
+    "mtime": 1786355516.226423,
+    "ast_hash": "8d3cb669719224f0285d2ad022b7c9d1",
     "semantic_hash": ""
   },
   "android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java": {
@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "android/capacitor.settings.gradle": {
-    "mtime": 1785865573.4095855,
-    "ast_hash": "0e91352e1143222262d0644b5006e02c",
+    "mtime": 1786355516.2240028,
+    "ast_hash": "d1376014db940349c3194df388a5cf4f",
     "semantic_hash": ""
   },
   "android/gradlew": {
@@ -60,13 +60,13 @@
     "semantic_hash": "0fd0e93f707fcabd1fee5c6222e69027"
   },
   "eslint.config.js": {
-    "mtime": 1785751393.774225,
-    "ast_hash": "a899e94b013cefd68b3c38c16b03015a",
+    "mtime": 1786061213.8293545,
+    "ast_hash": "664cb23c82cdb027f50d0ff3c8fc5999",
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1785828322.3590539,
-    "ast_hash": "26b3b81c8241d2e230bec9bdfb4f2afd",
+    "mtime": 1786061039.4909227,
+    "ast_hash": "fa04af2ad48fe31c4246cd506c83ba46",
     "semantic_hash": ""
   },
   "scripts/gen-icons.mjs": {
@@ -75,18 +75,18 @@
     "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
   },
   "src/App.jsx": {
-    "mtime": 1785912868.1759815,
-    "ast_hash": "5319a9724083a6815254bdae1e31cabc",
+    "mtime": 1786355505.7179751,
+    "ast_hash": "9bb5b3eaa5a356b5a32e79d554130b36",
     "semantic_hash": ""
   },
   "src/main.jsx": {
-    "mtime": 1785751393.7972288,
-    "ast_hash": "636bbe8b0e396539425e074074d5b2d7",
+    "mtime": 1786061039.49259,
+    "ast_hash": "49eb1d381e94c94086a53361ff8ad9cf",
     "semantic_hash": ""
   },
   "src/native.js": {
-    "mtime": 1785851659.830187,
-    "ast_hash": "6479a940dc545863b15c284141d70885",
+    "mtime": 1786061039.49259,
+    "ast_hash": "ffd3187fd9a13dee68d434ea8c6c47a3",
     "semantic_hash": ""
   },
   "vite.config.js": {
@@ -295,13 +295,13 @@
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/MainActivity.kt": {
-    "mtime": 1785862433.3889418,
-    "ast_hash": "22318db48da86dfb70fd7ea3571f3e49",
+    "mtime": 1786061039.48559,
+    "ast_hash": "07d99240e0661eca97eee5b3a3a6c41e",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.kt": {
-    "mtime": 1785751393.7669137,
-    "ast_hash": "6fde85e5eae24b68edcdd2a5cab731e2",
+    "mtime": 1786061039.48559,
+    "ast_hash": "efe0699f60f42a22d89ec2b5ddc918d2",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/IncomingSharePlugin.kt": {
@@ -385,23 +385,23 @@
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/FolderPickerPlugin.kt": {
-    "mtime": 1785751393.7668138,
-    "ast_hash": "d23f103cd1b95b0c90364023acd1f985",
+    "mtime": 1786061039.4849126,
+    "ast_hash": "2878a58fd93666eab9af892d19d5cf77",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/LocalSignalingServerPlugin.kt": {
-    "mtime": 1785850326.171196,
-    "ast_hash": "c5e66766cb9cd549b28b74d605ab3611",
+    "mtime": 1786061039.48559,
+    "ast_hash": "cdd48a175c980f3fbe834a12e1bcab7f",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/WifiDirectPlugin.kt": {
-    "mtime": 1785758042.8711708,
-    "ast_hash": "390f5173b513934f1e14ef1edcb77cfa",
+    "mtime": 1786061039.48559,
+    "ast_hash": "40d19d0a9a5bcb6579a4675767154671",
     "semantic_hash": ""
   },
   "src/webrtcLocal.js": {
-    "mtime": 1785757334.390072,
-    "ast_hash": "f1aed33da4b88fb1c587c9808b42331c",
+    "mtime": 1786061039.49259,
+    "ast_hash": "17edc3b78e767c1cb41deff226daf791",
     "semantic_hash": ""
   },
   "src/history.test.js": {
@@ -430,13 +430,13 @@
     "semantic_hash": ""
   },
   "src/transferUtils.js": {
-    "mtime": 1785912868.1759815,
-    "ast_hash": "a945c4cc92a403bbfd09a07032521b6d",
+    "mtime": 1786061039.49259,
+    "ast_hash": "484715090910f646208171d7eaf3d2ff",
     "semantic_hash": ""
   },
   "src/transferUtils.test.js": {
-    "mtime": 1785828947.3927953,
-    "ast_hash": "ec89fc40d5032d431ad96e6217f52769",
+    "mtime": 1786061039.49259,
+    "ast_hash": "01e3cca0769a3eea3bf0cd125506fcad",
     "semantic_hash": ""
   },
   "src/webrtcLocal.test.js": {
@@ -445,13 +445,13 @@
     "semantic_hash": ""
   },
   "src/App.components.test.jsx": {
-    "mtime": 1785829078.7193522,
-    "ast_hash": "8b4d5052404b3d5879f22347af115abd",
+    "mtime": 1786061039.4909227,
+    "ast_hash": "9020928a851162c482a1faef9d69bf25",
     "semantic_hash": ""
   },
   "src/App.panels.test.jsx": {
-    "mtime": 1785829182.7230134,
-    "ast_hash": "452bffadaec1ae5d5b97ea7ddbeebde7",
+    "mtime": 1786355240.5027466,
+    "ast_hash": "c29c7f9ece908091193dd1cf72436e22",
     "semantic_hash": ""
   },
   "src/native.native.test.js": {
@@ -465,18 +465,148 @@
     "semantic_hash": ""
   },
   "src/App.receiver.test.jsx": {
-    "mtime": 1785851813.8975656,
-    "ast_hash": "778b170f34dbfab4fad833ed10fe8895",
+    "mtime": 1786061039.49259,
+    "ast_hash": "6c86e4887269e183cfed4d75f9e98321",
     "semantic_hash": ""
   },
   "src/App.sender.test.jsx": {
-    "mtime": 1785851807.5655944,
-    "ast_hash": "7100c0f549d08e85782abf778edeec7f",
+    "mtime": 1786061039.49259,
+    "ast_hash": "ad0e482ba7fb04f283da8cc98024545d",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/AppUpdatePlugin.kt": {
     "mtime": 1785851637.3002625,
     "ast_hash": "ad9612161587f40159d0047b881419a5",
+    "semantic_hash": ""
+  },
+  "src/ErrorBoundary.jsx": {
+    "mtime": 1786004703.452328,
+    "ast_hash": "baeeaf445164c3c6cd1fb148c4edf1f9",
+    "semantic_hash": ""
+  },
+  "src/components/AppIcon.jsx": {
+    "mtime": 1786004838.5216444,
+    "ast_hash": "ff3c61201812680186f1160f478a536b",
+    "semantic_hash": ""
+  },
+  "src/components/AppsPanel.jsx": {
+    "mtime": 1786004869.9626403,
+    "ast_hash": "3efdb24c4062068e530dba06dba29ad0",
+    "semantic_hash": ""
+  },
+  "src/components/FolderQueueRow.jsx": {
+    "mtime": 1786004832.9370008,
+    "ast_hash": "ea331fab37d49bbae7a00c680e06ce3b",
+    "semantic_hash": ""
+  },
+  "src/components/HighlightMatch.jsx": {
+    "mtime": 1786004842.5243888,
+    "ast_hash": "adc323b659764cc901d576bc616499a1",
+    "semantic_hash": ""
+  },
+  "src/components/HistoryPanel.jsx": {
+    "mtime": 1786355226.1044064,
+    "ast_hash": "935def3fd9e4ac8956b66f9d27c5623d",
+    "semantic_hash": ""
+  },
+  "src/components/RoomCodeFlap.jsx": {
+    "mtime": 1786004812.0683346,
+    "ast_hash": "67dbbe0e0f86e196229aafde621cc82a",
+    "semantic_hash": ""
+  },
+  "src/components/SwipeableFileRow.jsx": {
+    "mtime": 1786007719.6338496,
+    "ast_hash": "b78feec4a0179d299668a0bcf74ebdee",
+    "semantic_hash": ""
+  },
+  "src/components/TransferRing.jsx": {
+    "mtime": 1786004893.931116,
+    "ast_hash": "51151bf8ed0da301bcb088b88705c76c",
+    "semantic_hash": ""
+  },
+  "src/crashLog.js": {
+    "mtime": 1786004671.7193909,
+    "ast_hash": "33924bfafb6888160fe903c6760eaf75",
+    "semantic_hash": ""
+  },
+  "src/uiHelpers.js": {
+    "mtime": 1786004803.6158757,
+    "ast_hash": "d15b2dc652adda12fbfafe4ec65e5ea0",
+    "semantic_hash": ""
+  },
+  "android/app/src/main/java/com/veer/novashare/HotspotPlugin.kt": {
+    "mtime": 1786045557.4788759,
+    "ast_hash": "17df87ae3169a85a7b6427c3faf34b22",
+    "semantic_hash": ""
+  },
+  "src/App.native-receive.test.jsx": {
+    "mtime": 1786040604.5728872,
+    "ast_hash": "3a2f5ebc8affbaf33f9d8020d8b49d2b",
+    "semantic_hash": ""
+  },
+  "src/clipboardSync.js": {
+    "mtime": 1786032547.7463934,
+    "ast_hash": "7e6b500dd2db1e246a50a39e2c05bfc4",
+    "semantic_hash": ""
+  },
+  "src/clipboardSync.test.js": {
+    "mtime": 1786032754.1223402,
+    "ast_hash": "67bbb55759342609be3cb4002b269d30",
+    "semantic_hash": ""
+  },
+  "src/completionChime.js": {
+    "mtime": 1786007603.5951784,
+    "ast_hash": "bd1f094223bc1a25f482e0b74aa3c46f",
+    "semantic_hash": ""
+  },
+  "src/components/FileThumbnail.jsx": {
+    "mtime": 1786008514.5752532,
+    "ast_hash": "8e8269a804ce4a24a620f69c6ba142a5",
+    "semantic_hash": ""
+  },
+  "src/receivedIndex.js": {
+    "mtime": 1786031868.4309509,
+    "ast_hash": "3a3f3389d6a149c002c4d0b1d0551817",
+    "semantic_hash": ""
+  },
+  "src/receivedIndex.test.js": {
+    "mtime": 1786032092.0794418,
+    "ast_hash": "61043e2a7a7b0e534f07e07b3fa690a2",
+    "semantic_hash": ""
+  },
+  "src/transferState.js": {
+    "mtime": 1786030302.7455833,
+    "ast_hash": "0b9bd5debee6e1b6abe096e7fb5790e2",
+    "semantic_hash": ""
+  },
+  "src/localSocketTransport.js": {
+    "mtime": 1786053527.8384988,
+    "ast_hash": "01cb266036440c2c9e5b0b947e87ccdb",
+    "semantic_hash": ""
+  },
+  "src/localSocketTransport.test.js": {
+    "mtime": 1786053747.8517177,
+    "ast_hash": "2a9bd142f5323d70bc3f5b1382cf5a72",
+    "semantic_hash": ""
+  },
+  "src/App.auto-transport.test.jsx": {
+    "mtime": 1786118290.0999026,
+    "ast_hash": "c64ea59337d9a579ed3df4c1200286b4",
+    "semantic_hash": ""
+  },
+  "src/connectivity.js": {
+    "mtime": 1786117733.8455875,
+    "ast_hash": "5b913ce834f9700e13b5f9bc688ea843",
+    "semantic_hash": ""
+  },
+  "src/connectivity.test.js": {
+    "mtime": 1786117756.4870207,
+    "ast_hash": "0ce80b7764bd090dc06a510f6c8dd364",
+    "semantic_hash": ""
+  },
+  "src/components/SwipeableHistoryRow.jsx": {
+    "mtime": 1786355218.40292,
+    "ast_hash": "27bc0257a1c8709afec4c44b11465be0",
     "semantic_hash": ""
   }
 }

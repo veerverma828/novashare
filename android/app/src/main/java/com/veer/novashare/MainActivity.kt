@@ -20,6 +20,7 @@ class MainActivity : BridgeActivity() {
         registerPlugin(NearbyDiscoveryPlugin::class.java)
         registerPlugin(FolderPickerPlugin::class.java)
         registerPlugin(WifiDirectPlugin::class.java)
+        registerPlugin(HotspotPlugin::class.java)
         registerPlugin(LocalSignalingServerPlugin::class.java)
         registerPlugin(AppUpdatePlugin::class.java)
         super.onCreate(savedInstanceState)

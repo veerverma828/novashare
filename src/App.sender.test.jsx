@@ -67,6 +67,7 @@ function makeFakeConn(peerId = 'receiver-1') {
 
 vi.mock('./native', () => ({
   triggerHaptic: vi.fn(),
+  triggerSuccessHaptic: vi.fn(),
   listInstalledApps: vi.fn(async () => []),
   getAppIcon: vi.fn(async () => null),
   getAppApkFile: vi.fn(async () => null),
@@ -88,9 +89,19 @@ vi.mock('./native', () => ({
   wifiDirectInitialize: vi.fn(async () => {}),
   wifiDirectDiscoverPeers: vi.fn(async () => {}),
   wifiDirectStopDiscovery: vi.fn(async () => {}),
+  wifiDirectIsLocationEnabled: vi.fn(async () => true),
+  wifiDirectOpenLocationSettings: vi.fn(async () => {}),
+  wifiDirectIsWifiEnabled: vi.fn(async () => true),
+  wifiDirectOpenWifiSettings: vi.fn(async () => {}),
   wifiDirectConnect: vi.fn(async () => {}),
   wifiDirectRequestGroupInfo: vi.fn(async () => ({ groupFormed: false, isGroupOwner: false, groupOwnerAddress: '' })),
   wifiDirectRemoveGroup: vi.fn(async () => {}),
+  isHotspotSupported: vi.fn(async () => false),
+  hotspotStart: vi.fn(async () => { throw new Error('not supported'); }),
+  hotspotStop: vi.fn(async () => {}),
+  hotspotJoin: vi.fn(async () => { throw new Error('not supported'); }),
+  hotspotLeave: vi.fn(async () => {}),
+  onHotspotLost: vi.fn(() => () => {}),
   onWifiDirectPeersChanged: vi.fn(() => () => {}),
   onWifiDirectConnectionChanged: vi.fn(() => () => {}),
   localSignalingStartServer: vi.fn(async () => { throw new Error('Local signaling requires native platform'); }),
@@ -103,7 +114,8 @@ vi.mock('./native', () => ({
   checkForAppUpdate: vi.fn(async () => ({ updateAvailable: false })),
   startFlexibleAppUpdate: vi.fn(async () => ({ accepted: false })),
   completeFlexibleAppUpdate: vi.fn(async () => {}),
-  onAppUpdateStateChanged: vi.fn(() => () => {})
+  onAppUpdateStateChanged: vi.fn(() => () => {}),
+  getBatteryInfo: vi.fn(() => Promise.resolve({ batteryLevel: null, isCharging: false }))
 }));
 
 vi.mock('@capacitor/app', () => ({
@@ -137,6 +149,7 @@ vi.mock('./history', async () => {
 
 import App from './App';
 import { addHistoryEntry } from './history';
+import { getBatteryInfo } from './native';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -214,9 +227,12 @@ describe('App sender flow (cloud/PeerJS transport)', () => {
     // Receiver connected toast / transferring state
     expect((await screen.findAllByText(/Receiver connected/i)).length).toBeGreaterThan(0);
 
-    // conn.on('open') schedules metadata + first chunk after a 150ms timer
+    // conn.on('open') schedules metadata + first chunk after a 150ms timer.
+    // metadata itself now goes out after an awaited SHA-256 hash (integrity
+    // verification), so wait for that specific message rather than "any
+    // message sent" — batch-start alone would satisfy a weaker check first.
     act(() => conn.emit('open'));
-    await waitFor(() => expect(conn.sent.length).toBeGreaterThan(0), { timeout: 500 });
+    await waitFor(() => expect(conn.sent.some((m) => m.type === 'metadata')).toBe(true), { timeout: 500 });
 
     const metaMsg = conn.sent.find((m) => m.type === 'metadata');
     expect(metaMsg).toMatchObject({ type: 'metadata', name: 'a.txt', size: file.size, fileIndex: 0, totalFiles: 1 });
@@ -251,6 +267,21 @@ describe('App sender flow (cloud/PeerJS transport)', () => {
     expect(addHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({ direction: 'sent', status: 'complete' })
     );
+
+    // Persistent clipboard channel (feature): the connection is still open
+    // after batch-complete — sending a snippet from the Complete screen
+    // should go out on it, and an incoming 'clip' should render too.
+    const clipInput = screen.getByPlaceholderText(/Send a quick note or link/i);
+    await user.type(clipInput, 'here is a link');
+    await user.click(screen.getByRole('button', { name: /^Send$/i }));
+
+    await waitFor(() => expect(conn.sent.some((m) => m.type === 'clip' && m.text === 'here is a link')).toBe(true));
+    expect(await screen.findByText('here is a link')).toBeInTheDocument();
+
+    await act(async () => {
+      conn.emit('data', { type: 'clip', text: 'reply from receiver' });
+    });
+    expect(await screen.findByText('reply from receiver')).toBeInTheDocument();
   });
 
   it('advances to the next queued file once the first is fully sent', async () => {
@@ -277,6 +308,46 @@ describe('App sender flow (cloud/PeerJS transport)', () => {
     const metaMsgs = conn.sent.filter((m) => m.type === 'metadata');
     expect(metaMsgs[0].name).toBe('a.txt');
     expect(metaMsgs[1].name).toBe('b.txt');
+  });
+
+  it('advances past a file the receiver already has, without streaming the rest of it', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    // Several chunks worth, so an early abandonment is distinguishable from
+    // "the whole file was only ever going to be one chunk anyway".
+    const file1 = makeFile('a.bin', 'a'.repeat(64 * 1024 * 4), 'application/octet-stream');
+    const file2 = makeFile('b.txt', 'b'.repeat(10), 'text/plain');
+    await selectFiles(user, [file1, file2]);
+    await startSend(user);
+
+    await waitFor(() => expect(FakePeer.instances.length).toBe(1));
+    const peer = latestPeer();
+    act(() => peer.emit('open'));
+
+    // Throttle to 512 KB/s (~125ms between 64KB chunks) so there's a
+    // reliable window to react to skip-duplicate before the whole file
+    // streams out — same technique as the pause/resume test below.
+    const rateBtn = await screen.findByRole('button', { name: /Speed limit/i });
+    await user.click(rateBtn);
+    const preset = await screen.findByRole('button', { name: '512 KB/s' });
+    await user.click(preset);
+
+    const conn = makeFakeConn('receiver-1');
+    act(() => peer.emit('connection', conn));
+    act(() => conn.emit('open'));
+
+    await waitFor(() => expect(conn.sent.some((m) => m.type === 'chunk')).toBe(true), { timeout: 500 });
+
+    // Receiver already has file 0 (duplicate-file skip / delta folder sync).
+    act(() => conn.emit('data', { type: 'skip-duplicate', fileIndex: 0 }));
+
+    await waitFor(() => expect(conn.sent.some((m) => m.type === 'metadata' && m.name === 'b.txt')).toBe(true), { timeout: 1000 });
+    await waitFor(() => expect(conn.sent.some((m) => m.type === 'batch-complete')).toBe(true), { timeout: 1000 });
+
+    // 4 chunks would be needed to stream a.bin in full — abandoning mid-stream
+    // should leave well under that.
+    const chunksSent = conn.sent.filter((m) => m.type === 'chunk').length;
+    expect(chunksSent).toBeLessThan(4);
   });
 
   it('pauses sending when paused and resumes without restarting from 0', async () => {
@@ -363,6 +434,44 @@ describe('App sender flow (cloud/PeerJS transport)', () => {
     // Now relieve backpressure and confirm sending resumes.
     conn.dataChannel.bufferedAmount = 0;
     await waitFor(() => expect(conn.sent.some((m) => m.type === 'chunk')).toBe(true), { timeout: 1000 });
+  });
+
+  it('auto-throttles bandwidth when battery is low and not charging', async () => {
+    getBatteryInfo.mockResolvedValueOnce({ batteryLevel: 0.1, isCharging: false });
+
+    const user = userEvent.setup();
+    render(<App />);
+    await selectFiles(user, [makeFile('a.txt')]);
+    await startSend(user);
+
+    await waitFor(() => expect(FakePeer.instances.length).toBe(1));
+    const peer = latestPeer();
+    act(() => peer.emit('open'));
+
+    const conn = makeFakeConn('receiver-1');
+    act(() => peer.emit('connection', conn));
+
+    await waitFor(() => expect(screen.getByText(/Speed limit: 512 KB\/s/i)).toBeInTheDocument(), { timeout: 1000 });
+  });
+
+  it('does not auto-throttle when the device is charging despite low battery', async () => {
+    getBatteryInfo.mockResolvedValueOnce({ batteryLevel: 0.1, isCharging: true });
+
+    const user = userEvent.setup();
+    render(<App />);
+    await selectFiles(user, [makeFile('a.txt')]);
+    await startSend(user);
+
+    await waitFor(() => expect(FakePeer.instances.length).toBe(1));
+    const peer = latestPeer();
+    act(() => peer.emit('open'));
+
+    const conn = makeFakeConn('receiver-1');
+    act(() => peer.emit('connection', conn));
+
+    // Give the async battery check a chance to (not) apply a throttle.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByText(/Speed limit: Unlimited/i)).toBeInTheDocument();
   });
 
   it('reflects a selected rate preset in UI state', async () => {

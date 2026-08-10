@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // App.jsx pulls in native.js -> @capacitor/core's Capacitor.isNativePlatform().
@@ -28,11 +28,13 @@ vi.mock('./history', () => ({
   getHistory: vi.fn(),
   addHistoryEntry: vi.fn(),
   clearHistory: vi.fn(),
+  removeHistoryEntry: vi.fn(),
 }));
 
-import { AppsPanel, HistoryPanel } from './App.jsx';
+import { AppsPanel } from './components/AppsPanel';
+import { HistoryPanel } from './components/HistoryPanel';
 import { listInstalledApps, getAppApkFile } from './native';
-import { getHistory } from './history';
+import { getHistory, removeHistoryEntry } from './history';
 
 const formatBytes = (n) => `${n}B`;
 
@@ -212,5 +214,25 @@ describe('HistoryPanel', () => {
     expect(screen.getByText(/just now/)).toBeInTheDocument();
     const oldDateLabel = new Date(now - 86400000 * 5).toLocaleDateString();
     expect(screen.getByText(new RegExp(oldDateLabel.replace(/\//g, '\\/')))).toBeInTheDocument();
+  });
+
+  it('discards a history entry when swiped left past the threshold', async () => {
+    const entry = { id: 'entry-123', timestamp: Date.now(), direction: 'sent', kind: 'file', files: [{ name: 'discardable.txt', size: 100 }], peerLabel: 'X', roomCode: 'SWIP', status: 'complete' };
+    getHistory.mockReturnValue([entry]);
+
+    render(<HistoryPanel formatBytes={formatBytes} onResend={vi.fn()} onClear={vi.fn()} now={Date.now()} />);
+
+    const itemLabel = screen.getByText('discardable.txt');
+    const rowEl = itemLabel.closest('.cursor-grab');
+
+    expect(rowEl).toBeInTheDocument();
+
+    // Fire pointer drag events leftwards past -72px threshold
+    await fireEvent.pointerDown(rowEl, { clientX: 200, button: 0 });
+    await fireEvent.pointerMove(rowEl, { clientX: 100, button: 0 }); // delta = -100px < -72px threshold
+    await fireEvent.pointerUp(rowEl);
+
+    expect(removeHistoryEntry).toHaveBeenCalledWith('entry-123');
+    expect(screen.queryByText('discardable.txt')).not.toBeInTheDocument();
   });
 });

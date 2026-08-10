@@ -1,0 +1,237 @@
+{
+  "app/build.gradle": {
+    "mtime": 1785851573.64245,
+    "ast_hash": "ed7ab83ddcfc69e978ea4a39b1c42d8b",
+    "semantic_hash": ""
+  },
+  "app/capacitor.build.gradle": {
+    "mtime": 1786019756.2179513,
+    "ast_hash": "75f5b1602da325f67fb63b22caebbd04",
+    "semantic_hash": ""
+  },
+  "app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java": {
+    "mtime": 1785751393.7662237,
+    "ast_hash": "fbaf7cc870c663eb52dcf218531c439d",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/AppUpdatePlugin.kt": {
+    "mtime": 1785851637.3002625,
+    "ast_hash": "ad9612161587f40159d0047b881419a5",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/FolderPickerPlugin.kt": {
+    "mtime": 1786030340.8475583,
+    "ast_hash": "2878a58fd93666eab9af892d19d5cf77",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/IncomingSharePlugin.kt": {
+    "mtime": 1785751393.7669137,
+    "ast_hash": "425b0fed88bee5afededf79098436ec4",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/InstalledAppsPlugin.kt": {
+    "mtime": 1785751393.7669137,
+    "ast_hash": "4dc5d8f3e7bf525615b3784971da06dc",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/LocalSignalingServerPlugin.kt": {
+    "mtime": 1785850326.171196,
+    "ast_hash": "c5e66766cb9cd549b28b74d605ab3611",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/MainActivity.kt": {
+    "mtime": 1786031294.2330487,
+    "ast_hash": "07d99240e0661eca97eee5b3a3a6c41e",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/NearbyDiscoveryPlugin.kt": {
+    "mtime": 1785751393.7669137,
+    "ast_hash": "6beb80888d6131c13ef2a6e2917bf2db",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.kt": {
+    "mtime": 1786030328.120565,
+    "ast_hash": "efe0699f60f42a22d89ec2b5ddc918d2",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/TransferForegroundService.kt": {
+    "mtime": 1785751393.7669137,
+    "ast_hash": "158cec1f02a7442ec6c85b2a625d7ebd",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/TransferNotificationPlugin.kt": {
+    "mtime": 1785751393.7672238,
+    "ast_hash": "bf7fce63c53f6f75a82d2c6c9d67a584",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/WifiDirectPlugin.kt": {
+    "mtime": 1786015557.0776622,
+    "ast_hash": "129e85ae28b5dcfc2a83f7bd2fc89f0d",
+    "semantic_hash": ""
+  },
+  "app/src/test/java/com/getcapacitor/myapp/ExampleUnitTest.java": {
+    "mtime": 1785751393.7699137,
+    "ast_hash": "e91b4501c14da821682fa5c26a16d616",
+    "semantic_hash": ""
+  },
+  "build.gradle": {
+    "mtime": 1785751393.7699137,
+    "ast_hash": "0273f5942420817099fd4238ba81083b",
+    "semantic_hash": ""
+  },
+  "capacitor.settings.gradle": {
+    "mtime": 1786019756.2179513,
+    "ast_hash": "874bace937366e6f3a0047d87e6fb106",
+    "semantic_hash": ""
+  },
+  "gradlew": {
+    "mtime": 1785751393.7707398,
+    "ast_hash": "794669d78aef1dd5c7d889ef618b311a",
+    "semantic_hash": ""
+  },
+  "settings.gradle": {
+    "mtime": 1785757837.1379907,
+    "ast_hash": "6d4f3375c8aa453cf683ad731ed71b8f",
+    "semantic_hash": ""
+  },
+  "variables.gradle": {
+    "mtime": 1785751393.7707398,
+    "ast_hash": "4b3fce8ea2a515a9d2e47e74757172ec",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-land-hdpi/splash.png": {
+    "mtime": 1785751393.767337,
+    "ast_hash": "f7a80786dd355bd39014e58027aa6e19",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-land-mdpi/splash.png": {
+    "mtime": 1785751393.767337,
+    "ast_hash": "acc976d4a36479233371a53021525c0c",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-land-xhdpi/splash.png": {
+    "mtime": 1785751393.767337,
+    "ast_hash": "b8c72969bc1f78aab71a76035360d4af",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-land-xxhdpi/splash.png": {
+    "mtime": 1785751393.767337,
+    "ast_hash": "f87e988387b07d843905f38b084929fb",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-land-xxxhdpi/splash.png": {
+    "mtime": 1785751393.767337,
+    "ast_hash": "055a69553b16b0bf5f72094a2e459fc7",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-port-hdpi/splash.png": {
+    "mtime": 1785751393.767337,
+    "ast_hash": "5eb10d16c81338abe8bbc033d49638a8",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-port-mdpi/splash.png": {
+    "mtime": 1785751393.767337,
+    "ast_hash": "d855a76a5070c8e6fcfd83a27549bdce",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-port-xhdpi/splash.png": {
+    "mtime": 1785751393.767337,
+    "ast_hash": "df100b2a36bdb98b711cca58941728de",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-port-xxhdpi/splash.png": {
+    "mtime": 1785751393.767337,
+    "ast_hash": "2c1b668364e815256f67b71dcdfa4d6e",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable-port-xxxhdpi/splash.png": {
+    "mtime": 1785751393.768224,
+    "ast_hash": "b5b1b22b59abe686c1df0d74a423d034",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/drawable/splash.png": {
+    "mtime": 1785751393.7684832,
+    "ast_hash": "acc976d4a36479233371a53021525c0c",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-hdpi/ic_launcher.png": {
+    "mtime": 1785751393.768649,
+    "ast_hash": "d97691ab87a9e860f24b0fe5c9668c11",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png": {
+    "mtime": 1785751393.7687268,
+    "ast_hash": "4fe06c7fca09285baa9d252d5c45c775",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-hdpi/ic_launcher_round.png": {
+    "mtime": 1785751393.7687268,
+    "ast_hash": "d97691ab87a9e860f24b0fe5c9668c11",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-mdpi/ic_launcher.png": {
+    "mtime": 1785751393.7687268,
+    "ast_hash": "6dacfa32bd73a93d90d4e6afc3d05a30",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png": {
+    "mtime": 1785751393.7688625,
+    "ast_hash": "7a0aefb773434ac8a8c8f69deccadfe5",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-mdpi/ic_launcher_round.png": {
+    "mtime": 1785751393.7688625,
+    "ast_hash": "6dacfa32bd73a93d90d4e6afc3d05a30",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-xhdpi/ic_launcher.png": {
+    "mtime": 1785751393.7688625,
+    "ast_hash": "8cafba95dac7794b08e3ba9ac747f51e",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png": {
+    "mtime": 1785751393.768987,
+    "ast_hash": "84b46348d4a5ed5da9e71abf71f85823",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-xhdpi/ic_launcher_round.png": {
+    "mtime": 1785751393.768987,
+    "ast_hash": "8cafba95dac7794b08e3ba9ac747f51e",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-xxhdpi/ic_launcher.png": {
+    "mtime": 1785751393.768987,
+    "ast_hash": "8d52440ed97460154305b89a334e39dd",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png": {
+    "mtime": 1785751393.7692242,
+    "ast_hash": "ba5c306a33201147476a6a2629e1be33",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png": {
+    "mtime": 1785751393.7692242,
+    "ast_hash": "8d52440ed97460154305b89a334e39dd",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": {
+    "mtime": 1785751393.7692242,
+    "ast_hash": "ed1aa6f9349bb8bcecfa673a41b00e3a",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png": {
+    "mtime": 1785751393.7694457,
+    "ast_hash": "82e3bf696dd39b4ec0994b37c0d28fa1",
+    "semantic_hash": ""
+  },
+  "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png": {
+    "mtime": 1785751393.7694457,
+    "ast_hash": "ed1aa6f9349bb8bcecfa673a41b00e3a",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/veer/novashare/HotspotPlugin.kt": {
+    "mtime": 1786031290.743342,
+    "ast_hash": "0d6754bc33238d773263a535945b3ff7",
+    "semantic_hash": ""
+  }
+}

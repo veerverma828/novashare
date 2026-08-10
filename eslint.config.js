@@ -23,6 +23,16 @@ export default defineConfig([
       // "sync state to external trigger" effects (routing, platform checks)
       // that already guard against re-render loops via their deps array.
       'react-hooks/set-state-in-effect': 'off',
+      // Same family of React Compiler preview rules, same problem: these
+      // treat any ref/Date.now()/etc. reachable from the component body as
+      // "used during render" even when it's only ever read inside an event
+      // handler or an async callback (e.g. sendClip's Date.now(), the
+      // pre-send "Add more" menu's ref-triggering onClick handlers) — App.jsx
+      // predates the compiler's stricter authoring rules and isn't a target
+      // for it yet, so these three just produce noise here.
+      'react-hooks/refs': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/immutability': 'off',
     },
   },
   {

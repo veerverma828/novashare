@@ -1,5 +1,6 @@
 package com.veer.novashare
 
+import android.util.Base64
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -13,13 +14,23 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicInteger
 
-// A dumb byte-pipe between two Wi-Fi-Direct-linked phones, used only to swap
-// one WebRTC SDP offer/answer plus trickle ICE candidates so a fully offline
-// RTCPeerConnection can be negotiated with no internet-reachable signaling
-// broker. No protocol logic lives here — framing is a 4-byte big-endian
-// length prefix + UTF-8 JSON, symmetric on both ends. The Wi-Fi Direct group
-// owner calls startServer() and waits for the one inbound socket; the other
-// side calls connectToServer() with the group owner's local IP.
+// A dumb byte-pipe between two locally-linked phones (Wi-Fi Direct or
+// hotspot-fallback group). Originally used only to swap a WebRTC SDP
+// offer/answer, it now carries the whole file transfer directly — no
+// RTCPeerConnection/ICE negotiation needed on a link the two devices are
+// already directly connected on, which is also what production sharing apps
+// (Xender, SHAREit, Nearby Share) do: plain local socket, no WebRTC, since
+// there's no NAT to traverse and no reason to pay SCTP/DTLS overhead once a
+// direct link already exists. WebRTC stays reserved for the internet/cloud
+// path (PeerJS in App.jsx) where NAT traversal is the actual problem.
+//
+// Framing: [1-byte type][4-byte big-endian length][payload], symmetric on
+// both ends. Type 0 = UTF-8 JSON text frame (control messages + the
+// small-file/text-snippet fast path). Type 1 = raw binary frame (file chunk
+// bytes, base64-encoded crossing the JS bridge since Capacitor plugin calls
+// are JSON). The Wi-Fi Direct group owner calls startServer() and waits for
+// the one inbound socket; the other side calls connectToServer() with the
+// group owner's local IP.
 @CapacitorPlugin(name = "LocalSignaling")
 class LocalSignalingServerPlugin : Plugin() {
 
@@ -28,6 +39,8 @@ class LocalSignalingServerPlugin : Plugin() {
         const val CONNECT_BUDGET_MS = 25000L
         const val CONNECT_ATTEMPT_TIMEOUT_MS = 1000
         const val RETRY_DELAY_MS = 300L
+        const val FRAME_TYPE_JSON: Int = 0
+        const val FRAME_TYPE_BINARY: Int = 1
     }
 
     private var serverSocket: ServerSocket? = null
@@ -127,23 +140,48 @@ class LocalSignalingServerPlugin : Plugin() {
             call.reject("connectionId and json are required")
             return
         }
+        writeFrame(connectionId, FRAME_TYPE_JSON, json.toByteArray(StandardCharsets.UTF_8), call)
+    }
+
+    // File chunk bytes — same socket/connection as send(), just tagged with
+    // the binary frame type. base64 in (JS bridge calls are JSON) — see
+    // arrayBufferToBase64 on the JS side, which already exists for this
+    // exact chunk-sized-payload reason (NotifyDownloadPlugin's appendChunk
+    // uses the same pattern for the receive side).
+    @PluginMethod
+    fun sendBinary(call: PluginCall) {
+        val connectionId = call.getInt("connectionId")
+        val base64 = call.getString("data")
+        if (connectionId == null || base64 == null) {
+            call.reject("connectionId and data are required")
+            return
+        }
+        val bytes = try {
+            Base64.decode(base64, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            call.reject("Invalid base64 data: " + e.message, e)
+            return
+        }
+        writeFrame(connectionId, FRAME_TYPE_BINARY, bytes, call)
+    }
+
+    private fun writeFrame(connectionId: Int, type: Int, payload: ByteArray, call: PluginCall) {
         val socket = connections[connectionId]
         if (socket == null || socket.isClosed) {
             call.reject("No open connection with id $connectionId")
             return
         }
-
         try {
-            val bytes = json.toByteArray(StandardCharsets.UTF_8)
             val out = DataOutputStream(socket.getOutputStream())
             synchronized(out) {
-                out.writeInt(bytes.size)
-                out.write(bytes)
+                out.writeByte(type)
+                out.writeInt(payload.size)
+                out.write(payload)
                 out.flush()
             }
             call.resolve()
         } catch (e: Exception) {
-            call.reject("Failed to send signaling message: " + e.message, e)
+            call.reject("Failed to send: " + e.message, e)
         }
     }
 
@@ -167,16 +205,24 @@ class LocalSignalingServerPlugin : Plugin() {
             try {
                 val input = DataInputStream(socket.getInputStream())
                 while (true) {
+                    val type = input.readUnsignedByte()
                     val length = input.readInt()
-                    if (length < 0 || length > 16 * 1024 * 1024) break // sanity bound, no valid signaling frame is this large
+                    if (length < 0 || length > 16 * 1024 * 1024) break // sanity bound, no valid frame is this large
                     val buf = ByteArray(length)
                     input.readFully(buf)
-                    val json = String(buf, StandardCharsets.UTF_8)
 
-                    val data = JSObject()
-                    data.put("connectionId", connectionId)
-                    data.put("json", json)
-                    notifyListeners("message", data)
+                    if (type == FRAME_TYPE_BINARY) {
+                        val data = JSObject()
+                        data.put("connectionId", connectionId)
+                        data.put("data", Base64.encodeToString(buf, Base64.NO_WRAP))
+                        notifyListeners("binaryMessage", data)
+                    } else {
+                        val json = String(buf, StandardCharsets.UTF_8)
+                        val data = JSObject()
+                        data.put("connectionId", connectionId)
+                        data.put("json", json)
+                        notifyListeners("message", data)
+                    }
                 }
             } catch (e: Exception) {
                 // Socket closed/reset — falls through to the disconnect notification below.
