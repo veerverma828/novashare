@@ -133,6 +133,11 @@ vi.mock('./native', () => ({
   getBatteryInfo: vi.fn(() => Promise.resolve({ batteryLevel: null, isCharging: false })),
 }));
 
+vi.mock('./connectivity', () => ({
+  isOnline: vi.fn(() => Promise.resolve(true)),
+  subscribeConnectivity: vi.fn(() => () => {}),
+}));
+
 vi.mock('canvas-confetti', () => ({
   default: vi.fn(),
 }));

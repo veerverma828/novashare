@@ -209,12 +209,7 @@ h1, h2, h3, h4, h5, h6 {
 /* Ripple feedback span — created imperatively via document.createElement in
    rippleTap(), so it can't be a Tailwind className applied through JSX. */
 .ripple {
-  position: absolute;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.45);
-  transform: scale(0);
-  pointer-events: none;
-  animation: rippleOut 0.5s ease-out;
+  display: none !important;
 }
 
 /* Global utility classes kept as-is: used across several components via

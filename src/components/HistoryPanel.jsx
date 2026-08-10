@@ -37,7 +37,7 @@ export function HistoryPanel({ formatBytes, onResend, onClear, now }) {
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-3">
+    <div className="flex-1 flex flex-col gap-3 pb-4">
       <div className="flex items-center justify-between flex-shrink-0">
         <span className="text-[0.8rem] text-text-muted">{entries.length} transfer{entries.length === 1 ? '' : 's'}</span>
         <button
@@ -48,7 +48,7 @@ export function HistoryPanel({ formatBytes, onResend, onClear, now }) {
           <Trash2 size={13} /> Clear
         </button>
       </div>
-      <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pr-[0.4rem]">
+      <div className="flex-1 flex flex-col gap-2 pb-2">
         {entries.map((entry) => (
           <SwipeableHistoryRow
             key={entry.id}

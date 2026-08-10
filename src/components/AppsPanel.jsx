@@ -105,7 +105,7 @@ export function AppsPanel({ onSelectApps, formatBytes }) {
   }
 
   return (
-    <div className="apps-panel flex-1 min-h-0 flex flex-col gap-4">
+    <div className="apps-panel flex-1 flex flex-col gap-4 pb-4">
       <div className="relative flex items-center gap-[0.4rem] w-full min-w-0 flex-shrink-0">
         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center"><Search size={16} /></div>
         <input
@@ -135,13 +135,9 @@ export function AppsPanel({ onSelectApps, formatBytes }) {
       )}
 
       {!loading && filtered.length > 0 && (
-        // Responsive tile grid (was a vertical list): auto-fill sizes each
-        // tile to a ~92px minimum and lets the track add/remove columns as
-        // the panel width changes, so it self-adjusts across phone sizes
-        // (and the wider modal/desktop width) with no manual breakpoints.
-        // Behavior below (click-to-toggle, checkbox state, search highlight,
-        // AppsPanel state/handlers) is unchanged from the list version.
-        <div className="apps-list flex-1 min-h-0 grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] auto-rows-max gap-2.5 content-start overflow-y-auto pb-1 pr-[0.4rem]">
+        // Responsive tile grid: auto-fill sizes each tile to a ~92px minimum
+        // and lets the track add/remove columns as the panel width changes.
+        <div className="apps-list flex-1 grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] auto-rows-max gap-2.5 content-start pb-2">
           {filtered.map((app) => {
             const isChecked = selected.has(app.packageName);
             return (

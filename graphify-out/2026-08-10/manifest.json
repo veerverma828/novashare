@@ -15,7 +15,7 @@
     "semantic_hash": ""
   },
   "android/app/capacitor.build.gradle": {
-    "mtime": 1786118442.8563743,
+    "mtime": 1786362858.7670684,
     "ast_hash": "8d3cb669719224f0285d2ad022b7c9d1",
     "semantic_hash": ""
   },
@@ -35,7 +35,7 @@
     "semantic_hash": ""
   },
   "android/capacitor.settings.gradle": {
-    "mtime": 1786118442.8563743,
+    "mtime": 1786362858.7670684,
     "ast_hash": "d1376014db940349c3194df388a5cf4f",
     "semantic_hash": ""
   },
@@ -75,8 +75,8 @@
     "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
   },
   "src/App.jsx": {
-    "mtime": 1786118179.2677305,
-    "ast_hash": "295ec38482c8cfb7dbd71dbce41b63e7",
+    "mtime": 1786362412.3553991,
+    "ast_hash": "341dace034961969bd94bc8e7c3df8f0",
     "semantic_hash": ""
   },
   "src/main.jsx": {
@@ -465,8 +465,8 @@
     "semantic_hash": ""
   },
   "src/App.receiver.test.jsx": {
-    "mtime": 1786061039.49259,
-    "ast_hash": "6c86e4887269e183cfed4d75f9e98321",
+    "mtime": 1786356678.2010758,
+    "ast_hash": "241313749df167d8d9ba32c7699092e2",
     "semantic_hash": ""
   },
   "src/App.sender.test.jsx": {
@@ -490,8 +490,8 @@
     "semantic_hash": ""
   },
   "src/components/AppsPanel.jsx": {
-    "mtime": 1786004869.9626403,
-    "ast_hash": "3efdb24c4062068e530dba06dba29ad0",
+    "mtime": 1786362576.900418,
+    "ast_hash": "11aaeac607e6b52c0512789c3af9e4ce",
     "semantic_hash": ""
   },
   "src/components/FolderQueueRow.jsx": {
@@ -505,8 +505,8 @@
     "semantic_hash": ""
   },
   "src/components/HistoryPanel.jsx": {
-    "mtime": 1786355226.1044064,
-    "ast_hash": "935def3fd9e4ac8956b66f9d27c5623d",
+    "mtime": 1786362581.6594234,
+    "ast_hash": "7f9011409fde1cb6dc62dd72100556c9",
     "semantic_hash": ""
   },
   "src/components/RoomCodeFlap.jsx": {
@@ -530,8 +530,8 @@
     "semantic_hash": ""
   },
   "src/uiHelpers.js": {
-    "mtime": 1786004803.6158757,
-    "ast_hash": "d15b2dc652adda12fbfafe4ec65e5ea0",
+    "mtime": 1786357797.3631155,
+    "ast_hash": "40f50154daa9865c72674c3b9ab880e6",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/HotspotPlugin.kt": {
@@ -607,6 +607,11 @@
   "src/components/SwipeableHistoryRow.jsx": {
     "mtime": 1786355218.40292,
     "ast_hash": "27bc0257a1c8709afec4c44b11465be0",
+    "semantic_hash": ""
+  },
+  "src/components/SettingsPanel.jsx": {
+    "mtime": 1786362824.4449575,
+    "ast_hash": "a2c7d50ea04aa6257c271065410f98eb",
     "semantic_hash": ""
   }
 }

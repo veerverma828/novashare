@@ -1,16 +1,16 @@
 # Graph Report - novashare  (2026-08-10)
 
 ## Corpus Check
-- 81 files · ~103,089 words
+- 82 files · ~104,456 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 550 nodes · 1033 edges · 46 communities (41 shown, 5 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 26 edges (avg confidence: 0.8)
+- 552 nodes · 1049 edges · 45 communities (40 shown, 5 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 26 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d44c8799`
+- Built from commit: `1f915d75`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -37,14 +37,13 @@
 - React + Vite
 - rules/graphify.md
 - workflows/graphify.md
-- .folderPickerResult
+- NotifyDownloadPlugin
 - CLAUDE.md
 - AppsPanel.jsx
 - localSocketTransport.js
 - AppUpdatePlugin
 - crashLog.js
 - HotspotPlugin
-- InstalledAppsPlugin
 - clipboardSync.js
 - App.native-receive.test.jsx
 - connectivity.js
@@ -53,10 +52,10 @@
 ## God Nodes (most connected - your core abstractions)
 1. `App()` - 73 edges
 2. `WifiDirectPlugin` - 32 edges
-3. `WifiDirect` - 15 edges
-4. `HotspotPlugin` - 14 edges
-5. `LocalSignalingServerPlugin` - 14 edges
-6. `rippleTap()` - 14 edges
+3. `rippleTap()` - 16 edges
+4. `WifiDirect` - 15 edges
+5. `HotspotPlugin` - 14 edges
+6. `LocalSignalingServerPlugin` - 14 edges
 7. `NearbyDiscoveryPlugin` - 12 edges
 8. `LocalSignaling` - 12 edges
 9. `AppUpdatePlugin` - 9 edges
@@ -77,7 +76,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (46 total, 5 thin omitted)
+## Communities (45 total, 5 thin omitted)
 
 ### Community 0 - "devDependencies"
 Cohesion: 0.05
@@ -112,8 +111,8 @@ Cohesion: 0.29
 Nodes (5): Intent, MainActivity, BridgeActivity, Bundle, Uri
 
 ### Community 9 - "WifiDirectPlugin"
-Cohesion: 0.07
-Nodes (16): IncomingSharePlugin, JSArray, Plugin, PluginCall, Plugin, PluginCall, NotifyDownloadPlugin, sanitizeRelPath() (+8 more)
+Cohesion: 0.05
+Nodes (23): FolderPickerPlugin, JSArray, Plugin, PluginCall, IncomingSharePlugin, JSArray, Plugin, PluginCall (+15 more)
 
 ### Community 10 - "LocalSignalingServerPlugin"
 Cohesion: 0.24
@@ -151,13 +150,13 @@ Nodes (3): computeSecurityCode(), formatDigest(), simpleHashBytes()
 Cohesion: 0.50
 Nodes (3): Expanding the ESLint configuration, React Compiler, React + Vite
 
-### Community 32 - ".folderPickerResult"
+### Community 32 - "NotifyDownloadPlugin"
 Cohesion: 0.27
-Nodes (6): FolderPickerPlugin, JSArray, Plugin, PluginCall, androidx, DocumentFile
+Nodes (4): Plugin, PluginCall, NotifyDownloadPlugin, sanitizeRelPath()
 
 ### Community 34 - "AppsPanel.jsx"
 Cohesion: 0.09
-Nodes (27): { FakePeer }, AppIcon(), appIconCache, AppsPanel(), FolderQueueRow(), HighlightMatch(), HistoryPanel(), RoomCodeFlap() (+19 more)
+Nodes (28): { FakePeer }, AppIcon(), appIconCache, AppsPanel(), FolderQueueRow(), HighlightMatch(), HistoryPanel(), RoomCodeFlap() (+20 more)
 
 ### Community 35 - "localSocketTransport.js"
 Cohesion: 0.13
@@ -174,10 +173,6 @@ Nodes (10): clearCrashLog(), formatCrashLogForShare(), getCrashLog(), installGlo
 ### Community 40 - "HotspotPlugin"
 Cohesion: 0.21
 Nodes (6): HotspotPlugin, Plugin, PluginCall, WifiManager, ConnectivityManager, Network
-
-### Community 41 - "InstalledAppsPlugin"
-Cohesion: 0.25
-Nodes (5): InstalledAppsPlugin, Plugin, PluginCall, Bitmap, Drawable
 
 ### Community 42 - "clipboardSync.js"
 Cohesion: 0.62

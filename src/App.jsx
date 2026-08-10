@@ -39,7 +39,9 @@ import {
   ClipboardCopy,
   MessageCircle,
   Paperclip,
-  Send
+  Send,
+  Home,
+  Settings
 } from 'lucide-react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
@@ -113,6 +115,7 @@ import { FolderQueueRow } from './components/FolderQueueRow';
 import { AppsPanel } from './components/AppsPanel';
 import { HistoryPanel } from './components/HistoryPanel';
 import { TransferRing } from './components/TransferRing';
+import { SettingsPanel } from './components/SettingsPanel';
 
 // Marks a queued File as a text snippet (feature: send text/clipboard
 // content through the same P2P pipeline as real files) rather than a user
@@ -152,6 +155,7 @@ const CLOUD_OPEN_TIMEOUT_MS = 8000;
 function App() {
   // Navigation & Mode States
   const [mode, setMode] = useState('home'); // 'home' | 'p2p-send' | 'p2p-receive'
+  const [mainNavTab, setMainNavTab] = useState('home'); // 'home' | 'settings'
   const [homeTab, setHomeTab] = useState('home'); // 'home' | 'apps'
   const homeTabSwipeRef = useRef({ x: 0, y: 0, active: false });
 
@@ -290,6 +294,7 @@ function App() {
   const [showChatApps, setShowChatApps] = useState(false);
   const [showChatAttach, setShowChatAttach] = useState(false);
   const [chatDraft, setChatDraft] = useState('');
+  const [chatPreviewItem, setChatPreviewItem] = useState(null); // { name, size, url, mime, kind, type }
   const chatBuffersRef = useRef(new Map()); // chatId -> { chunks: ArrayBuffer[], received: number, meta }
   const chatFileInputRef = useRef(null);
 
@@ -449,6 +454,27 @@ function App() {
     }).catch((err) => console.warn('runUpdateCheck: update check failed', err));
   };
 
+  const handleManualCheckUpdate = () => {
+    if (!Capacitor.isNativePlatform()) {
+      showToast('You are running NovaShare v1.2 (Latest)', 'info');
+      return;
+    }
+    showToast('Checking for app updates...', 'info');
+    checkForAppUpdate().then(({ updateAvailable, flexibleAllowed, downloadedPending }) => {
+      if (downloadedPending) {
+        setAppUpdate({ status: 'downloaded', progress: 100 });
+        showToast('An update is ready to install!', 'success');
+      } else if (updateAvailable && flexibleAllowed) {
+        setAppUpdate({ status: 'available', progress: 0 });
+        showToast('New update available!', 'success');
+      } else {
+        showToast('NovaShare is up to date (v1.2)', 'success');
+      }
+    }).catch(() => {
+      showToast('NovaShare is up to date (v1.2)', 'info');
+    });
+  };
+
   // Check once on mount, then again whenever the app returns to the
   // foreground — catches an update that finished downloading while backgrounded.
   useEffect(() => {
@@ -554,9 +580,13 @@ function App() {
   // closing the app. Refs mirror the live state so the listener (registered
   // once) never sees stale values.
   const modeRef = useRef(mode);
+  const mainNavTabRef = useRef(mainNavTab);
   const homeTabRef = useRef(homeTab);
   const showQrZoomRef = useRef(showQrZoom);
   const showScannerRef = useRef(showScanner);
+  const chatPreviewItemRef = useRef(chatPreviewItem);
+  const showChatRef = useRef(showChat);
+  const showChatAppsRef = useRef(showChatApps);
   // Also read by the connectivity-triggered rejoin (feature: automatic
   // transport selection), which fires long after its closure was created and
   // must not resume a join the user has since moved on from.
@@ -575,17 +605,37 @@ function App() {
     }
   }, []);
   useEffect(() => { homeTabRef.current = homeTab; }, [homeTab]);
+  useEffect(() => { mainNavTabRef.current = mainNavTab; }, [mainNavTab]);
   useEffect(() => { showQrZoomRef.current = showQrZoom; }, [showQrZoom]);
   useEffect(() => { showScannerRef.current = showScanner; }, [showScanner]);
+  useEffect(() => { chatPreviewItemRef.current = chatPreviewItem; }, [chatPreviewItem]);
+  useEffect(() => { showChatRef.current = showChat; }, [showChat]);
+  useEffect(() => { showChatAppsRef.current = showChatApps; }, [showChatApps]);
 
   useEffect(() => {
     const handle = CapacitorApp.addListener('backButton', () => {
+      if (chatPreviewItemRef.current) {
+        setChatPreviewItem(null);
+        return;
+      }
+      if (showChatAppsRef.current) {
+        setShowChatApps(false);
+        return;
+      }
+      if (showChatRef.current) {
+        setShowChat(false);
+        return;
+      }
       if (showQrZoomRef.current) {
         setShowQrZoom(false);
         return;
       }
       if (showScannerRef.current) {
         setShowScanner(false);
+        return;
+      }
+      if (mainNavTabRef.current !== 'home') {
+        setMainNavTab('home');
         return;
       }
       if (modeRef.current !== 'home') {
@@ -2342,9 +2392,11 @@ function App() {
       return;
     }
     const chatId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const url = URL.createObjectURL(file);
     setChatMessages((prev) => [...prev, {
       id: chatId, direction: 'sent', kind: isApp ? 'app' : 'file',
-      name: file.name, size: file.size, status: 'sending', progress: 0, sortTs: Date.now()
+      name: file.name, size: file.size, status: 'sending', progress: 0, sortTs: Date.now(),
+      file, url, mime: file.type
     }]);
     targets.forEach((conn) => {
       try { conn.send({ type: 'chat-meta', chatId, name: file.name, size: file.size, mime: file.type, isApp }); } catch { /* peer dropped, others may still get it */ }
@@ -2393,8 +2445,28 @@ function App() {
       const blob = new Blob(buf.chunks, { type: buf.meta.mime || 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       chatBuffersRef.current.delete(data.chatId);
-      updateChatMessage(data.chatId, { status: 'received', progress: 1, url });
+      updateChatMessage(data.chatId, { status: 'received', progress: 1, url, file: blob });
     }
+  };
+
+  const handleOpenChatAttachment = (m) => {
+    let fileUrl = m.url;
+    if (!fileUrl && m.file) {
+      fileUrl = URL.createObjectURL(m.file);
+    }
+    if (!fileUrl) {
+      showToast('Attachment is still transferring…', 'info');
+      return;
+    }
+    const type = getFileType(m.name);
+    setChatPreviewItem({
+      name: m.name,
+      size: m.size,
+      url: fileUrl,
+      type,
+      kind: m.kind,
+      direction: m.direction
+    });
   };
 
   // One merged, time-ordered timeline for the Chat overlay — text clips
@@ -2638,16 +2710,35 @@ function App() {
       )}
 
       {/* MAIN LAYOUT CONTAINER */}
-      <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2">
+      <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2 pb-14">
         <div
-          className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 min-h-0 flex flex-col justify-start p-6 max-[640px]:px-4 max-[640px]:py-5 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:py-4 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)] overflow-y-auto touch-pan-y`}
+          className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 min-h-0 flex flex-col justify-start p-6 pb-3 max-[640px]:px-4 max-[640px]:pt-5 max-[640px]:pb-3 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:pt-4 max-[380px]:pb-2 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)] overflow-y-auto touch-pan-y`}
         >
-
-          {/* ==================================================== */}
-          {/* VIEW: HOME VIEW                                      */}
-          {/* ==================================================== */}
-          {mode === 'home' && (
-            <div className="flex-1 min-h-0 flex flex-col w-full">
+          {mainNavTab === 'settings' ? (
+            <div className="flex-1 flex flex-col w-full pb-2">
+              <div className="flex items-center justify-between mb-4 flex-shrink-0">
+                <h2 className="text-[1.5rem] font-bold glow-text flex items-center gap-2 m-0 font-heading">
+                  <Settings size={22} className="text-accent-purple" /> Settings
+                </h2>
+              </div>
+              <SettingsPanel
+                formatBytes={formatBytes}
+                maxRateKBps={maxRateKBps}
+                onSelectMaxRate={(kbps) => {
+                  setMaxRateKBps(kbps);
+                  showToast(kbps === 0 ? 'Bandwidth cap set to Unlimited' : `Bandwidth cap set to ${kbps} KB/s`, 'info');
+                }}
+                appUpdate={appUpdate}
+                onCheckUpdate={handleManualCheckUpdate}
+                onStartUpdate={handleStartUpdate}
+                onRestartUpdate={handleRestartUpdate}
+                showToast={showToast}
+              />
+            </div>
+          ) : (
+          <>
+            {mode === 'home' && (
+              <div className="flex-1 min-h-0 flex flex-col w-full">
               <div className="text-center mb-6 max-[640px]:mb-4 flex-shrink-0">
                 <h2 className="text-[1.85rem] max-[640px]:text-2xl max-[380px]:text-[1.3rem] leading-[1.2] mb-2 font-bold glow-text">Secure P2P File Sharing</h2>
                 <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem]">Transfer files directly browser-to-browser. Encrypted, private, with zero size limits.</p>
@@ -3047,7 +3138,7 @@ function App() {
                   box with the Wi-Fi Direct room code and make it look like a
                   code got typed in on its own. */}
               {selectedFiles.length === 0 && !wifiDirectConnecting && (
-                <div>
+                <div className="mb-2 flex-shrink-0">
                   <div className="flex items-center text-center my-3 text-text-muted text-[0.8rem] before:content-[''] before:flex-1 before:border-b before:border-border before:mr-3 after:content-[''] after:flex-1 after:border-b after:border-border after:ml-3">or receive a file</div>
                   <div className="flex flex-col gap-3">
                     <div className="relative flex items-center gap-[0.4rem] w-full min-w-0">
@@ -3071,7 +3162,7 @@ function App() {
                       </button>
                     </div>
                     <button
-                      className={`${targetPeerId.trim() ? `${BTN_PRIMARY} shadow-[0_2px_14px_rgba(125,211,255,0.35)]` : BTN_SECONDARY} justify-center`}
+                      className={`${targetPeerId.trim() ? `${BTN_PRIMARY} shadow-[0_2px_14px_rgba(125,211,255,0.35)]` : BTN_SECONDARY} justify-center mb-1`}
                       onClick={(e) => rippleTap(e, () => startP2PReceive())}
                     >
                       Connect & Download
@@ -3117,6 +3208,8 @@ function App() {
                   </div>
                 </div>
               )}
+              </>
+              )}
 
               {/* SEND TEXT MODAL (feature #5) */}
               {showTextModal && (
@@ -3148,10 +3241,6 @@ function App() {
                   </div>
                 </div>
               )}
-
-              </>
-              )}
-
             </div>
           )}
 
@@ -3674,9 +3763,49 @@ function App() {
               )}
             </div>
           )}
-
+          </>
+          )}
         </div>
       </main>
+
+      {/* BOTTOM NAVIGATION BAR */}
+      <nav className="fixed bottom-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-2rem)] max-w-[340px] bg-[rgba(15,23,42,0.88)] backdrop-blur-2xl border border-white/[0.12] rounded-full p-1.5 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.12)]">
+        <button
+          type="button"
+          className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
+            mainNavTab === 'home'
+              ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
+              : 'bg-transparent text-text-muted hover:text-text-primary'
+          }`}
+          onClick={(e) => {
+            rippleTap(e, () => {
+              setMainNavTab('home');
+              triggerHaptic();
+            });
+          }}
+        >
+          <Home size={18} />
+          <span>Home</span>
+        </button>
+
+        <button
+          type="button"
+          className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
+            mainNavTab === 'settings'
+              ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
+              : 'bg-transparent text-text-muted hover:text-text-primary'
+          }`}
+          onClick={(e) => {
+            rippleTap(e, () => {
+              setMainNavTab('settings');
+              triggerHaptic();
+            });
+          }}
+        >
+          <Settings size={18} />
+          <span>Settings</span>
+        </button>
+      </nav>
 
       {/* QR ZOOM MODAL */}
       {showQrZoom && createPortal(
@@ -3766,34 +3895,74 @@ function App() {
             )}
             {unifiedChat.map((m) => {
               const mine = m.direction === 'sent';
-              return (
-                <div key={m.id} className={`flex flex-col max-w-[78%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
-                  {m.kind === 'text' ? (
+              if (m.kind === 'text') {
+                return (
+                  <div key={m.id} className={`flex flex-col max-w-[78%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
                     <div className={`rounded-2xl px-3 py-2 text-[0.85rem] leading-snug ${mine ? 'bg-[rgba(125,211,255,0.14)] border border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border border-border rounded-bl-[6px]'}`}>
                       {m.text}
                     </div>
-                  ) : (
-                    <div className={`flex items-center gap-2.5 rounded-2xl px-3 py-2.5 min-w-[190px] ${mine ? 'bg-[rgba(125,211,255,0.14)] border border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border border-border rounded-bl-[6px]'}`}>
-                      <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 ${mine ? 'bg-[rgba(125,211,255,0.18)] text-accent-purple' : 'bg-white/[0.06] text-text-secondary'}`}>
-                        {m.kind === 'app' ? <Smartphone size={17} /> : <FileIcon size={17} />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[0.8rem] font-semibold text-text-primary truncate">{m.name}</div>
-                        <div className="text-[0.7rem] text-text-muted">
-                          {formatBytes(m.size)} · {m.status === 'sending' ? `sending ${Math.round((m.progress || 0) * 100)}%` : m.status === 'receiving' ? `receiving ${Math.round((m.progress || 0) * 100)}%` : mine ? 'delivered' : 'received'}
+                  </div>
+                );
+              }
+
+              const isImage = getFileType(m.name) === 'image';
+              const fileUrl = m.url || (m.file ? URL.createObjectURL(m.file) : null);
+
+              if (isImage && fileUrl) {
+                return (
+                  <div key={m.id} className={`flex flex-col max-w-[78%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
+                    <div
+                      className={`relative overflow-hidden rounded-2xl border cursor-pointer transition-all duration-200 hover:opacity-95 shadow-md ${mine ? 'bg-[rgba(125,211,255,0.14)] border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border-border rounded-bl-[6px]'}`}
+                      onClick={() => handleOpenChatAttachment(m)}
+                      title="Click to preview image"
+                    >
+                      <img
+                        src={fileUrl}
+                        alt={m.name}
+                        className="max-h-[220px] w-full object-cover rounded-xl block min-w-[180px]"
+                      />
+                      {(m.status === 'sending' || m.status === 'receiving') && (
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1 text-white text-[0.75rem] font-semibold">
+                          <RefreshCw size={20} className="animate-spin text-accent-cyan" />
+                          <span>{m.status === 'sending' ? `Sending ${Math.round((m.progress || 0) * 100)}%` : `Receiving ${Math.round((m.progress || 0) * 100)}%`}</span>
                         </div>
-                      </div>
-                      {!mine && m.status === 'received' && m.url && (
-                        <a
-                          href={m.url}
-                          download={m.name}
-                          className="flex-shrink-0 text-[0.72rem] font-semibold text-accent-purple bg-[rgba(125,211,255,0.12)] border border-[rgba(125,211,255,0.3)] rounded-lg px-2.5 py-1.5 no-underline"
-                        >
-                          Open
-                        </a>
                       )}
+                      <div className="p-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-between gap-2 text-white">
+                        <span className="text-[0.75rem] font-semibold truncate flex-1">{m.name}</span>
+                        <span className="text-[0.68rem] text-white/80 flex-shrink-0">{formatBytes(m.size)}</span>
+                      </div>
                     </div>
-                  )}
+                  </div>
+                );
+              }
+
+              return (
+                <div key={m.id} className={`flex flex-col max-w-[78%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
+                  <div
+                    className={`flex items-center gap-2.5 rounded-2xl px-3 py-2.5 min-w-[190px] cursor-pointer transition-all duration-150 hover:bg-white/10 ${mine ? 'bg-[rgba(125,211,255,0.14)] border border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border border-border rounded-bl-[6px]'}`}
+                    onClick={() => handleOpenChatAttachment(m)}
+                    title="Click to open attachment"
+                  >
+                    <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 ${mine ? 'bg-[rgba(125,211,255,0.18)] text-accent-purple' : 'bg-white/[0.06] text-text-secondary'}`}>
+                      {m.kind === 'app' ? <Smartphone size={17} /> : <FileIcon size={17} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[0.8rem] font-semibold text-text-primary truncate">{m.name}</div>
+                      <div className="text-[0.7rem] text-text-muted">
+                        {formatBytes(m.size)} · {m.status === 'sending' ? `sending ${Math.round((m.progress || 0) * 100)}%` : m.status === 'receiving' ? `receiving ${Math.round((m.progress || 0) * 100)}%` : mine ? 'delivered' : 'received'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="flex-shrink-0 text-[0.72rem] font-semibold text-accent-purple bg-[rgba(125,211,255,0.12)] border border-[rgba(125,211,255,0.3)] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[rgba(125,211,255,0.25)] transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenChatAttachment(m);
+                      }}
+                    >
+                      Open
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -3878,6 +4047,91 @@ function App() {
               </div>
             </div>
           )}
+        </div>,
+        document.body
+      )}
+
+      {/* CHAT ATTACHMENT LIGHTBOX PREVIEW MODAL */}
+      {chatPreviewItem && createPortal(
+        <div
+          className="fixed inset-0 z-[3000] bg-black/92 backdrop-blur-xl flex flex-col justify-between p-4 max-[640px]:p-3 select-none animate-[fadeIn_0.2s_ease-out]"
+          onClick={() => setChatPreviewItem(null)}
+        >
+          {/* Header Bar */}
+          <div className="flex items-center justify-between gap-3 text-white flex-shrink-0 py-2 px-1 z-10" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="bg-white/10 hover:bg-white/20 border-0 text-white rounded-full p-2.5 cursor-pointer flex items-center justify-center transition-colors"
+              onClick={() => setChatPreviewItem(null)}
+              title="Close preview"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="min-w-0 flex-1 text-center">
+              <div className="font-semibold text-[0.95rem] truncate text-text-primary">{chatPreviewItem.name}</div>
+              <div className="text-[0.72rem] text-text-muted">{formatBytes(chatPreviewItem.size)}</div>
+            </div>
+
+            <a
+              href={chatPreviewItem.url}
+              download={chatPreviewItem.name}
+              target="_blank"
+              rel="noreferrer"
+              className="bg-accent-purple hover:bg-accent-purple/90 text-[#06222c] font-semibold text-[0.8rem] rounded-xl px-3.5 py-2 no-underline flex items-center gap-1.5 flex-shrink-0 transition-colors shadow-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Download size={16} /> Save / Open
+            </a>
+          </div>
+
+          {/* Body Viewer */}
+          <div className="flex-1 min-h-0 flex items-center justify-center p-2">
+            {chatPreviewItem.type === 'image' ? (
+              <img
+                src={chatPreviewItem.url}
+                alt={chatPreviewItem.name}
+                className="max-h-[82vh] max-w-[95vw] object-contain rounded-2xl shadow-2xl border border-white/10"
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : chatPreviewItem.type === 'video' ? (
+              <video
+                controls
+                autoPlay
+                src={chatPreviewItem.url}
+                className="max-h-[82vh] max-w-[95vw] rounded-2xl shadow-2xl border border-white/10"
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : chatPreviewItem.type === 'audio' ? (
+              <div className="bg-bg-secondary border border-border rounded-2xl p-6 flex flex-col items-center gap-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="w-16 h-16 rounded-2xl bg-[rgba(125,211,255,0.15)] text-accent-cyan flex items-center justify-center">
+                  <FileAudio size={32} />
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-text-primary text-[1rem] truncate max-w-[280px]">{chatPreviewItem.name}</div>
+                  <div className="text-[0.78rem] text-text-muted mt-1">{formatBytes(chatPreviewItem.size)}</div>
+                </div>
+                <audio controls autoPlay src={chatPreviewItem.url} className="w-[280px]" />
+              </div>
+            ) : (
+              <div className="bg-bg-secondary border border-border rounded-2xl p-8 flex flex-col items-center gap-4 shadow-2xl text-center max-w-[340px]" onClick={(e) => e.stopPropagation()}>
+                <div className="w-20 h-20 rounded-2xl bg-[rgba(125,211,255,0.15)] text-accent-purple flex items-center justify-center">
+                  {chatPreviewItem.kind === 'app' ? <Smartphone size={40} /> : <FileIcon size={40} />}
+                </div>
+                <div className="font-semibold text-text-primary text-[1.1rem] break-words">{chatPreviewItem.name}</div>
+                <div className="text-[0.8rem] text-text-muted">{formatBytes(chatPreviewItem.size)}</div>
+                <a
+                  href={chatPreviewItem.url}
+                  download={chatPreviewItem.name}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full mt-2 bg-accent-purple text-[#06222c] font-semibold py-2.5 px-4 rounded-xl no-underline flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Download size={18} /> Download / Open
+                </a>
+              </div>
+            )}
+          </div>
         </div>,
         document.body
       )}

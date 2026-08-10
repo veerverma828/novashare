@@ -4,18 +4,6 @@ import { triggerHaptic } from './native';
 // light haptic tick on-device. Purely a feedback layer; never blocks the
 // actual click handler.
 export function rippleTap(e, handler) {
-  const el = e.currentTarget;
-  const rect = el.getBoundingClientRect();
-  const size = Math.max(rect.width, rect.height) * 1.6;
-  const span = document.createElement('span');
-  span.className = 'ripple';
-  span.style.width = span.style.height = `${size}px`;
-  const x = (e.clientX ?? rect.left + rect.width / 2) - rect.left - size / 2;
-  const y = (e.clientY ?? rect.top + rect.height / 2) - rect.top - size / 2;
-  span.style.left = `${x}px`;
-  span.style.top = `${y}px`;
-  el.appendChild(span);
-  span.addEventListener('animationend', () => span.remove());
   triggerHaptic();
   if (handler) handler(e);
 }
