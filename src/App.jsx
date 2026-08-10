@@ -358,6 +358,7 @@ function App() {
   const scanCanvasRef = useRef(null);
   const scanStreamRef = useRef(null);
   const scanRafRef = useRef(null);
+  const [qrDetected, setQrDetected] = useState(false);
 
   // Multi-file send queue refs
   const sendQueueRef = useRef([]);
@@ -1026,6 +1027,8 @@ function App() {
     });
     return `https://novashare.app/?${params.toString()}`;
   };
+
+  const qrPayload = useMemo(() => buildQrPayload(), [roomCode, hotspotCredentials]);
 
   // Cleanup active peer/connections
   function clearCloudOpenWatchdog() {
@@ -2505,19 +2508,46 @@ function App() {
     }
     setShowScanner(false);
     setCameraReady(false);
+    setQrDetected(false);
   };
 
-  // Open camera and start scanning frames for a QR code
+  // Open camera and start scanning frames for a QR code with auto-adjust zoom
   const openScanner = async () => {
     setScannerError('');
     setCameraReady(false);
+    setQrDetected(false);
     setShowScanner(true);
     try {
-      const { default: jsQR } = await import('jsqr');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
+      const [{ default: jsQR }, stream] = await Promise.all([
+        import('jsqr'),
+        navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        })
+      ]);
       scanStreamRef.current = stream;
+
+      // Auto-apply hardware camera zoom & continuous focus if supported
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack && videoTrack.getCapabilities) {
+        try {
+          const caps = videoTrack.getCapabilities();
+          const advanced = [];
+          if (caps.zoom) {
+            const maxZ = Math.min(caps.zoom.max || 1, 3.5);
+            const targetZ = Math.min(maxZ, 2.0);
+            advanced.push({ zoom: targetZ });
+          }
+          if (caps.focusMode && caps.focusMode.includes('continuous')) {
+            advanced.push({ focusMode: 'continuous' });
+          }
+          if (advanced.length > 0) {
+            videoTrack.applyConstraints({ advanced }).catch(() => {});
+          }
+        } catch {
+          // Ignore constraint errors on unsupported devices
+        }
+      }
+
       if (scanVideoRef.current) {
         scanVideoRef.current.srcObject = stream;
         await scanVideoRef.current.play();
@@ -2526,28 +2556,62 @@ function App() {
 
       const canvas = scanCanvasRef.current;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      let isProcessingHit = false;
+      let lastScanTime = 0;
 
-      const tick = () => {
+      const tick = (now) => {
         const video = scanVideoRef.current;
-        if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && code.data) {
-            const roomFromScan = extractRoomCode(code.data);
-            const hotspotCreds = extractHotspotCredentials(code.data);
-            stopScanner();
-            if (hotspotCreds) {
-              // Hotspot-fallback QR (feature: Wi-Fi Direct → hotspot) — the
-              // sender is hosting a LocalOnlyHotspot, not a plain cloud room.
-              joinHotspotFallback(roomFromScan, hotspotCreds);
-            } else {
-              setTargetPeerId(roomFromScan);
-              startP2PReceive(roomFromScan);
+        if (video && video.readyState === video.HAVE_ENOUGH_DATA && !isProcessingHit) {
+          // Throttle QR scanning to ~75ms interval (~13 FPS) for ultra-low CPU load and 60 FPS video preview
+          if (!now || now - lastScanTime >= 75) {
+            lastScanTime = now;
+            // Downscale analysis canvas to max 640px dimension for maximum jsQR speed
+            const maxDim = 640;
+            let sw = video.videoWidth;
+            let sh = video.videoHeight;
+            if (sw > maxDim || sh > maxDim) {
+              const scale = maxDim / Math.max(sw, sh);
+              sw = Math.floor(sw * scale);
+              sh = Math.floor(sh * scale);
             }
-            return;
+            canvas.width = sw;
+            canvas.height = sh;
+            ctx.drawImage(video, 0, 0, sw, sh);
+
+            // Pass 1: Full-frame scan (downscaled)
+            let imageData = ctx.getImageData(0, 0, sw, sh);
+            let code = jsQR(imageData.data, sw, sh);
+
+            // Pass 2: Center-cropped 2x digital zoom scan for distant or small QR codes
+            if (!code && sw > 150 && sh > 150) {
+              const cropW = Math.floor(sw * 0.5);
+              const cropH = Math.floor(sh * 0.5);
+              const cropX = Math.floor((sw - cropW) / 2);
+              const cropY = Math.floor((sh - cropH) / 2);
+              const croppedData = ctx.getImageData(cropX, cropY, cropW, cropH);
+              code = jsQR(croppedData.data, cropW, cropH);
+            }
+
+            if (code && code.data) {
+              isProcessingHit = true;
+              setQrDetected(true);
+              triggerHaptic();
+
+              const roomFromScan = extractRoomCode(code.data);
+              const hotspotCreds = extractHotspotCredentials(code.data);
+
+              // Visual auto-zoom snap before completing scan
+              setTimeout(() => {
+                stopScanner();
+                if (hotspotCreds) {
+                  joinHotspotFallback(roomFromScan, hotspotCreds);
+                } else {
+                  setTargetPeerId(roomFromScan);
+                  startP2PReceive(roomFromScan);
+                }
+              }, 250);
+              return;
+            }
           }
         }
         scanRafRef.current = requestAnimationFrame(tick);
@@ -2558,8 +2622,9 @@ function App() {
     }
   };
 
-  // Clean up camera on unmount
+  // Warm-up preload jsQR in background for instant scanner launch & clean up on unmount
   useEffect(() => {
+    import('jsqr').catch(() => {});
     return () => stopScanner();
   }, []);
 
@@ -3196,12 +3261,14 @@ function App() {
                         )}
                         <video
                           ref={scanVideoRef}
-                          className="w-full h-full object-cover"
+                          className={`w-full h-full object-cover transition-transform duration-300 ease-out ${qrDetected ? 'scale-125' : 'scale-100'}`}
                           style={{ visibility: cameraReady ? 'visible' : 'hidden' }}
                           playsInline
                           muted
                         />
-                        {cameraReady && <div className="absolute inset-[12%] border-2 border-accent-purple rounded-xl shadow-[0_0_20px_rgba(125,211,255,0.4)] pointer-events-none" />}
+                        {cameraReady && (
+                          <div className={`absolute inset-[12%] border-2 rounded-xl transition-all duration-300 pointer-events-none ${qrDetected ? 'border-accent-green shadow-[0_0_35px_rgba(74,222,128,0.9)] scale-90 bg-accent-green/10' : 'border-accent-purple shadow-[0_0_20px_rgba(125,211,255,0.4)]'}`} />
+                        )}
                       </div>
                     )}
                     <canvas ref={scanCanvasRef} style={{ display: 'none' }} />
@@ -3339,11 +3406,11 @@ function App() {
                         title="Tap to enlarge"
                       >
                         <QRCodeSVG
-                          value={buildQrPayload()}
+                          value={qrPayload}
                           size={92}
                           bgColor={"#ffffff"}
                           fgColor={"#0b0e1c"}
-                          level={"H"}
+                          level={"M"}
                           includeMargin={false}
                         />
                       </div>
@@ -3823,11 +3890,11 @@ function App() {
             </div>
             <div className="bg-white p-4 rounded-2xl flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
               <QRCodeSVG
-                value={buildQrPayload()}
+                value={qrPayload}
                 size={240}
                 bgColor={"#ffffff"}
                 fgColor={"#0b0e1c"}
-                level={"H"}
+                level={"M"}
                 includeMargin={false}
               />
             </div>
