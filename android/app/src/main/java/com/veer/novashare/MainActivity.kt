@@ -1,21 +1,19 @@
 package com.veer.novashare
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.content.Intent
-import android.graphics.drawable.Animatable2
-import android.graphics.drawable.AnimatedVectorDrawable
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.provider.OpenableColumns
-import android.view.Gravity
 import android.view.View
+import android.view.animation.AccelerateInterpolator
 import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.ImageView
 import androidx.annotation.RequiresApi
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -67,23 +65,17 @@ class MainActivity : BridgeActivity() {
     }
 
     /**
-     * Un-forms the splash bolt as the splash tears down, so the logo retracts into the app
-     * instead of being cut off fully-drawn.
+     * Animates the splash away as it hands off to the app, so the bolt collapses out instead of
+     * being cut abruptly.
      *
-     * Runs splash_laser_bolt_exit.xml (trimPathEnd 1 -> 0) in an ImageView overlaid on the
-     * splash, with the system's icon view hidden behind it.
-     *
-     * Two simpler approaches don't work here, both confirmed on-device rather than assumed:
-     *  - reverse() on the entry drawable: reverse()/canReverse() are @hide on the platform
-     *    AnimatedVectorDrawable, public only on AnimatedVectorDrawableCompat.
-     *  - Swapping the icon view's drawable: there is nothing to swap. The system renders the
-     *    animated splash icon into a SurfaceView composited from the system shell process, so
-     *    iconView comes back with a null background AND a null image drawable — the bolt on
-     *    screen is not drawn by this process at all.
-     *
-     * The exit drawable opens on the fully-drawn frame the entry animation ends on, and is laid
-     * out at its intrinsic size (see the sizing note below), so the handover reads as one
-     * continuous bolt rather than a swap.
+     * This deliberately transforms the SplashScreenView as a whole (lift + fade) rather than
+     * touching the icon inside it. Reaching into the icon is not portable: the system renders
+     * the animated splash icon into a SurfaceView composited from the system shell process, so
+     * on this device iconView comes back with a null background AND a null image drawable —
+     * the bolt on screen is not drawn by this process at all. Anything that depends on how a
+     * given OEM builds that icon (its drawable, its size, its position) is a guess that holds
+     * on one device and breaks on the next. Transforming the view is documented, supported API
+     * and behaves the same everywhere.
      *
      * Two things make this load-bearing rather than cosmetic:
      *  - Registering an exit listener stops the system from auto-removing the splash view, so
@@ -94,8 +86,8 @@ class MainActivity : BridgeActivity() {
     @RequiresApi(Build.VERSION_CODES.S)
     private fun setupSplashExitAnimation() {
         splashScreen.setOnExitAnimationListener { splashScreenView ->
-            // remove() is reachable from both the animation callback and the watchdog below,
-            // and isn't safe to call twice, so gate it.
+            // remove() is reachable from both the animator and the watchdog below, and isn't
+            // safe to call twice, so gate it.
             var removed = false
             val finish = {
                 if (!removed) {
@@ -104,57 +96,31 @@ class MainActivity : BridgeActivity() {
                 }
             }
 
-            val icon = splashScreenView.iconView
-            val exit = getDrawable(R.drawable.splash_laser_bolt_exit) as? AnimatedVectorDrawable
+            // Translation is the transform to reach for here, and it is not interchangeable
+            // with scale/alpha. The system draws the icon into a SurfaceView composited as its
+            // own layer, which ignores scale and alpha applied to the view tree — whether set
+            // on splashScreenView or directly on iconView, both were tried on-device and left
+            // a fully opaque, full-size bolt sitting over a background that had already faded,
+            // then popping. Position does sync to the surface, so a lift carries the icon with
+            // it and the fade rides along. This is also the transform Google's own exit-anim
+            // sample uses.
+            val lift = -splashScreenView.height * SPLASH_EXIT_LIFT_FRACTION
+            val animations = mutableListOf<Animator>(
+                ObjectAnimator.ofFloat(splashScreenView, View.ALPHA, 1f, 0f),
+                ObjectAnimator.ofFloat(splashScreenView, View.TRANSLATION_Y, 0f, lift)
+            )
 
-            if (icon == null || exit == null) {
-                // No icon view to animate (OEM splash override), or the drawable didn't
-                // inflate. Drop the flourish rather than stranding the splash on screen.
-                finish()
-                return@setOnExitAnimationListener
+            val exit = AnimatorSet().apply {
+                playTogether(animations)
+                duration = SPLASH_EXIT_DURATION_MS
+                interpolator = AccelerateInterpolator(1.4f)
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) = finish()
+                })
             }
 
-            // The entry bolt can't simply be swapped out: the system renders the animated
-            // splash icon into a SurfaceView composited from the system shell process, so
-            // there is no drawable in our view tree to replace (confirmed on this device —
-            // iconView is a SurfaceView with a null background and null image drawable).
-            //
-            // Instead, hide that surface and overlay our own ImageView running the exit
-            // animation in-process. The exit drawable opens on the fully-drawn frame the
-            // entry animation ended on, and is laid out to the same box, so the handover
-            // reads as one continuous bolt rather than a swap.
-            if (icon.width <= 0 || icon.height <= 0) {
-                Log.w(TAG, "splash icon has no size (${icon.width}x${icon.height}); skipping")
-                finish()
-                return@setOnExitAnimationListener
-            }
-
-            // Size the overlay to the drawable's INTRINSIC size, not the icon view's. The icon
-            // view is 192dp (576px at this device's 3.0 density) while the drawable's canvas is
-            // 288dp (864px), and the system draws it at natural size rather than fitting it to
-            // that view. Laying out to icon.width/height instead made FIT_CENTER shrink the
-            // exit bolt to 576/864 = 0.67 of the entry bolt — a visible pop at the handover.
-            val exitView = ImageView(this).apply {
-                setImageDrawable(exit)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                layoutParams = FrameLayout.LayoutParams(
-                    exit.intrinsicWidth,
-                    exit.intrinsicHeight,
-                    Gravity.CENTER
-                )
-            }
-            icon.visibility = View.INVISIBLE
-            splashScreenView.addView(exitView)
-
-            exit.registerAnimationCallback(object : Animatable2.AnimationCallback() {
-                override fun onAnimationEnd(drawable: Drawable?) {
-                    exit.unregisterAnimationCallback(this)
-                    finish()
-                }
-            })
-
-            // Watchdog: if the animation never reports completion, the splash would hang over
-            // a fully-booted app. Budgeted just past the animation's own duration.
+            // Watchdog: if the animator never reports completion, the splash would hang over a
+            // fully-booted app. Budgeted just past the animation's own duration.
             Handler(Looper.getMainLooper()).postDelayed({ finish() }, SPLASH_EXIT_TIMEOUT_MS)
 
             exit.start()
@@ -222,10 +188,17 @@ class MainActivity : BridgeActivity() {
     }
 
     private companion object {
-        // Slightly longer than the 450ms animation in splash_laser_bolt_exit.xml, leaving
-        // room for it to finish before the watchdog steps in. Keep the two in step if that
-        // duration changes.
-        const val SPLASH_EXIT_TIMEOUT_MS = 700L
-        const val TAG = "NovaSplash"
+        // Kept short: by this point the app is booted and waiting behind the splash, so this
+        // is delay the user feels.
+        const val SPLASH_EXIT_DURATION_MS = 320L
+
+        // How far the splash lifts as it leaves, as a fraction of its height. Small on
+        // purpose: the fade carries most of the effect, and a full-height slide this quick
+        // reads as a jerk rather than a lift.
+        const val SPLASH_EXIT_LIFT_FRACTION = 0.18f
+
+        // Backstop if the animator never reports completion. Must stay above the duration
+        // above, or it would cut the animation short.
+        const val SPLASH_EXIT_TIMEOUT_MS = 600L
     }
 }
