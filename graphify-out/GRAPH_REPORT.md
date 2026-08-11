@@ -1,16 +1,16 @@
 # Graph Report - novashare  (2026-08-11)
 
 ## Corpus Check
-- 66 files · ~79,489 words
+- 67 files · ~80,688 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 498 nodes · 946 edges · 41 communities (36 shown, 5 thin omitted)
+- 500 nodes · 949 edges · 41 communities (36 shown, 5 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 26 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `da312249`
+- Built from commit: `e0742202`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -37,7 +37,7 @@
 - React + Vite
 - rules/graphify.md
 - workflows/graphify.md
-- .folderPickerResult
+- InstalledAppsPlugin
 - CLAUDE.md
 - rippleTap
 - localSocketTransport.js
@@ -105,8 +105,8 @@ Cohesion: 0.83
 Nodes (3): gradlew script, die(), warn()
 
 ### Community 8 - "MainActivity"
-Cohesion: 0.27
-Nodes (5): Intent, MainActivity, BridgeActivity, Bundle, Uri
+Cohesion: 0.23
+Nodes (6): Intent, MainActivity, BridgeActivity, Bundle, SplashScreenView, Uri
 
 ### Community 9 - "WifiDirectPlugin"
 Cohesion: 0.12
@@ -114,7 +114,7 @@ Nodes (7): Plugin, PluginCall, WifiManager, WifiDirectPlugin, BroadcastReceiver,
 
 ### Community 10 - "JSObject"
 Cohesion: 0.07
-Nodes (20): IncomingSharePlugin, JSArray, Plugin, PluginCall, InstalledAppsPlugin, Plugin, PluginCall, Plugin (+12 more)
+Nodes (21): FolderPickerPlugin, JSArray, Plugin, PluginCall, IncomingSharePlugin, JSArray, Plugin, PluginCall (+13 more)
 
 ### Community 11 - "TransferForegroundService"
 Cohesion: 0.27
@@ -148,9 +148,9 @@ Nodes (3): computeSecurityCode(), formatDigest(), simpleHashBytes()
 Cohesion: 0.50
 Nodes (3): Expanding the ESLint configuration, React Compiler, React + Vite
 
-### Community 32 - ".folderPickerResult"
-Cohesion: 0.27
-Nodes (6): FolderPickerPlugin, JSArray, Plugin, PluginCall, androidx, DocumentFile
+### Community 32 - "InstalledAppsPlugin"
+Cohesion: 0.25
+Nodes (5): InstalledAppsPlugin, Plugin, PluginCall, Bitmap, Drawable
 
 ### Community 34 - "rippleTap"
 Cohesion: 0.19
@@ -189,11 +189,11 @@ Nodes (7): CACHE_TTL_MS, DEFAULT_PROBE_URL, isOnline(), probe(), PROBE_TIMEOUT_M
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `App()` connect `App.jsx` to `rippleTap`, `localSocketTransport.js`, `crashLog.js`, `clipboardSync.js`, `dependencies`, `connectivity.js`, `receivedIndex.js`, `computeSecurityCode`?**
-  _High betweenness centrality (0.132) - this node is a cross-community bridge._
+  _High betweenness centrality (0.131) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `dependencies` to `devDependencies`?**
-  _High betweenness centrality (0.129) - this node is a cross-community bridge._
+  _High betweenness centrality (0.128) - this node is a cross-community bridge._
 - **Why does `@capacitor/app` connect `dependencies` to `App.jsx`?**
-  _High betweenness centrality (0.117) - this node is a cross-community bridge._
+  _High betweenness centrality (0.116) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `App()` (e.g. with `sharedEntryToFile()` and `wifiDirectOpenLocationSettings()`) actually correct?**
   _`App()` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 22 inferred relationships involving `JSObject` (e.g. with `.checkForUpdate()` and `.handleOnActivityResult()`) actually correct?**

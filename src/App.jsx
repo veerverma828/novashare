@@ -2678,7 +2678,7 @@ function App() {
       const blob = new Blob(buf.chunks, { type: buf.meta.mime || 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       chatBuffersRef.current.delete(data.chatId);
-      updateChatMessage(data.chatId, { status: 'received', progress: 1, url, file: blob });
+      updateChatMessage(data.chatId, { status: 'received', progress: 1, url, file: blob, mime: buf.meta.mime });
     }
   };
 
@@ -2698,8 +2698,68 @@ function App() {
       url: fileUrl,
       type,
       kind: m.kind,
-      direction: m.direction
+      direction: m.direction,
+      file: m.file,
+      mime: m.mime || (m.file ? m.file.type : undefined)
     });
+  };
+
+  const handleSaveChatAttachment = async (item) => {
+    if (!item) return;
+    try {
+      let blob = item.file;
+      if (!blob && item.url) {
+        try {
+          const res = await fetch(item.url);
+          blob = await res.blob();
+        } catch {
+          // ignore fetch error if blob URL not reachable via fetch
+        }
+      }
+
+      const fileName = item.name || 'file';
+      const mimeType = item.mime || (blob ? blob.type : null) || 'application/octet-stream';
+
+      if (Capacitor.isNativePlatform() && blob) {
+        showToast(`Saving ${fileName}…`, 'info');
+        const fileId = `chat_save_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const CHUNK_SIZE = 64 * 1024;
+        let offset = 0;
+        while (offset < blob.size) {
+          const slice = blob.slice(offset, offset + CHUNK_SIZE);
+          const buf = await slice.arrayBuffer();
+          const base64Chunk = arrayBufferToBase64(buf);
+          await NotifyDownload.appendChunk({ fileId, data: base64Chunk });
+          offset += buf.byteLength;
+        }
+        const { uri } = await NotifyDownload.finishReceive({
+          fileId,
+          fileName,
+          mimeType
+        });
+        showToast(`${fileName} saved to Downloads!`, 'success');
+        triggerSuccessHaptic();
+        if (uri) {
+          NotifyDownload.openFile({ uri, mimeType }).catch(() => {});
+        }
+      } else {
+        const fileUrl = item.url || (blob ? URL.createObjectURL(blob) : null);
+        if (!fileUrl) {
+          showToast('Attachment data not ready yet.', 'info');
+          return;
+        }
+        const a = document.createElement('a');
+        a.href = fileUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast(`Downloading ${fileName}…`, 'success');
+      }
+    } catch (err) {
+      console.error('Failed to save chat attachment:', err);
+      showToast(`Could not save file: ${err.message || 'Unknown error'}`, 'error');
+    }
   };
 
   // One merged, time-ordered timeline for the Chat overlay — text clips
@@ -4356,31 +4416,68 @@ function App() {
                 );
               }
 
-              const isImage = getFileType(m.name) === 'image';
+              const fileType = getFileType(m.name);
+              const isImage = fileType === 'image';
+              const isVideo = fileType === 'video';
               const fileUrl = m.url || (m.file ? URL.createObjectURL(m.file) : null);
 
-              if (isImage && fileUrl) {
+              if (isImage || isVideo) {
                 return (
-                  <div key={m.id} className={`flex flex-col max-w-[78%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
+                  <div key={m.id} className={`flex flex-col max-w-[80%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
                     <div
-                      className={`relative overflow-hidden rounded-2xl border cursor-pointer transition-all duration-200 hover:opacity-95 shadow-md ${mine ? 'bg-[rgba(125,211,255,0.14)] border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border-border rounded-bl-[6px]'}`}
+                      className={`group relative overflow-hidden rounded-2xl border cursor-pointer transition-all duration-200 hover:opacity-95 shadow-lg w-[240px] xs:w-[260px] max-w-full ${mine ? 'bg-[rgba(125,211,255,0.14)] border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border-border rounded-bl-[6px]'}`}
                       onClick={() => handleOpenChatAttachment(m)}
-                      title="Click to preview image"
+                      title={isVideo ? 'Click to play video' : 'Click to preview image'}
                     >
-                      <img
-                        src={fileUrl}
-                        alt={m.name}
-                        className="max-h-[220px] w-full object-cover rounded-xl block min-w-[180px]"
-                      />
-                      {(m.status === 'sending' || m.status === 'receiving') && (
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1 text-white text-[0.75rem] font-semibold">
-                          <RefreshCw size={20} className="animate-spin text-accent-cyan" />
-                          <span>{m.status === 'sending' ? `Sending ${Math.round((m.progress || 0) * 100)}%` : `Receiving ${Math.round((m.progress || 0) * 100)}%`}</span>
+                      <div className="relative w-full h-[180px] xs:h-[200px] bg-black/40 flex items-center justify-center overflow-hidden">
+                        {fileUrl ? (
+                          isImage ? (
+                            <img
+                              src={fileUrl}
+                              alt={m.name}
+                              className="w-full h-full object-cover block"
+                            />
+                          ) : (
+                            <>
+                              <video
+                                src={fileUrl}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                onLoadedMetadata={(e) => {
+                                  try { e.currentTarget.currentTime = Math.min(0.5, (e.currentTarget.duration || 1) / 4); } catch {}
+                                }}
+                                className="w-full h-full object-cover block opacity-90"
+                              />
+                              {m.status !== 'sending' && m.status !== 'receiving' && (
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                  <div className="w-11 h-11 rounded-full bg-black/55 backdrop-blur-md border border-white/20 text-white flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
+                                    <Play size={20} className="fill-white ml-0.5" />
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )
+                        ) : (
+                          <div className="flex flex-col items-center gap-1.5 text-text-muted">
+                            {isImage ? <FileImage size={28} className="opacity-60" /> : <FileVideo size={28} className="opacity-60" />}
+                          </div>
+                        )}
+
+                        {(m.status === 'sending' || m.status === 'receiving') && (
+                          <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1 text-white text-[0.75rem] font-semibold z-20">
+                            <RefreshCw size={20} className="animate-spin text-accent-cyan" />
+                            <span>{m.status === 'sending' ? `Sending ${Math.round((m.progress || 0) * 100)}%` : `Receiving ${Math.round((m.progress || 0) * 100)}%`}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-2.5 bg-gradient-to-t from-black/90 via-black/50 to-transparent absolute bottom-0 inset-x-0 flex items-center justify-between gap-2 text-white z-10">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          {isVideo ? <FileVideo size={13} className="text-accent-cyan flex-shrink-0" /> : <FileImage size={13} className="text-accent-cyan flex-shrink-0" />}
+                          <span className="text-[0.75rem] font-semibold truncate drop-shadow">{m.name}</span>
                         </div>
-                      )}
-                      <div className="p-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-between gap-2 text-white">
-                        <span className="text-[0.75rem] font-semibold truncate flex-1">{m.name}</span>
-                        <span className="text-[0.68rem] text-white/80 flex-shrink-0">{formatBytes(m.size)}</span>
+                        <span className="text-[0.68rem] text-white/80 flex-shrink-0 drop-shadow">{formatBytes(m.size)}</span>
                       </div>
                     </div>
                   </div>
@@ -4524,16 +4621,16 @@ function App() {
               <div className="text-[0.72rem] text-text-muted">{formatBytes(chatPreviewItem.size)}</div>
             </div>
 
-            <a
-              href={chatPreviewItem.url}
-              download={chatPreviewItem.name}
-              target="_blank"
-              rel="noreferrer"
-              className="bg-accent-purple hover:bg-accent-purple/90 text-[#06222c] font-semibold text-[0.8rem] rounded-xl px-3.5 py-2 no-underline flex items-center gap-1.5 flex-shrink-0 transition-colors shadow-lg"
-              onClick={(e) => e.stopPropagation()}
+            <button
+              type="button"
+              className="bg-accent-purple hover:bg-accent-purple/90 text-[#06222c] font-semibold text-[0.8rem] rounded-xl px-3.5 py-2 cursor-pointer border-0 flex items-center gap-1.5 flex-shrink-0 transition-colors shadow-lg"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSaveChatAttachment(chatPreviewItem);
+              }}
             >
               <Download size={16} /> Save / Open
-            </a>
+            </button>
           </div>
 
           {/* Body Viewer */}
@@ -4571,15 +4668,16 @@ function App() {
                 </div>
                 <div className="font-semibold text-text-primary text-[1.1rem] break-words">{chatPreviewItem.name}</div>
                 <div className="text-[0.8rem] text-text-muted">{formatBytes(chatPreviewItem.size)}</div>
-                <a
-                  href={chatPreviewItem.url}
-                  download={chatPreviewItem.name}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full mt-2 bg-accent-purple text-[#06222c] font-semibold py-2.5 px-4 rounded-xl no-underline flex items-center justify-center gap-2 shadow-lg"
+                <button
+                  type="button"
+                  className="w-full mt-2 bg-accent-purple text-[#06222c] font-semibold py-2.5 px-4 rounded-xl cursor-pointer border-0 flex items-center justify-center gap-2 shadow-lg hover:bg-accent-purple/90 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSaveChatAttachment(chatPreviewItem);
+                  }}
                 >
                   <Download size={18} /> Download / Open
-                </a>
+                </button>
               </div>
             )}
           </div>
