@@ -1,21 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Native splash icon: the laser bolt draws itself in, matching the stroke animation
-  of the SVG in index.html so the cold-start window flows into the web loading screen.
+  Native splash icon, pre-Android-12 variant: the laser bolt draws itself in and stops there.
+  Android 12+ picks up drawable-v31/splash_laser_bolt.xml instead, which folds the bolt into a
+  paper plane for MainActivity's take-off exit to fly away.
 
-  The web version uses stroke-dasharray/dashoffset, which VectorDrawable has no
-  equivalent for — trimPathEnd is the Android analogue, so the path below starts at
-  trimPathEnd="0" (nothing drawn) and animates to 1 (fully drawn).
+  The split is deliberate, and the two files are NOT interchangeable. The take-off lives in
+  MainActivity.setupSplashExitAnimation(), which is gated behind Build.VERSION_CODES.S because
+  the platform SplashScreen API — the exit listener and the iconAnimationStart/Duration values
+  that let the exit wait out the morph — simply does not exist below API 31. Running the morph
+  here would leave older devices showing a plane that never flies: it would fold and then be
+  cut away with no exit at all. A bolt that finishes drawing and holds is a complete image at
+  every frame, so however early or late the system tears the splash down, it looks intentional.
 
-  Draw-in only, deliberately: the system tears the splash down the moment the WebView
-  is ready, at an unpredictable point in the animation. Ending on a fully-drawn bolt
-  means a late teardown looks intentional; an erase phase (as the web keyframes have)
-  would risk handing off mid-erase to a blank icon.
+  Keep this file's icon sizing in step with the v31 variant so the two versions look like the
+  same app: a 288dp canvas whose artwork stays inside a 192dp circle, per the Android 12+ spec
+  for an icon with no icon-background colour. The path is authored in the same 24x24 viewport
+  as the web SVG, so the 0.55 group scale is what keeps it inside that circle — the bolt spans
+  18x20 viewport units, ~119x132dp here, a ~178dp diagonal.
 
-  Sizing follows the Android 12+ spec for an icon with no icon-background colour: a
-  288dp canvas whose artwork stays inside a 192dp circle. The path is authored in the
-  same 24x24 viewport as the web SVG, so the 0.55 group scale is what keeps it inside
-  that circle — the bolt spans 18x20 viewport units, ~119x132dp here, a ~178dp diagonal.
+  The web version uses stroke-dasharray/dashoffset, which VectorDrawable has no equivalent for
+  — trimPathEnd is the Android analogue, so the path below starts at trimPathEnd="0" (nothing
+  drawn) and animates to 1 (fully drawn). Draw-in only, never an erase phase: handing off to a
+  blank icon would read as a glitch.
 -->
 <animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt">

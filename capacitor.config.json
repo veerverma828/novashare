@@ -5,7 +5,7 @@
   "backgroundColor": "#04060c",
   "plugins": {
     "SplashScreen": {
-      "launchShowDuration": 600,
+      "launchShowDuration": 900,
       "launchFadeOutDuration": 0,
       "launchAutoHide": false,
       "backgroundColor": "#04060c",

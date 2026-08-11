@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      How long the system holds the splash icon animation open, in ms.
+
+      This value must match the length of the splash_laser_bolt.xml the platform will actually
+      load, and that drawable is version-qualified: the base one is a 600ms bolt draw-in, while
+      drawable-v31's folds into a paper plane and runs 900ms. values-v31/integers.xml carries
+      the matching 900 — change one and change the other, or the system exits mid-animation.
+    -->
+    <integer name="splash_animation_duration">600</integer>
+</resources>

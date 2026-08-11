@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Native splash icon (Android 12+): the laser bolt draws itself in, morphs into a paper
+  plane, lights its engine, and holds on the burn until MainActivity's exit animation flies
+  it off screen. See drawable/splash_laser_bolt.xml for the pre-12 variant, which stops at
+  the drawn bolt because the exit API it would need does not exist there.
+
+  The web version uses stroke-dasharray/dashoffset, which VectorDrawable has no
+  equivalent for — trimPathEnd is the Android analogue, so the path below starts at
+  trimPathEnd="0" (nothing drawn) and animates to 1 (fully drawn).
+
+  The morph is a pathData animation, which Android can only interpolate between two paths
+  that are command-for-command compatible: same count, same types, same order. Both paths
+  here are M + 5L + Z (six points), which is what makes the tween legal — editing either
+  one to a different number of points silently breaks the morph at runtime rather than at
+  build time, so keep the command structure intact.
+
+  Point order is what the morph interpolates, and the two shapes are ordered so the bolt's
+  outline unfolds outward into wings rather than crossing over itself mid-tween.
+
+  The plane's mid-edge points (7.5,11) and (16.5,11) exist only to satisfy that six-point
+  requirement — the silhouette wants a straight leading edge from nose to wingtip, and a
+  four-point shape could not morph from the bolt. They are therefore placed exactly on the
+  line between nose (12,2) and each wingtip: at y=11, half way down, x is 12 ∓ 4.5. Nudging
+  either off that line puts a visible kink back in the wing, which is what an earlier
+  (8,11)/(16,11) pair did.
+
+  Why the engine burn loops: the splash cannot leave until the WebView is ready, and that
+  wait is not knowable here — it moves with the device, cold vs warm start, and system load.
+  Any fixed-length ending freezes as soon as the wait outlasts it, which is exactly how the
+  earlier one-shot version came to look stuck. The burn has no such edge: it fills a 200ms
+  wait and a 3s wait equally well, it reads as an engine holding at power rather than as an
+  object sitting idle, and the take-off always cuts in on something already moving.
+
+  Timing is front-loaded so an early teardown still lands on a complete image: bolt drawn by
+  360ms, plane by 780ms, engine lit by 900ms — which is what values-v31/integers.xml holds
+  windowSplashScreenAnimationDuration open for, and what MainActivity waits out before
+  launching. Nothing here erases the icon; a late teardown should look intentional.
+
+  Sizing follows the Android 12+ spec for an icon with no icon-background colour: a
+  288dp canvas whose artwork stays inside a 192dp circle. The path is authored in the
+  same 24x24 viewport as the web SVG, so the 0.55 group scale is what keeps it inside
+  that circle — the bolt spans 18x20 viewport units, ~119x132dp here, a ~178dp diagonal.
+  The plane and its exhaust are authored inside the same span so neither outgrows the circle.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="288dp"
+            android:height="288dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <group
+                android:name="craft"
+                android:scaleX="0.55"
+                android:scaleY="0.55"
+                android:pivotX="12"
+                android:pivotY="12">
+
+                <!-- Exhaust sits in its own group so it can flare from the tail without
+                     scaling the plane with it. The pivot is the tail notch (12,15), so the
+                     flame stretches downward and stays anchored to the craft.
+
+                     Both flame paths start at fillAlpha 0 — invisible through the draw-in
+                     and the morph, since a bolt with a jet exhaust would make no sense.
+                     Ignition brings them up only once the plane exists. -->
+                <group
+                    android:name="exhaust"
+                    android:pivotX="12"
+                    android:pivotY="15">
+                    <!-- Outer plume. Curved rather than straight-sided: a polygon reads as a
+                         cut gem, not fire — the belly has to bulge near the nozzle and taper
+                         off. Only the morphing `bolt` path is constrained to line segments;
+                         these are free to use curves.
+
+                         Three gradient stops, not two. A straight saturated-orange-to-clear
+                         ramp spends its whole midsection at partial alpha over a near-black
+                         background, which composites to brown. Holding a bright stop through
+                         the first third and dropping alpha late keeps the flame reading as
+                         light rather than as a dark shape. -->
+                    <path
+                        android:name="flameOuter"
+                        android:pathData="M12,15.5 C13.3,17.9 13.8,19.8 13.4,21.8 C13.1,23.6 12.6,25.2 12,26.4 C11.4,25.2 10.9,23.6 10.6,21.8 C10.2,19.8 10.7,17.9 12,15.5 Z"
+                        android:fillAlpha="0">
+                        <aapt:attr name="android:fillColor">
+                            <gradient
+                                android:type="linear"
+                                android:startX="12"
+                                android:startY="15.5"
+                                android:endX="12"
+                                android:endY="26.4">
+                                <item android:offset="0" android:color="#FFFFD9A0" />
+                                <item android:offset="0.3" android:color="#FFFF9A45" />
+                                <item android:offset="0.62" android:color="#66FF6B35" />
+                                <item android:offset="1" android:color="#00FF5E3A" />
+                            </gradient>
+                        </aapt:attr>
+                    </path>
+                    <!-- Inner core: shorter, narrower and white-hot at the nozzle, so the
+                         plume above reads as the cooler edge of the same flame. -->
+                    <path
+                        android:name="flameInner"
+                        android:pathData="M12,16.8 C12.8,18.5 13.1,19.9 12.9,21.3 C12.7,22.6 12.4,23.6 12,24.4 C11.6,23.6 11.3,22.6 11.1,21.3 C10.9,19.9 11.2,18.5 12,16.8 Z"
+                        android:fillAlpha="0">
+                        <aapt:attr name="android:fillColor">
+                            <gradient
+                                android:type="linear"
+                                android:startX="12"
+                                android:startY="16.8"
+                                android:endX="12"
+                                android:endY="24.4">
+                                <item android:offset="0" android:color="#FFFFFFFF" />
+                                <item android:offset="0.45" android:color="#FFFFD98A" />
+                                <item android:offset="1" android:color="#00FFC46B" />
+                            </gradient>
+                        </aapt:attr>
+                    </path>
+                </group>
+
+                <path
+                    android:name="bolt"
+                    android:pathData="M13,2 L3,14 L12,14 L11,22 L21,10 L12,10 Z"
+                    android:strokeWidth="2.5"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round"
+                    android:trimPathStart="0"
+                    android:trimPathEnd="0">
+                    <aapt:attr name="android:strokeColor">
+                        <gradient
+                            android:type="linear"
+                            android:startX="0"
+                            android:startY="0"
+                            android:endX="24"
+                            android:endY="24"
+                            android:startColor="#7DD3FF"
+                            android:endColor="#C084FC" />
+                    </aapt:attr>
+                </path>
+            </group>
+        </vector>
+    </aapt:attr>
+
+    <!-- Phase 1: draw the bolt in. -->
+    <target android:name="bolt">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="trimPathEnd"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:duration="360"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+
+    <!-- Phase 2: bolt unfolds into a paper plane, nose up and ready to climb. -->
+    <target android:name="bolt">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="pathData"
+                android:valueFrom="M13,2 L3,14 L12,14 L11,22 L21,10 L12,10 Z"
+                android:valueTo="M12,2 L7.5,11 L3,20 L12,15 L21,20 L16.5,11 Z"
+                android:valueType="pathType"
+                android:startOffset="420"
+                android:duration="360"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+
+    <!-- Phase 3: ignition. The plume catches first and the core follows a beat later, which
+         is what makes it read as lighting rather than switching on. -->
+    <target android:name="flameOuter">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="fillAlpha"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:startOffset="780"
+                android:duration="120"
+                android:interpolator="@android:interpolator/decelerate_quad" />
+        </aapt:attr>
+    </target>
+    <target android:name="flameInner">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="fillAlpha"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:startOffset="840"
+                android:duration="120"
+                android:interpolator="@android:interpolator/decelerate_quad" />
+        </aapt:attr>
+    </target>
+
+    <!-- Phase 4: the burn holds at power until the exit takes over.
+
+         Flicker is on scaleY only. Animating the flame's alpha here instead would fight the
+         ignition animators above, which own fillAlpha — two animators driving one property
+         on one target is how you get a flame that snaps back to invisible mid-loop.
+
+         The two layers pulse at different rates on purpose: matched rates read as one shape
+         breathing, while offset rates read as combustion. Neither divides evenly into the
+         other, so they drift in and out of phase instead of resyncing every few cycles. -->
+    <target android:name="exhaust">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueFrom="0.82"
+                android:valueTo="1.18"
+                android:valueType="floatType"
+                android:startOffset="900"
+                android:duration="170"
+                android:repeatCount="-1"
+                android:repeatMode="reverse"
+                android:interpolator="@android:interpolator/accelerate_decelerate" />
+        </aapt:attr>
+    </target>
+    <target android:name="exhaust">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueFrom="0.94"
+                android:valueTo="1.06"
+                android:valueType="floatType"
+                android:startOffset="900"
+                android:duration="230"
+                android:repeatCount="-1"
+                android:repeatMode="reverse"
+                android:interpolator="@android:interpolator/accelerate_decelerate" />
+        </aapt:attr>
+    </target>
+
+    <!-- Phase 5: engine rumble — a small, fast vertical shudder through the whole craft.
+         Deliberately tiny (~0.2 viewport units, a couple of dp on screen) and much faster
+         than the old hover: at this amplitude and rate it reads as a held engine vibrating,
+         whereas anything slower or wider reads as the plane floating, which is the effect
+         this replaced. -->
+    <target android:name="craft">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="translateY"
+                android:valueFrom="0"
+                android:valueTo="-0.2"
+                android:valueType="floatType"
+                android:startOffset="900"
+                android:duration="90"
+                android:repeatCount="-1"
+                android:repeatMode="reverse"
+                android:interpolator="@android:interpolator/linear" />
+        </aapt:attr>
+    </target>
+
+</animated-vector>

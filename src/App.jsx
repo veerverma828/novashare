@@ -638,6 +638,11 @@ function App() {
   const modeRef = useRef(mode);
   const mainNavTabRef = useRef(mainNavTab);
   const homeTabRef = useRef(homeTab);
+  // True while the room currently open was hosted by the Connect tab itself
+  // (auto on entry, or via its Host/QR buttons) rather than by a send started
+  // from Home. Such a room is only a chat invite, so leaving Connect without a
+  // peer tears it down instead of leaving Home stuck on the sending screen.
+  const connectTabHostedRef = useRef(false);
   const showQrZoomRef = useRef(showQrZoom);
   const showScannerRef = useRef(showScanner);
   const chatPreviewItemRef = useRef(chatPreviewItem);
@@ -673,7 +678,9 @@ function App() {
   // If React took longer than the draw-in, wait is 0 and we hide immediately.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    const SPLASH_DRAW_MS = 600;
+    // Matches windowSplashScreenAnimationDuration / the bolt-to-plane animation length in
+    // splash_laser_bolt.xml — hiding earlier hands off while the plane is still folding.
+    const SPLASH_DRAW_MS = 900;
     const timer = setTimeout(() => {
       SplashScreen.hide({ fadeDuration: 200 }).catch(() => {});
     }, Math.max(0, SPLASH_DRAW_MS - performance.now()));
@@ -681,17 +688,32 @@ function App() {
   }, []);
   useEffect(() => { homeTabRef.current = homeTab; }, [homeTab]);
   useEffect(() => {
+    // A toast belongs to the section that raised it — the room-code banner in
+    // particular reads as stale once you've left Connect. Dropping it on a real
+    // tab change only touches the message; the room itself is untouched here.
+    if (mainNavTabRef.current !== mainNavTab) setToast(null);
     mainNavTabRef.current = mainNavTab;
     if (mainNavTab === 'connect') {
       if (!roomCode && mode === 'home') {
+        connectTabHostedRef.current = true;
         handleHostRoomCode();
       }
     } else {
-      if (connsRef.current.length === 0 && mode === 'home' && roomCode) {
+      // handleHostRoomCode() switches mode to 'p2p-send', so the room this tab
+      // opened never satisfies a `mode === 'home'` check on the way out — the
+      // teardown keys off who hosted it instead. A peer that actually connected
+      // is a live chat and is left alone.
+      if (connsRef.current.length === 0 && connectTabHostedRef.current) {
+        cleanup();
+        setRoomCode('');
+        setTransferState('idle');
+        setMode('home');
+      } else if (connsRef.current.length === 0 && mode === 'home' && roomCode) {
         cleanup();
         setRoomCode('');
         setTransferState('idle');
       }
+      connectTabHostedRef.current = false;
     }
   }, [mainNavTab]);
   useEffect(() => { showQrZoomRef.current = showQrZoom; }, [showQrZoom]);
@@ -2471,9 +2493,13 @@ function App() {
 
   const handleHostRoomCode = (customCode = null) => {
     cleanup();
+    // The signalling handshake finishes well after this call, so remember which
+    // section asked for the room and only announce it if we're still there.
+    const hostedFromTab = mainNavTabRef.current;
     const code = customCode || generateRoomCode();
     setRoomCode(code);
     setTransferState('preparing');
+    setMode('p2p-send');
     senderTransportRef.current = 'cloud';
     setIsPaused(false);
     isPausedRef.current = false;
@@ -2505,7 +2531,9 @@ function App() {
     peer.on('open', () => {
       clearCloudOpenWatchdog();
       setTransferState('waiting');
-      showToast(`Your Room Code (${code}) is active!`, 'success');
+      if (mainNavTabRef.current === hostedFromTab) {
+        showToast(`Your Room Code (${code}) is active!`, 'success');
+      }
     });
 
     peer.on('connection', (conn) => handleIncomingReceiverConnection(conn, code));
@@ -3014,6 +3042,9 @@ function App() {
               onOpenChat={() => setShowChat(true)}
               unreadCount={chatUnreadCount}
               onReconnectRoom={(code, autoChat = true) => {
+                // Deliberate hand-off to Home with a receive in flight — not an
+                // abandoned invite, so it must survive the leave-Connect teardown.
+                connectTabHostedRef.current = false;
                 cleanup();
                 setTargetPeerId(code);
                 setMode('p2p-receive');
@@ -3024,14 +3055,19 @@ function App() {
                 }).catch(() => {});
               }}
               onConnectPeer={(peer) => {
+                connectTabHostedRef.current = false;
                 connectToWifiDirectPeer(peer);
                 setMainNavTab('home');
               }}
-              onHostRoom={() => handleHostRoomCode()}
+              onHostRoom={() => {
+                connectTabHostedRef.current = true;
+                handleHostRoomCode();
+              }}
               onCopyRoomCode={(code) => copyToClipboard(code, 'Room code copied to clipboard!')}
               onShareRoomCode={(code) => shareRoomCode(code)}
               onShowQr={() => {
                 if (!roomCode) {
+                  connectTabHostedRef.current = true;
                   handleHostRoomCode();
                 }
                 setShowQrZoom(true);

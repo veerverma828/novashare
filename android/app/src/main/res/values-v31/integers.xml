@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Android 12+ loads drawable-v31/splash_laser_bolt.xml, where the bolt folds into a paper
+      plane and begins its climb — 900ms end to end. See values/integers.xml for the pre-12
+      value and the reason the two are kept in step.
+    -->
+    <integer name="splash_animation_duration">900</integer>
+</resources>

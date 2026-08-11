@@ -21,7 +21,11 @@
         <item name="android:colorBackground">#04060c</item>
         <item name="windowSplashScreenBackground">#04060c</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/splash_laser_bolt</item>
-        <item name="windowSplashScreenAnimationDuration">600</item>
+        <!-- Must cover the whole animation in whichever splash_laser_bolt.xml this platform
+             version loads; a shorter value lets the system exit mid-morph, on a half-folded
+             shape. The value is version-qualified alongside the drawable — see
+             values/integers.xml. -->
+        <item name="windowSplashScreenAnimationDuration">@integer/splash_animation_duration</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

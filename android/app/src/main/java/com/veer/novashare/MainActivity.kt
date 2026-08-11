@@ -14,12 +14,15 @@ import android.provider.OpenableColumns
 import android.view.View
 import android.view.animation.AccelerateInterpolator
 import android.view.ViewGroup
+import android.window.SplashScreenView
 import androidx.annotation.RequiresApi
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.getcapacitor.BridgeActivity
 import java.io.File
 import java.io.FileOutputStream
+import java.time.Duration
+import java.time.Instant
 
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -104,27 +107,69 @@ class MainActivity : BridgeActivity() {
             // then popping. Position does sync to the surface, so a lift carries the icon with
             // it and the fade rides along. This is also the transform Google's own exit-anim
             // sample uses.
+            // The icon has just folded into a paper plane, so the exit is its take-off: a
+            // climb up and slightly across, accelerating the whole way out. The drift is a
+            // fraction of width rather than a fixed dp so the flight path keeps the same
+            // angle on any screen.
             val lift = -splashScreenView.height * SPLASH_EXIT_LIFT_FRACTION
+            val drift = splashScreenView.width * SPLASH_EXIT_DRIFT_FRACTION
             val animations = mutableListOf<Animator>(
                 ObjectAnimator.ofFloat(splashScreenView, View.ALPHA, 1f, 0f),
-                ObjectAnimator.ofFloat(splashScreenView, View.TRANSLATION_Y, 0f, lift)
+                ObjectAnimator.ofFloat(splashScreenView, View.TRANSLATION_Y, 0f, lift),
+                ObjectAnimator.ofFloat(splashScreenView, View.TRANSLATION_X, 0f, drift)
             )
+
+            // This listener fires the instant the app is ready to draw, which on a warm start
+            // can be long before the bolt has finished folding into the plane. Taking off from
+            // a half-morphed shape is the one thing that must never happen, so the exit waits
+            // out whatever is left of the icon animation. The system reports both when that
+            // animation started and how long it runs, so the wait is measured rather than
+            // guessed — it self-corrects on a slow device (nothing left to wait for, exit is
+            // immediate) and on a fast one (waits the full remainder).
+            val holdForIcon = remainingIconAnimationMs(splashScreenView)
 
             val exit = AnimatorSet().apply {
                 playTogether(animations)
                 duration = SPLASH_EXIT_DURATION_MS
-                interpolator = AccelerateInterpolator(1.4f)
+                startDelay = holdForIcon
+                interpolator = AccelerateInterpolator(2f)
                 addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) = finish()
                 })
             }
 
             // Watchdog: if the animator never reports completion, the splash would hang over a
-            // fully-booted app. Budgeted just past the animation's own duration.
-            Handler(Looper.getMainLooper()).postDelayed({ finish() }, SPLASH_EXIT_TIMEOUT_MS)
+            // fully-booted app. Budgeted past the animation's own duration, and past the hold
+            // as well — a fixed backstop would otherwise fire mid-hold and cut the morph.
+            Handler(Looper.getMainLooper()).postDelayed({ finish() }, holdForIcon + SPLASH_EXIT_TIMEOUT_MS)
 
             exit.start()
         }
+    }
+
+    /**
+     * How much of the splash icon animation has yet to play, in ms.
+     *
+     * Both values come from the system rather than from our own constants, which is the point:
+     * the drawable's timings, the theme's windowSplashScreenAnimationDuration and whatever cap
+     * a given OEM applies can all disagree, and only the system knows what it actually started
+     * and for how long. Reading them keeps the hand-off correct without this file having to
+     * track the drawable.
+     *
+     * Returns 0 when the animation is already done, when the device reports no animated icon
+     * (some OEM launchers, or a static fallback), or when the clock reads backwards — in every
+     * one of those cases there is nothing to wait for and the exit should just run.
+     *
+     * The result is capped: if a device were ever to report an implausibly long duration, an
+     * uncapped wait would strand the user on a splash over an app that is already running.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun remainingIconAnimationMs(splashScreenView: SplashScreenView): Long {
+        val start = splashScreenView.iconAnimationStart ?: return 0L
+        val total = splashScreenView.iconAnimationDuration ?: return 0L
+        val elapsed = Duration.between(start, Instant.now()).toMillis()
+        val remaining = total.toMillis() - elapsed
+        return remaining.coerceIn(0L, SPLASH_MAX_ICON_HOLD_MS)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -190,15 +235,25 @@ class MainActivity : BridgeActivity() {
     private companion object {
         // Kept short: by this point the app is booted and waiting behind the splash, so this
         // is delay the user feels.
-        const val SPLASH_EXIT_DURATION_MS = 320L
+        const val SPLASH_EXIT_DURATION_MS = 420L
 
-        // How far the splash lifts as it leaves, as a fraction of its height. Small on
-        // purpose: the fade carries most of the effect, and a full-height slide this quick
-        // reads as a jerk rather than a lift.
-        const val SPLASH_EXIT_LIFT_FRACTION = 0.18f
+        // How far the plane climbs as it leaves, as a fraction of the splash height. Much
+        // larger than a plain fade-out would want: the shape is a plane by this point, and
+        // it has to actually clear the screen for the exit to read as flying off rather
+        // than drifting. The acceleration curve keeps the start of the climb gentle.
+        const val SPLASH_EXIT_LIFT_FRACTION = 0.85f
+
+        // Sideways drift over the same climb, as a fraction of width — enough to angle the
+        // flight path, not so much that the plane exits sideways.
+        const val SPLASH_EXIT_DRIFT_FRACTION = 0.22f
 
         // Backstop if the animator never reports completion. Must stay above the duration
-        // above, or it would cut the animation short.
-        const val SPLASH_EXIT_TIMEOUT_MS = 600L
+        // above, or it would cut the animation short. Applied on top of the icon hold.
+        const val SPLASH_EXIT_TIMEOUT_MS = 700L
+
+        // Ceiling on how long the exit will wait for the icon animation to finish. Sits just
+        // above the drawable's own length (900ms) so a normal cold start is never clipped,
+        // while a device reporting a nonsense duration still can't strand the splash.
+        const val SPLASH_MAX_ICON_HOLD_MS = 1000L
     }
 }
