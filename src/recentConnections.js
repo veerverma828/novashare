@@ -42,11 +42,15 @@ export function removeRecentConnection(id) {
   try {
     const all = getRecentConnections().filter((c) => c.id !== id);
     localStorage.setItem(RECENT_CONN_KEY, JSON.stringify(all));
-  } catch {}
+  } catch {
+    // Ignore storage quota errors
+  }
 }
 
 export function clearRecentConnections() {
   try {
     localStorage.setItem(RECENT_CONN_KEY, JSON.stringify([]));
-  } catch {}
+  } catch {
+    // Ignore storage quota errors
+  }
 }

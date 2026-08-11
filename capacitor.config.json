@@ -1,5 +1,15 @@
 {
   "appId": "com.veer.novashare",
   "appName": "NovaShare",
-  "webDir": "dist"
+  "webDir": "dist",
+  "backgroundColor": "#04060c",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 600,
+      "launchFadeOutDuration": 0,
+      "launchAutoHide": false,
+      "backgroundColor": "#04060c",
+      "showSpinner": false
+    }
+  }
 }

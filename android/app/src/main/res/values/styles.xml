@@ -12,11 +12,16 @@
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
-        <item name="android:background">@null</item>
+        <item name="android:windowBackground">#04060c</item>
+        <item name="android:colorBackground">#04060c</item>
     </style>
 
-
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="android:windowBackground">#04060c</item>
+        <item name="android:colorBackground">#04060c</item>
+        <item name="windowSplashScreenBackground">#04060c</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_laser_bolt</item>
+        <item name="windowSplashScreenAnimationDuration">600</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

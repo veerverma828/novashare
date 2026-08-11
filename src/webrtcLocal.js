@@ -16,6 +16,7 @@ export class PeerJsCompatDataConnection {
   constructor(dataChannel, peerId) {
     this.dataChannel = dataChannel; // preserves conn.dataChannel.bufferedAmount access as-is
     this.peer = peerId; // mirrors PeerJS's conn.peer
+    this.isLocalSocket = !!dataChannel.isLocalSocket;
     this._handlers = { data: [], open: [], close: [], error: [] };
     this._pendingMeta = null;
     // A caller only gets this wrapper once the channel is already confirmed

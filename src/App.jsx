@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
+import { Keyboard } from '@capacitor/keyboard';
+import { SplashScreen } from '@capacitor/splash-screen';
 import { createPortal } from 'react-dom';
 import Peer from 'peerjs';
 import { QRCodeSVG } from 'qrcode.react';
@@ -18,6 +20,7 @@ import {
   File as FileIcon,
   X,
   ArrowLeft,
+  ArrowRight,
   AlertCircle,
   Zap,
   Laptop,
@@ -132,6 +135,7 @@ const TEXT_SNIPPET_MIME = 'text/x-novashare-snippet';
 const sentFilesMemory = new Map();
 
 const CHUNK_SIZE = 64 * 1024; // 64KB chunks for P2P WebRTC
+const LOCAL_SOCKET_CHUNK_SIZE = 256 * 1024; // 256KB chunks for direct TCP sockets (Wi-Fi Direct)
 
 // Left-right order the Home/Apps/History tabs cycle through on a swipe.
 const HOME_TAB_ORDER = ['home', 'apps', 'history'];
@@ -259,6 +263,52 @@ function App() {
   const [historyVersion, setHistoryVersion] = useState(0);
   const [historyOpenedAt, setHistoryOpenedAt] = useState(0);
 
+  // Soft keyboard detection to hide bottom navigation bar when typing
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    let showListener;
+    let hideListener;
+    let didShowListener;
+    let didHideListener;
+
+    try {
+      Keyboard.addListener('keyboardWillShow', () => setIsKeyboardOpen(true)).then((l) => { showListener = l; }).catch(() => {});
+      Keyboard.addListener('keyboardDidShow', () => setIsKeyboardOpen(true)).then((l) => { didShowListener = l; }).catch(() => {});
+      Keyboard.addListener('keyboardWillHide', () => setIsKeyboardOpen(false)).then((l) => { hideListener = l; }).catch(() => {});
+      Keyboard.addListener('keyboardDidHide', () => setIsKeyboardOpen(false)).then((l) => { didHideListener = l; }).catch(() => {});
+    } catch {
+      // Keyboard plugin fallback for non-native web execution
+    }
+
+    const handleFocusIn = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target?.tagName)) {
+        setIsKeyboardOpen(true);
+      }
+    };
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+        if (!isInput) {
+          setIsKeyboardOpen(false);
+        }
+      }, 50);
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+
+    return () => {
+      if (showListener?.remove) showListener.remove();
+      if (hideListener?.remove) hideListener.remove();
+      if (didShowListener?.remove) didShowListener.remove();
+      if (didHideListener?.remove) didHideListener.remove();
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
+
   // A receive checkpoint found on cold start (feature: resume after app
   // restart) — null once dismissed/resumed/absent. Distinct from the live
   // 'reconnecting' transferState, which only handles a WebRTC drop while the
@@ -300,6 +350,7 @@ function App() {
   const [chatPreviewItem, setChatPreviewItem] = useState(null); // { name, size, url, mime, kind, type }
   const chatBuffersRef = useRef(new Map()); // chatId -> { chunks: ArrayBuffer[], received: number, meta }
   const chatFileInputRef = useRef(null);
+  const [lastReadChatTs, setLastReadChatTs] = useState(0);
 
   // Bandwidth throttle (feature #8) — 0 = unlimited, else target KB/s per peer.
   const [maxRateKBps, setMaxRateKBps] = useState(0);
@@ -403,6 +454,7 @@ function App() {
   // written every ~2s during an active receive instead of on every chunk, to
   // keep localStorage write pressure low.
   const checkpointThrottleRef = useRef(0);
+  const lastRxStatsUpdateRef = useRef(0);
   // Sender-side: caches each queued file's SHA-256 (as a Promise, so a
   // broadcast to several receivers hashes each file once instead of once per
   // peer) for the integrity check in the 'metadata' message.
@@ -607,6 +659,25 @@ function App() {
       connectivityRetryRef.current();
       connectivityRetryRef.current = null;
     }
+  }, []);
+
+  // The native splash (splash_laser_bolt.xml) is now the app's only loading logo, so
+  // it has to stay up until React has actually mounted — releasing it earlier would
+  // expose a bare background with nothing on it. launchAutoHide is off for that
+  // reason, which makes this hide() the only thing that dismisses it.
+  //
+  // The floor gives the 600ms bolt draw-in a chance to finish before the handoff.
+  // performance.now() is measured from webview navigation start, which happens after
+  // the native splash is already on screen, so the true elapsed time is always at
+  // least this — it errs toward hiding slightly late rather than cutting the bolt.
+  // If React took longer than the draw-in, wait is 0 and we hide immediately.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const SPLASH_DRAW_MS = 600;
+    const timer = setTimeout(() => {
+      SplashScreen.hide({ fadeDuration: 200 }).catch(() => {});
+    }, Math.max(0, SPLASH_DRAW_MS - performance.now()));
+    return () => clearTimeout(timer);
   }, []);
   useEffect(() => { homeTabRef.current = homeTab; }, [homeTab]);
   useEffect(() => {
@@ -1120,10 +1191,11 @@ function App() {
     setMySecurityCode('');
   }
 
-  // Reset UI back to Home State
+  // Reset UI back to Home State (fresh cold restart equivalent)
   function resetToHome() {
     cleanup();
     setMode('home');
+    setMainNavTab('home');
     setHomeTab('home');
     setTransferState('idle');
     setSelectedFiles([]);
@@ -1150,6 +1222,22 @@ function App() {
     setChatDraft('');
     setShowChat(false);
     setShowChatAttach(false);
+
+    // Reset Nearby / Wi-Fi Direct discovery state
+    setWifiDirectBrowsing(false);
+    setWifiDirectPeers([]);
+    setWifiDirectConnecting(null);
+    setWifiDirectLocationOff(false);
+    setWifiDirectWifiOff(false);
+
+    // Reset modals & overlays
+    setShowScanner(false);
+    setShowQrZoom(false);
+    setShowAddApps(false);
+    setShowAddMoreMenu(false);
+    setShowTextModal(false);
+    setTextDraft('');
+
     chatBuffersRef.current.clear();
 
     // Clear URL search params without page reload
@@ -1633,10 +1721,17 @@ function App() {
     attemptConnection(0);
   };
 
+  const lastStatsUpdateRef = useRef(0);
+
   // Recomputes the ring/speed/ETA from whichever connected receiver is
   // furthest behind, so the UI reflects "done when everyone's done" rather
-  // than one arbitrary peer.
-  const updateAggregateStats = () => {
+  // than one arbitrary peer. Throttled to ~10Hz during streaming to eliminate
+  // React re-rendering bottlenecks.
+  const updateAggregateStats = (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastStatsUpdateRef.current < 100) return;
+    lastStatsUpdateRef.current = now;
+
     const peers = connsRef.current;
     if (peers.length === 0) return;
 
@@ -1647,7 +1742,7 @@ function App() {
     const slowest = peers.reduce((a, b) => (a.totalBytesSent <= b.totalBytesSent ? a : b));
     setSendFileIndex(Math.min(slowest.queueIndex, Math.max(0, sendQueueRef.current.length - 1)));
 
-    const elapsed = (Date.now() - transferStartTime.current) / 1000;
+    const elapsed = (now - transferStartTime.current) / 1000;
     const speed = elapsed > 0 ? slowest.totalBytesSent / elapsed : 0;
     setTransferSpeed(formatSpeed(speed));
 
@@ -1669,7 +1764,7 @@ function App() {
 
     if (idx >= files.length) {
       try { peerState.conn.send({ type: 'batch-complete' }); } catch { /* ignore */ }
-      updateAggregateStats();
+      updateAggregateStats(true);
       if (connsRef.current.length > 0 && connsRef.current.every((p) => p.queueIndex >= files.length)) {
         setTransferState('complete');
         import('canvas-confetti').then(({ default: confetti }) => confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } }));
@@ -1745,7 +1840,7 @@ function App() {
         const skippedSize = file.size - offset;
         peerState.totalBytesSent += skippedSize;
         peerState.queueIndex += 1;
-        updateAggregateStats();
+        updateAggregateStats(true);
         sendNextQueuedFileForPeer(peerState);
         return;
       }
@@ -1770,7 +1865,8 @@ function App() {
         return;
       }
 
-      const slice = file.slice(offset, offset + CHUNK_SIZE);
+      const chunkSize = peerState.conn?.isLocalSocket ? LOCAL_SOCKET_CHUNK_SIZE : CHUNK_SIZE;
+      const slice = file.slice(offset, offset + chunkSize);
       const reader = new FileReader();
 
       reader.onload = (e) => {
@@ -1781,7 +1877,7 @@ function App() {
             type: 'chunk',
             chunk: e.target.result,
             offset: offset,
-            done: offset + CHUNK_SIZE >= file.size
+            done: offset + chunkSize >= file.size
           });
 
           offset += slice.size;
@@ -1798,7 +1894,7 @@ function App() {
             const delayMs = (slice.size / (rateKBps * 1024)) * 1000;
             setTimeout(sendNext, delayMs);
           } else {
-            sendNext();
+            setTimeout(sendNext, 0);
           }
         } catch (err) {
           // Only this peer's stream failed — drop them, everyone else keeps going
@@ -1973,12 +2069,14 @@ function App() {
       }
 
       const totalSize = incomingFileRef.current ? incomingFileRef.current.size : 0;
+      const nowTs = Date.now();
 
-      if (totalSize > 0) {
+      if (totalSize > 0 && (data.done || nowTs - lastRxStatsUpdateRef.current >= 100)) {
+        lastRxStatsUpdateRef.current = nowTs;
         const pct = Math.min((receivedBytes.current / totalSize) * 100, 100);
         setTransferProgress(pct);
 
-        const elapsed = (Date.now() - transferStartTime.current) / 1000;
+        const elapsed = (nowTs - transferStartTime.current) / 1000;
         const speed = elapsed > 0 ? (receivedBytes.current / elapsed) : 0;
         setTransferSpeed(formatSpeed(speed));
 
@@ -2588,6 +2686,12 @@ function App() {
     return [...clips, ...chatMessages].sort((a, b) => (a.sortTs || 0) - (b.sortTs || 0));
   }, [sessionClips, chatMessages]);
 
+  useEffect(() => {
+    if (showChat) {
+      setLastReadChatTs(Date.now());
+    }
+  }, [showChat, unifiedChat.length]);
+
   // Opens a just-received file in whatever app the device has for its type
   // (gallery, PDF viewer, etc.) via the same content:// URI it was saved
   // with — tapping a "File Received!" row just opens it, no re-navigating
@@ -2752,10 +2856,15 @@ function App() {
   // receive on the receiver side (the conn stays open past 'complete').
   const chatAvailable = (mode === 'p2p-send' && connectedCount > 0) || (mode === 'p2p-receive' && (transferState === 'transferring' || transferState === 'complete'));
   const chatPeerLabel = mode === 'p2p-send' ? `${connectedCount} receiver${connectedCount === 1 ? '' : 's'}` : (targetPeerId || 'sender');
-  const chatUnreadCount = chatMessages.filter((m) => m.direction === 'received').length;
+  const chatUnreadCount = useMemo(() => {
+    return unifiedChat.filter(
+      (m) => m.direction === 'received' && (m.sortTs || 0) > lastReadChatTs
+    ).length;
+  }, [unifiedChat, lastReadChatTs]);
 
   return (
-    <div className="max-w-[1200px] w-full min-h-0 flex-1 mx-auto flex flex-col justify-start overflow-x-hidden gap-3 max-[640px]:gap-2 p-5 max-[640px]:p-3 max-[380px]:p-2 pt-[max(1.25rem,env(safe-area-inset-top))] max-[640px]:pt-[max(0.75rem,env(safe-area-inset-top))] max-[380px]:pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] max-[640px]:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-[380px]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <>
+      <div className="max-w-[1200px] w-full min-h-0 flex-1 mx-auto flex flex-col justify-start overflow-x-hidden gap-3 max-[640px]:gap-2 p-5 max-[640px]:p-3 max-[380px]:p-2 pt-[max(1.25rem,env(safe-area-inset-top))] max-[640px]:pt-[max(0.75rem,env(safe-area-inset-top))] max-[380px]:pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] max-[640px]:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-[380px]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {/* HEADER */}
       <header className="flex items-center justify-between border-b border-border pb-5 max-[640px]:pb-3 max-[640px]:gap-2">
         <div className="flex items-center gap-3 cursor-pointer" onClick={resetToHome}>
@@ -2889,7 +2998,7 @@ function App() {
       )}
 
       {/* MAIN LAYOUT CONTAINER */}
-      <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2 pb-14">
+      <main className={`flex-1 min-h-0 flex flex-col items-center justify-start py-2 ${isKeyboardOpen ? 'pb-2' : 'pb-14'}`}>
         <div
           className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 min-h-0 flex flex-col justify-start p-4 max-[640px]:p-3.5 max-[380px]:p-3 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)] overflow-y-auto touch-pan-y`}
         >
@@ -2903,6 +3012,7 @@ function App() {
               nearbyPeers={nearbyPeers}
               wifiDirectPeers={wifiDirectPeers}
               onOpenChat={() => setShowChat(true)}
+              unreadCount={chatUnreadCount}
               onReconnectRoom={(code, autoChat = true) => {
                 cleanup();
                 setTargetPeerId(code);
@@ -2914,7 +3024,7 @@ function App() {
                 }).catch(() => {});
               }}
               onConnectPeer={(peer) => {
-                handleConnectPeer(peer);
+                connectToWifiDirectPeer(peer);
                 setMainNavTab('home');
               }}
               onHostRoom={() => handleHostRoomCode()}
@@ -2943,11 +3053,6 @@ function App() {
               </div>
               <SettingsPanel
                 formatBytes={formatBytes}
-                maxRateKBps={maxRateKBps}
-                onSelectMaxRate={(kbps) => {
-                  setMaxRateKBps(kbps);
-                  showToast(kbps === 0 ? 'Bandwidth cap set to Unlimited' : `Bandwidth cap set to ${kbps} KB/s`, 'info');
-                }}
                 appUpdate={appUpdate}
                 onCheckUpdate={handleManualCheckUpdate}
                 onStartUpdate={handleStartUpdate}
@@ -2964,33 +3069,45 @@ function App() {
                 <p className="text-text-secondary text-[0.82rem] max-[380px]:text-[0.75rem]">Transfer files directly browser-to-browser. Encrypted & private.</p>
               </div>
 
-              {/* TOP TAB SWITCHER: Home / Apps (hidden once a file is queued) */}
+              {/* TOP TAB SWITCHER: Home / Apps / History */}
               {selectedFiles.length === 0 && (
                 <div
-                  className="flex flex-shrink-0 gap-[0.4rem] bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-[0.25rem] mb-4 max-[640px]:mb-3"
+                  className="flex flex-shrink-0 gap-1 bg-bg-secondary/70 border border-white/10 rounded-2xl p-1 mb-3.5 shadow-inner"
                   onPointerDown={onCardSwipeStart}
                   onPointerUp={onCardSwipeEnd}
                 >
                   <button
                     type="button"
-                    className={`flex-1 border-0 font-heading text-[0.82rem] font-semibold py-[0.45rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'home' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 border-0 font-heading text-[0.82rem] font-bold py-2 px-3 rounded-xl cursor-pointer transition-all duration-200 ${
+                      homeTab === 'home'
+                        ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(168,85,247,0.35)]'
+                        : 'bg-transparent text-text-muted hover:text-text-primary'
+                    }`}
                     onClick={() => setHomeTab('home')}
                   >
                     Home
                   </button>
                   <button
                     type="button"
-                    className={`flex-1 border-0 font-heading text-[0.82rem] font-semibold py-[0.45rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'apps' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 border-0 font-heading text-[0.82rem] font-bold py-2 px-3 rounded-xl cursor-pointer transition-all duration-200 ${
+                      homeTab === 'apps'
+                        ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(168,85,247,0.35)]'
+                        : 'bg-transparent text-text-muted hover:text-text-primary'
+                    }`}
                     onClick={() => setHomeTab('apps')}
                   >
                     Apps
                   </button>
                   <button
                     type="button"
-                    className={`flex-1 border-0 font-heading text-[0.82rem] font-semibold py-[0.45rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 flex items-center justify-center gap-1 ${homeTab === 'history' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 border-0 font-heading text-[0.82rem] font-bold py-2 px-3 rounded-xl cursor-pointer transition-all duration-200 flex items-center justify-center gap-1.5 ${
+                      homeTab === 'history'
+                        ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(168,85,247,0.35)]'
+                        : 'bg-transparent text-text-muted hover:text-text-primary'
+                    }`}
                     onClick={() => { setHomeTab('history'); setHistoryVersion((v) => v + 1); setHistoryOpenedAt(Date.now()); }}
                   >
-                    <HistoryIcon size={13} /> History
+                    <HistoryIcon size={14} /> History
                   </button>
                 </div>
               )}
@@ -3025,7 +3142,11 @@ function App() {
               {/* FILE DROP ZONE (IF NO FILES SELECTED) */}
               {selectedFiles.length === 0 ? (
                 <div
-                  className={`group flex-shrink-0 border-2 border-dashed rounded-[18px] px-4 py-6 max-[640px]:py-4 max-[640px]:px-3 text-center cursor-pointer bg-[rgba(15,23,42,0.25)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden ${dragActive ? 'border-accent-cyan bg-[rgba(125,211,255,0.04)] shadow-[0_0_25px_rgba(125,211,255,0.12)]' : 'border-[rgba(125,211,255,0.25)] hover:border-accent-cyan hover:bg-[rgba(125,211,255,0.04)] hover:shadow-[0_0_25px_rgba(125,211,255,0.12)]'}`}
+                  className={`group flex-shrink-0 border-2 border-dashed rounded-2xl p-5 max-[640px]:p-4 text-center cursor-pointer bg-gradient-to-b from-white/[0.04] to-white/[0.01] backdrop-blur-xl transition-all duration-300 relative overflow-hidden shadow-lg ${
+                    dragActive
+                      ? 'border-accent-cyan bg-accent-cyan/10 shadow-[0_0_30px_rgba(45,212,191,0.25)]'
+                      : 'border-accent-purple/30 hover:border-accent-cyan/60 hover:shadow-[0_0_30px_rgba(168,85,247,0.15)]'
+                  }`}
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
                   onDragLeave={handleDrag}
@@ -3039,36 +3160,61 @@ function App() {
                     onChange={handleFileSelect}
                     multiple
                   />
-                  <div className="flex flex-col items-center gap-2.5">
-                    <div className={`w-11 h-11 rounded-[12px] flex items-center justify-center transition-all duration-300 ${dragActive ? 'bg-[rgba(125,211,255,0.15)] text-accent-cyan -translate-y-1' : 'bg-[rgba(125,211,255,0.08)] text-accent-purple group-hover:bg-[rgba(125,211,255,0.15)] group-hover:text-accent-cyan group-hover:-translate-y-1'}`}>
-                      <UploadCloud size={24} />
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-accent-purple/20 to-accent-cyan/20 border border-accent-purple/30 text-accent-cyan flex items-center justify-center group-hover:scale-105 transition-transform duration-300 shadow-[0_4px_16px_rgba(168,85,247,0.2)]">
+                        <UploadCloud size={24} className="text-accent-cyan animate-pulse" />
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-[1.05rem] max-[380px]:text-[0.95rem] font-medium text-text-primary">Drag & drop your files here</h3>
-                      <p className="text-[0.78rem] text-text-muted">or click to browse files from your device</p>
+
+                    <div className="flex flex-col gap-1">
+                      <h3 className="text-[1.08rem] max-[380px]:text-[0.98rem] font-bold text-text-primary font-heading tracking-tight">
+                        Drag & Drop Files Here
+                      </h3>
+                      <p className="text-[0.78rem] text-text-muted">
+                        Any format, fast & unlimited
+                      </p>
                     </div>
-                    <span className="bg-bg-tertiary border border-[rgba(125,211,255,0.3)] text-accent-purple px-2.5 py-0.5 rounded-full text-[0.68rem] font-semibold tracking-wide uppercase">
-                      No File Size Limits
-                    </span>
+
+                    <div className="mt-0.5">
+                      <button
+                        type="button"
+                        className="relative overflow-hidden py-2 px-5.5 rounded-full bg-gradient-to-r from-accent-cyan via-accent-purple to-accent-cyan bg-[length:200%_100%] hover:bg-right transition-all duration-300 text-[#06222c] font-heading text-[0.8rem] font-extrabold tracking-wide uppercase shadow-[0_4px_16px_rgba(45,212,191,0.3)] hover:shadow-[0_6px_20px_rgba(168,85,247,0.45)] active:scale-95 flex items-center justify-center gap-2 cursor-pointer border-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          triggerFileInput();
+                        }}
+                      >
+                        <FolderUp size={15} className="stroke-[2.5]" />
+                        <span>Select Files</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : null}
 
               {selectedFiles.length === 0 && (
-                <div className="flex items-center justify-center gap-3 mt-2.5 flex-shrink-0">
+                <div className="flex items-center justify-center gap-1.5 mt-2.5 flex-wrap flex-shrink-0">
                   <button
                     type="button"
-                    className="relative overflow-hidden flex items-center gap-1.5 bg-[rgba(30,41,59,0.4)] border border-border text-text-secondary text-[0.78rem] cursor-pointer py-[0.35rem] px-3 rounded-full transition-all duration-200 hover:bg-[rgba(125,211,255,0.1)] hover:border-[rgba(125,211,255,0.3)] hover:text-accent-cyan"
+                    className="py-1.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-text-secondary hover:text-text-primary text-[0.76rem] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors active:scale-95"
                     onClick={(e) => rippleTap(e, triggerFolderInput)}
                   >
-                    <FolderUp size={13} /> Send a folder
+                    <FolderUp size={13} className="text-accent-purple" /> Folder
                   </button>
                   <button
                     type="button"
-                    className="relative overflow-hidden flex items-center gap-1.5 bg-[rgba(30,41,59,0.4)] border border-border text-text-secondary text-[0.78rem] cursor-pointer py-[0.35rem] px-3 rounded-full transition-all duration-200 hover:bg-[rgba(125,211,255,0.1)] hover:border-[rgba(125,211,255,0.3)] hover:text-accent-cyan"
+                    className="py-1.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-text-secondary hover:text-text-primary text-[0.76rem] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors active:scale-95"
+                    onClick={(e) => rippleTap(e, () => setHomeTab('apps'))}
+                  >
+                    <Smartphone size={13} className="text-accent-cyan" /> Apps
+                  </button>
+                  <button
+                    type="button"
+                    className="py-1.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-text-secondary hover:text-text-primary text-[0.76rem] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors active:scale-95"
                     onClick={(e) => rippleTap(e, () => setShowTextModal(true))}
                   >
-                    <Type size={14} /> Send text
+                    <Type size={13} className="text-accent-pink" /> Text Note
                   </button>
                   <input
                     type="file"
@@ -3240,26 +3386,39 @@ function App() {
                 </div>
               )}
 
-              {/* NEARBY (OFFLINE): Wi-Fi Direct — no router, no shared Wi-Fi, no
-                  internet required at all. Explicit opt-in toggle since it
-                  needs a location/nearby-Wi-Fi permission prompt on first use. */}
+              {/* NEARBY OFFLINE RADAR CARD */}
               {wifiDirectAvailable && (
-                <div className="mt-4 mb-2 flex-shrink-0">
-                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                    <div className="flex items-center gap-[0.4rem] text-[0.78rem] text-text-muted min-w-0">
-                      <Zap size={14} className="text-accent-purple flex-shrink-0" /> <span>Nearby (offline, no Wi-Fi needed)</span>
+                <div className="mt-2.5 mb-1 bg-bg-secondary/60 border border-white/10 rounded-2xl p-3 flex flex-col gap-2 flex-shrink-0 shadow-sm">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${
+                        wifiDirectBrowsing
+                          ? 'bg-accent-purple/20 text-accent-purple border-accent-purple/30 animate-pulse'
+                          : 'bg-white/5 text-text-muted border-white/10'
+                      }`}>
+                        <Radar size={15} />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[0.82rem] font-semibold text-text-primary font-heading">
+                          Nearby Offline Devices
+                        </span>
+                        <span className="text-[0.72rem] text-text-muted">
+                          No Wi-Fi router or internet required
+                        </span>
+                      </div>
                     </div>
+
                     <button
                       type="button"
-                      className={`relative overflow-hidden flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 text-[0.72rem] font-semibold rounded-full cursor-pointer py-1 px-3 border transition-all duration-200 ${
+                      className={`py-1.5 px-3 rounded-xl font-heading text-[0.76rem] font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
                         wifiDirectBrowsing
-                          ? 'bg-accent-purple text-[#06222c] border-accent-purple'
-                          : 'bg-[rgba(125,211,255,0.1)] text-accent-purple border-[rgba(125,211,255,0.3)] hover:bg-[rgba(125,211,255,0.18)]'
+                          ? 'bg-accent-purple text-[#06222c] border-accent-purple shadow-[0_2px_10px_rgba(168,85,247,0.3)] active:scale-95'
+                          : 'bg-white/5 text-text-secondary border-white/10 hover:bg-white/10 hover:text-text-primary'
                       }`}
                       onClick={(e) => rippleTap(e, () => setWifiDirectBrowsing((prev) => !prev))}
                     >
-                      {wifiDirectBrowsing && <span className="w-1.5 h-1.5 rounded-full bg-[#06222c] animate-pulse flex-shrink-0" />}
-                      {wifiDirectBrowsing ? 'Stop searching' : 'Find devices'}
+                      {wifiDirectBrowsing && <span className="w-1.5 h-1.5 rounded-full bg-[#06222c] animate-ping flex-shrink-0" />}
+                      <span>{wifiDirectBrowsing ? 'Stop Radar' : 'Find Devices'}</span>
                     </button>
                   </div>
 
@@ -3298,7 +3457,10 @@ function App() {
                   )}
 
                   {wifiDirectBrowsing && !wifiDirectWifiOff && !wifiDirectLocationOff && wifiDirectPeers.length === 0 && (
-                    <div className="text-[0.78rem] text-text-muted py-1">Searching nearby devices…</div>
+                    <div className="flex items-center gap-2 text-[0.78rem] text-accent-purple py-1 px-1">
+                      <RefreshCw size={13} className="animate-[spin_1.4s_linear_infinite] flex-shrink-0" />
+                      <span>Scanning for nearby devices...</span>
+                    </div>
                   )}
 
                   {wifiDirectPeers.length > 0 && (
@@ -3332,12 +3494,6 @@ function App() {
                     </div>
                   )}
 
-                  {/* HOTSPOT FALLBACK (feature: Wi-Fi Direct → hotspot) —
-                      manual escape hatch for when Wi-Fi Direct itself is
-                      flaky/unavailable on this hardware. Sender-only UI; the
-                      receiving device just scans the resulting QR code with
-                      the existing "Scan QR Code" button, which detects the
-                      hotspot credentials automatically. */}
                   {hotspotSupported && selectedFiles.length > 0 && !wifiDirectConnecting && (
                     <button
                       type="button"
@@ -3352,40 +3508,49 @@ function App() {
                 </div>
               )}
 
-              {/* RECEIVE AREA (ONLY SHOW IF NO FILE CURRENTLY BEING SENT). Hidden
-                  (not just disabled) while a Wi-Fi Direct handshake is pending —
-                  startP2PReceive's setTargetPeerId() would otherwise fill this
-                  box with the Wi-Fi Direct room code and make it look like a
-                  code got typed in on its own. */}
+              {/* CONDENSED QUICK RECEIVE BAR */}
               {selectedFiles.length === 0 && !wifiDirectConnecting && (
-                <div className="mb-2 flex-shrink-0">
-                  <div className="flex items-center text-center my-3 text-text-muted text-[0.8rem] before:content-[''] before:flex-1 before:border-b before:border-border before:mr-3 after:content-[''] after:flex-1 after:border-b after:border-border after:ml-3">or receive a file</div>
-                  <div className="flex flex-col gap-3">
-                    <div className="relative flex items-center gap-[0.4rem] w-full min-w-0">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center">
-                        <Download size={20} />
+                <div className="mt-1.5 mb-2 pb-2 flex-shrink-0 flex flex-col gap-2">
+                  <div className="flex items-center text-center my-0.5 text-text-muted text-[0.75rem] before:content-[''] before:flex-1 before:border-b before:border-white/10 before:mr-3 after:content-[''] after:flex-1 after:border-b after:border-white/10 after:ml-3">
+                    or receive with room code
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 min-w-0">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center">
+                        <Download size={16} />
                       </div>
                       <input
                         type="text"
-                        placeholder="Enter Room Code (e.g. 4D8G2X)"
-                        className="w-auto flex-1 min-w-0 bg-[rgba(8,12,20,0.5)] border border-border rounded-xl py-[0.8rem] pr-4 pl-10 font-heading text-[0.95rem] text-text-primary outline-none transition-all duration-300 focus:border-accent-purple focus:shadow-[0_0_10px_rgba(125,211,255,0.12)]"
+                        placeholder="Enter Room Code"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pr-3 pl-9 font-mono font-semibold text-[0.85rem] text-text-primary placeholder:text-text-muted/70 placeholder:normal-case focus:outline-none focus:border-accent-purple uppercase tracking-wider"
                         value={targetPeerId}
                         onChange={(e) => setTargetPeerId(e.target.value.toUpperCase())}
                         onKeyDown={(e) => e.key === 'Enter' && startP2PReceive()}
+                        maxLength={10}
                       />
-                      <button
-                        className="relative overflow-hidden flex-shrink-0 bg-transparent border border-border text-text-secondary cursor-pointer flex items-center p-[0.7rem] rounded-xl transition-all duration-200 hover:bg-white/5 hover:text-text-primary"
-                        onClick={(e) => rippleTap(e, openScanner)}
-                        title="Scan QR Code"
-                      >
-                        <QrCode size={20} />
-                      </button>
                     </div>
+
                     <button
-                      className={`${targetPeerId.trim() ? `${BTN_PRIMARY} shadow-[0_2px_14px_rgba(125,211,255,0.35)]` : BTN_SECONDARY} justify-center mb-1`}
+                      type="button"
+                      className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-text-secondary hover:text-text-primary cursor-pointer transition-colors active:scale-95 flex-shrink-0"
+                      onClick={(e) => rippleTap(e, openScanner)}
+                      title="Scan QR Code"
+                    >
+                      <QrCode size={18} />
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={!targetPeerId.trim()}
+                      className={`py-2 px-3.5 rounded-xl font-heading text-[0.82rem] font-bold flex items-center gap-1 border-0 transition-all flex-shrink-0 ${
+                        targetPeerId.trim()
+                          ? 'bg-gradient-to-r from-accent-cyan to-accent-purple text-[#06222c] cursor-pointer shadow-[0_2px_12px_rgba(45,212,191,0.35)] active:scale-95'
+                          : 'bg-white/5 text-text-muted border border-white/10 opacity-70 cursor-not-allowed'
+                      }`}
                       onClick={(e) => rippleTap(e, () => startP2PReceive())}
                     >
-                      Connect & Download
+                      <span>Join</span> <ArrowRight size={14} />
                     </button>
                   </div>
                 </div>
@@ -3990,65 +4155,72 @@ function App() {
         </div>
       </main>
 
-      {/* BOTTOM NAVIGATION BAR */}
-      <nav className="fixed bottom-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-2rem)] max-w-[390px] bg-[rgba(15,23,42,0.88)] backdrop-blur-2xl border border-white/[0.12] rounded-full p-1.5 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.12)]">
-        <button
-          type="button"
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
-            mainNavTab === 'home'
-              ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
-              : 'bg-transparent text-text-muted hover:text-text-primary'
-          }`}
-          onClick={(e) => {
-            rippleTap(e, () => {
-              setMainNavTab('home');
-              triggerHaptic();
-            });
-          }}
-        >
-          <Home size={18} />
-          <span>Home</span>
-        </button>
+      {/* BOTTOM NAVIGATION BAR (Hidden when keyboard is open) */}
+      {!isKeyboardOpen && (
+        <nav className="fixed bottom-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-2rem)] max-w-[390px] bg-[rgba(15,23,42,0.88)] backdrop-blur-2xl border border-white/[0.12] rounded-full p-1.5 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.12)]">
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
+              mainNavTab === 'home'
+                ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
+                : 'bg-transparent text-text-muted hover:text-text-primary'
+            }`}
+            onClick={(e) => {
+              rippleTap(e, () => {
+                setMainNavTab('home');
+                triggerHaptic();
+              });
+            }}
+          >
+            <Home size={18} />
+            <span>Home</span>
+          </button>
 
-        <button
-          type="button"
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer relative ${
-            mainNavTab === 'connect'
-              ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
-              : 'bg-transparent text-text-muted hover:text-text-primary'
-          }`}
-          onClick={(e) => {
-            rippleTap(e, () => {
-              setMainNavTab('connect');
-              triggerHaptic();
-            });
-          }}
-        >
-          <Radio size={18} />
-          <span>Connect</span>
-          {chatUnreadCount > 0 && (
-            <span className="w-2.5 h-2.5 rounded-full bg-accent-pink absolute top-1.5 right-3 border-2 border-bg-primary" />
-          )}
-        </button>
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
+              mainNavTab === 'connect'
+                ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
+                : 'bg-transparent text-text-muted hover:text-text-primary'
+            }`}
+            onClick={(e) => {
+              rippleTap(e, () => {
+                setMainNavTab('connect');
+                triggerHaptic();
+              });
+            }}
+          >
+            <div className="relative flex items-center justify-center">
+              <Radio size={18} />
+              {chatUnreadCount > 0 && (
+                <span className="absolute -top-2 -right-2.5 min-w-[17px] h-[17px] px-1 rounded-full bg-accent-pink text-white text-[0.6rem] font-extrabold flex items-center justify-center border-2 border-bg-primary shadow-sm animate-pulse">
+                  {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+                </span>
+              )}
+            </div>
+            <span>Connect</span>
+          </button>
 
-        <button
-          type="button"
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
-            mainNavTab === 'settings'
-              ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
-              : 'bg-transparent text-text-muted hover:text-text-primary'
-          }`}
-          onClick={(e) => {
-            rippleTap(e, () => {
-              setMainNavTab('settings');
-              triggerHaptic();
-            });
-          }}
-        >
-          <Settings size={18} />
-          <span>Settings</span>
-        </button>
-      </nav>
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
+              mainNavTab === 'settings'
+                ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
+                : 'bg-transparent text-text-muted hover:text-text-primary'
+            }`}
+            onClick={(e) => {
+              rippleTap(e, () => {
+                setMainNavTab('settings');
+                triggerHaptic();
+              });
+            }}
+          >
+            <Settings size={18} />
+            <span>Settings</span>
+          </button>
+        </nav>
+      )}
+      </div>
 
       {/* QR ZOOM MODAL */}
       {showQrZoom && createPortal(
@@ -4271,8 +4443,8 @@ function App() {
 
           {showChatApps && (
             <div className="fixed inset-0 bg-[rgba(4,6,12,0.85)] backdrop-blur-sm flex items-center justify-center z-[2100] p-5" onClick={(e) => rippleTap(e, () => setShowChatApps(false))}>
-              <div className="bg-bg-secondary border border-border rounded-[20px] p-4 w-full max-w-[360px] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_8px_10px_-6px_rgba(0,0,0,0.3)] has-[.apps-panel]:max-h-[80vh] has-[.apps-panel]:flex has-[.apps-panel]:flex-col" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-3 font-heading font-semibold">
+              <div className="bg-bg-secondary border border-border rounded-[22px] p-4 w-full max-w-[420px] h-[80vh] max-h-[580px] flex flex-col min-h-0 shadow-[0_12px_36px_rgba(0,0,0,0.6)] relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3 font-heading font-semibold flex-shrink-0">
                   <span className="flex items-center gap-[0.4rem]">
                     <Smartphone size={16} /> Send an app
                   </span>
@@ -4378,7 +4550,7 @@ function App() {
         </div>,
         document.body
       )}
-    </div>
+    </>
   );
 }
 

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Exit half of the splash animation: the bolt un-forms, retracting the stroke back the way
+  splash_laser_bolt.xml drew it, as the splash hands off to the app.
+
+  This exists as a separate drawable rather than calling reverse() on the entry one because
+  AnimatedVectorDrawable.reverse()/canReverse() are @hide on the platform class — only
+  AnimatedVectorDrawableCompat exposes them, and the splash icon is inflated by the system
+  as a platform drawable that can't be cast to it.
+
+  Starts at trimPathEnd="1" (fully drawn), which is exactly where the entry animation ends,
+  so MainActivity swapping this in at exit produces no visible jump. Geometry — 288dp canvas,
+  0.55 group scale, 24x24 viewport — must stay identical to the entry drawable for that to
+  hold. Runs slightly faster than the 600ms draw-in: by this point the app is booted and
+  waiting behind the splash, so every millisecond here is delay the user feels.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="288dp"
+            android:height="288dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <group
+                android:scaleX="0.55"
+                android:scaleY="0.55"
+                android:pivotX="12"
+                android:pivotY="12">
+                <path
+                    android:name="bolt"
+                    android:pathData="M13,2 L3,14 L12,14 L11,22 L21,10 L12,10 Z"
+                    android:strokeWidth="2.5"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round"
+                    android:trimPathStart="0"
+                    android:trimPathEnd="1">
+                    <aapt:attr name="android:strokeColor">
+                        <gradient
+                            android:type="linear"
+                            android:startX="0"
+                            android:startY="0"
+                            android:endX="24"
+                            android:endY="24"
+                            android:startColor="#7DD3FF"
+                            android:endColor="#C084FC" />
+                    </aapt:attr>
+                </path>
+            </group>
+        </vector>
+    </aapt:attr>
+
+    <target android:name="bolt">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="trimPathEnd"
+                android:valueFrom="1"
+                android:valueTo="0"
+                android:valueType="floatType"
+                android:duration="450"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+
+</animated-vector>

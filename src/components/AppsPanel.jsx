@@ -105,7 +105,7 @@ export function AppsPanel({ onSelectApps, formatBytes }) {
   }
 
   return (
-    <div className="apps-panel flex-1 flex flex-col gap-4 pb-4">
+    <div className="apps-panel flex-1 min-h-0 flex flex-col gap-3">
       <div className="relative flex items-center gap-[0.4rem] w-full min-w-0 flex-shrink-0">
         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none flex items-center"><Search size={16} /></div>
         <input
@@ -129,7 +129,7 @@ export function AppsPanel({ onSelectApps, formatBytes }) {
       )}
 
       {!loading && !error && filtered.length === 0 && (
-        <p className="text-[0.85rem] text-text-muted text-center">
+        <p className="text-[0.85rem] text-text-muted text-center py-6">
           {apps.length === 0 ? 'No user-installed apps found.' : `No apps match "${query}".`}
         </p>
       )}
@@ -137,18 +137,28 @@ export function AppsPanel({ onSelectApps, formatBytes }) {
       {!loading && filtered.length > 0 && (
         // Responsive tile grid: auto-fill sizes each tile to a ~92px minimum
         // and lets the track add/remove columns as the panel width changes.
-        <div className="apps-list flex-1 grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] auto-rows-max gap-2.5 content-start pb-2">
+        <div className="apps-list flex-1 min-h-0 grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] auto-rows-max gap-2.5 content-start overflow-y-auto pr-1 pb-3">
           {filtered.map((app) => {
             const isChecked = selected.has(app.packageName);
             return (
               <div
                 key={app.packageName}
                 title={`${app.packageName}${app.versionName ? ` · v${app.versionName}` : ''} · ${formatBytes(app.apkSize)}`}
-                className={`relative flex flex-col items-center gap-1.5 rounded-xl py-3 px-2 cursor-pointer transition-[background-color,border-color] duration-150 ease-linear border text-center ${isChecked ? 'bg-[rgba(125,211,255,0.14)] border-accent-purple' : 'bg-[rgba(30,41,59,0.4)] border-border hover:bg-[rgba(30,41,59,0.65)] hover:border-accent-purple'}`}
+                className={`relative flex flex-col items-center gap-1.5 rounded-xl py-3 px-2 cursor-pointer transition-all duration-200 border text-center ${
+                  isChecked
+                    ? 'bg-accent-purple/15 border-accent-cyan shadow-[0_0_12px_rgba(45,212,191,0.2)]'
+                    : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.07] hover:border-accent-purple/50'
+                }`}
                 onClick={() => toggleSelected(app.packageName)}
               >
-                <span className={`absolute top-1.5 right-1.5 w-5 h-5 flex-shrink-0 rounded-md border-[1.5px] flex items-center justify-center text-white transition-all duration-150 ${isChecked ? 'bg-accent-purple border-accent-purple !text-[#06222c]' : 'border-border bg-[rgba(8,12,20,0.5)]'}`}>
-                  {isChecked && <Check size={13} strokeWidth={3} />}
+                <span
+                  className={`absolute top-1.5 right-1.5 w-5 h-5 flex-shrink-0 rounded-md border flex items-center justify-center transition-all duration-150 ${
+                    isChecked
+                      ? 'bg-gradient-to-r from-accent-cyan to-accent-purple border-transparent text-[#06222c] shadow-[0_2px_8px_rgba(45,212,191,0.4)]'
+                      : 'border-white/35 bg-black/50 hover:border-accent-cyan'
+                  }`}
+                >
+                  {isChecked && <Check size={13} strokeWidth={3.5} className="text-[#06222c]" />}
                 </span>
                 <AppIcon packageName={app.packageName} />
                 <div className="w-full min-w-0 flex flex-col items-center">
@@ -164,16 +174,18 @@ export function AppsPanel({ onSelectApps, formatBytes }) {
       )}
 
       {selected.size > 0 && (
-        <button
-          type="button"
-          className={BTN_PRIMARY}
-          disabled={!!preparing}
-          onClick={(e) => rippleTap(e, handleShareSelected)}
-        >
-          {preparing
-            ? <><RefreshCw size={16} className="animate-[spin_1.1s_linear_infinite]" /> Preparing {preparing.index}/{preparing.total}&hellip;</>
-            : <><Share2 size={16} /> Share {selected.size} {selected.size === 1 ? 'App' : 'Apps'}</>}
-        </button>
+        <div className="sticky bottom-0 bg-bg-secondary pt-2.5 pb-1 z-10 border-t border-white/10 flex-shrink-0">
+          <button
+            type="button"
+            className={`${BTN_PRIMARY} w-full py-2.5 rounded-xl font-heading text-[0.85rem] font-bold shadow-[0_4px_14px_rgba(45,212,191,0.35)]`}
+            disabled={!!preparing}
+            onClick={(e) => rippleTap(e, handleShareSelected)}
+          >
+            {preparing
+              ? <><RefreshCw size={16} className="animate-[spin_1.1s_linear_infinite]" /> Preparing {preparing.index}/{preparing.total}&hellip;</>
+              : <><Share2 size={16} /> Send {selected.size} {selected.size === 1 ? 'App' : 'Apps'}</>}
+          </button>
+        </div>
       )}
     </div>
   );

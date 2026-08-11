@@ -45,6 +45,7 @@ class LocalSocketChannel {
     // has one.
     this.readyState = 'open';
     this.binaryType = 'arraybuffer';
+    this.isLocalSocket = true;
     this.onopen = null;
     this.onmessage = null;
     this.onclose = null;

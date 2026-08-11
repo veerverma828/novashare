@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Native splash icon: the laser bolt draws itself in, matching the stroke animation
+  of the SVG in index.html so the cold-start window flows into the web loading screen.
+
+  The web version uses stroke-dasharray/dashoffset, which VectorDrawable has no
+  equivalent for — trimPathEnd is the Android analogue, so the path below starts at
+  trimPathEnd="0" (nothing drawn) and animates to 1 (fully drawn).
+
+  Draw-in only, deliberately: the system tears the splash down the moment the WebView
+  is ready, at an unpredictable point in the animation. Ending on a fully-drawn bolt
+  means a late teardown looks intentional; an erase phase (as the web keyframes have)
+  would risk handing off mid-erase to a blank icon.
+
+  Sizing follows the Android 12+ spec for an icon with no icon-background colour: a
+  288dp canvas whose artwork stays inside a 192dp circle. The path is authored in the
+  same 24x24 viewport as the web SVG, so the 0.55 group scale is what keeps it inside
+  that circle — the bolt spans 18x20 viewport units, ~119x132dp here, a ~178dp diagonal.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="288dp"
+            android:height="288dp"
+            android:viewportWidth="24"
+            android:viewportHeight="24">
+            <group
+                android:scaleX="0.55"
+                android:scaleY="0.55"
+                android:pivotX="12"
+                android:pivotY="12">
+                <path
+                    android:name="bolt"
+                    android:pathData="M13,2 L3,14 L12,14 L11,22 L21,10 L12,10 Z"
+                    android:strokeWidth="2.5"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round"
+                    android:trimPathStart="0"
+                    android:trimPathEnd="0">
+                    <aapt:attr name="android:strokeColor">
+                        <gradient
+                            android:type="linear"
+                            android:startX="0"
+                            android:startY="0"
+                            android:endX="24"
+                            android:endY="24"
+                            android:startColor="#7DD3FF"
+                            android:endColor="#C084FC" />
+                    </aapt:attr>
+                </path>
+            </group>
+        </vector>
+    </aapt:attr>
+
+    <target android:name="bolt">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="trimPathEnd"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:duration="600"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+
+</animated-vector>

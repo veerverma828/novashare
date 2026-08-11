@@ -5,12 +5,10 @@ import {
   Smartphone,
   RefreshCw,
   Trash2,
-  Send,
   Zap,
   ArrowRight,
   Wifi,
   CheckCircle2,
-  Plus,
   Copy,
   Share2,
   QrCode,
@@ -35,6 +33,7 @@ export function ConnectPanel({
   nearbyPeers = [],
   wifiDirectPeers = [],
   onOpenChat,
+  unreadCount = 0,
   onReconnectRoom,
   onConnectPeer,
   onHostRoom,
@@ -113,11 +112,11 @@ export function ConnectPanel({
         </div>
       </div>
 
-      {/* COLLAPSIBLE YOUR ROOM CODE DROPDOWN */}
-      <div className="bg-bg-secondary/90 border border-accent-purple/30 rounded-2xl overflow-hidden shadow-[0_2px_12px_rgba(168,85,247,0.1)] transition-all">
-        {/* Dropdown Header Bar */}
+      {/* YOUR ROOM CODE CARD */}
+      <div className="bg-bg-secondary/90 border border-accent-purple/30 rounded-2xl p-3.5 flex flex-col gap-2.5 shadow-[0_2px_12px_rgba(168,85,247,0.1)] transition-all">
+        {/* Top Header Row */}
         <div
-          className="p-3 flex items-center justify-between gap-2 cursor-pointer hover:bg-white/[0.03] transition-colors"
+          className="flex items-center justify-between gap-2 cursor-pointer"
           onClick={() => {
             triggerHaptic();
             setIsExpanded((prev) => !prev);
@@ -130,94 +129,80 @@ export function ConnectPanel({
             <span className="text-[0.85rem] font-semibold text-text-primary font-heading">
               Your Room Code
             </span>
-            {displayRoomCode && !isExpanded && (
-              <span className="font-mono font-bold text-[0.78rem] text-accent-cyan px-2 py-0.5 rounded-md bg-accent-purple/15 border border-accent-purple/30 flex items-center gap-1">
-                {displayRoomCode}
-                <span className="w-1.5 h-1.5 rounded-full bg-accent-green animate-pulse" />
-              </span>
-            )}
           </div>
 
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span className="text-[0.72rem] text-text-muted font-medium">
-              {isExpanded ? 'Hide' : 'Show'}
-            </span>
-            <div className="text-text-muted">
-              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </div>
-          </div>
+          <button
+            type="button"
+            className="p-1 text-text-muted hover:text-text-primary bg-transparent border-0 cursor-pointer flex items-center gap-1 text-[0.72rem] font-medium"
+            onClick={(e) => {
+              e.stopPropagation();
+              triggerHaptic();
+              setIsExpanded((prev) => !prev);
+            }}
+          >
+            <span>{isExpanded ? 'Hide' : 'More'}</span>
+            {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          </button>
         </div>
 
-        {/* Collapsible Dropdown Content */}
+        {/* Room Code & Quick Actions Bar */}
+        {displayRoomCode && (
+          <div className="flex items-center justify-between gap-2 bg-bg-primary/60 border border-border rounded-xl p-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 font-mono font-bold text-[0.92rem] text-accent-cyan tracking-wider bg-white/5 border border-accent-cyan/30 px-3 py-1 rounded-lg">
+                <span>{displayRoomCode}</span>
+                <span className="w-2 h-2 rounded-full bg-accent-green animate-pulse" title="Room Ready" />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                className="py-1 px-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-text-primary text-[0.75rem] font-semibold flex items-center gap-1 border border-white/10 cursor-pointer transition-colors active:scale-95"
+                onClick={(e) => rippleTap(e, () => handleCopyCode(displayRoomCode))}
+                title="Copy Code"
+              >
+                {copied ? <CheckCircle2 size={13} className="text-accent-green" /> : <Copy size={13} className="text-accent-cyan" />}
+                <span>{copied ? 'Copied' : 'Copy'}</span>
+              </button>
+
+              <button
+                type="button"
+                className="p-1.5 rounded-lg bg-accent-purple/20 hover:bg-accent-purple/30 text-accent-purple border border-accent-purple/30 cursor-pointer transition-colors active:scale-95"
+                onClick={(e) => rippleTap(e, () => handleShareCode(displayRoomCode))}
+                title="Share room code"
+              >
+                <Share2 size={14} />
+              </button>
+
+              {onShowQr && (
+                <button
+                  type="button"
+                  className="p-1.5 rounded-lg bg-accent-cyan/20 hover:bg-accent-cyan/30 text-accent-cyan border border-accent-cyan/30 cursor-pointer transition-colors active:scale-95"
+                  onClick={(e) => rippleTap(e, onShowQr)}
+                  title="Show QR code"
+                >
+                  <QrCode size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Collapsible Options */}
         {isExpanded && (
-          <div className="px-3 pb-3 pt-1 border-t border-white/[0.06] flex flex-col gap-2.5 animate-[fadeIn_0.15s_ease]">
-            {displayRoomCode ? (
-              <div className="flex items-center justify-between gap-2 flex-wrap bg-bg-primary/60 border border-border rounded-xl p-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[0.75rem] text-text-muted font-medium">Room Code:</span>
-                  <div className="flex items-center gap-1.5 font-mono font-bold text-[0.95rem] text-accent-cyan tracking-wider bg-white/5 border border-accent-cyan/30 px-3 py-1 rounded-lg">
-                    <span>{displayRoomCode}</span>
-                    <span className="w-2 h-2 rounded-full bg-accent-green animate-pulse" title="Room Ready" />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    className="py-1.5 px-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-text-primary text-[0.75rem] font-semibold flex items-center gap-1 border border-white/10 cursor-pointer transition-colors active:scale-95"
-                    onClick={(e) => rippleTap(e, () => handleCopyCode(displayRoomCode))}
-                  >
-                    {copied ? <CheckCircle2 size={13} className="text-accent-green" /> : <Copy size={13} className="text-accent-cyan" />}
-                    <span>{copied ? 'Copied' : 'Copy'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="p-1.5 rounded-lg bg-accent-purple/20 hover:bg-accent-purple/30 text-accent-purple border border-accent-purple/30 cursor-pointer transition-colors active:scale-95"
-                    onClick={(e) => rippleTap(e, () => handleShareCode(displayRoomCode))}
-                    title="Share room code"
-                  >
-                    <Share2 size={14} />
-                  </button>
-
-                  {onShowQr && (
-                    <button
-                      type="button"
-                      className="p-1.5 rounded-lg bg-accent-cyan/20 hover:bg-accent-cyan/30 text-accent-cyan border border-accent-cyan/30 cursor-pointer transition-colors active:scale-95"
-                      onClick={(e) => rippleTap(e, onShowQr)}
-                      title="Show QR code"
-                    >
-                      <QrCode size={14} />
-                    </button>
-                  )}
-
-                  {onHostRoom && (
-                    <button
-                      type="button"
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-text-muted hover:text-text-primary border border-border cursor-pointer transition-colors active:scale-95"
-                      onClick={(e) => rippleTap(e, onHostRoom)}
-                      title="Generate new room code"
-                    >
-                      <RefreshCw size={13} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between gap-2 py-1">
-                <span className="text-[0.78rem] text-text-muted">
-                  No active room code generated yet.
-                </span>
-                {onHostRoom && (
-                  <button
-                    type="button"
-                    className="py-1.5 px-3 rounded-lg bg-accent-purple text-[#06222c] font-heading text-[0.78rem] font-bold flex items-center gap-1 border-0 cursor-pointer transition-transform active:scale-95"
-                    onClick={(e) => rippleTap(e, onHostRoom)}
-                  >
-                    <Zap size={13} /> Generate Code
-                  </button>
-                )}
-              </div>
+          <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between gap-2 animate-[fadeIn_0.15s_ease]">
+            <span className="text-[0.78rem] text-text-muted">
+              {displayRoomCode ? 'Change room code?' : 'No active room code generated yet.'}
+            </span>
+            {onHostRoom && (
+              <button
+                type="button"
+                className="py-1.5 px-3 rounded-lg bg-accent-purple text-[#06222c] font-heading text-[0.78rem] font-bold flex items-center gap-1 border-0 cursor-pointer transition-transform active:scale-95"
+                onClick={(e) => rippleTap(e, onHostRoom)}
+              >
+                <Zap size={13} /> {displayRoomCode ? 'New Code' : 'Generate Code'}
+              </button>
             )}
           </div>
         )}
@@ -252,41 +237,49 @@ export function ConnectPanel({
           <div className="flex items-center gap-2 pt-1">
             <button
               type="button"
-              className="flex-1 py-2 px-3 rounded-xl bg-accent-purple text-[#06222c] font-heading text-[0.82rem] font-bold flex items-center justify-center gap-2 border-0 cursor-pointer shadow-[0_2px_12px_rgba(125,211,255,0.35)] transition-transform active:scale-[0.98]"
+              className="relative flex-1 py-2 px-3 rounded-xl bg-accent-purple text-[#06222c] font-heading text-[0.82rem] font-bold flex items-center justify-center gap-2 border-0 cursor-pointer shadow-[0_2px_12px_rgba(125,211,255,0.35)] transition-transform active:scale-[0.98]"
               onClick={(e) => rippleTap(e, onOpenChat)}
             >
-              <MessageCircle size={16} /> Open Chat
+              <div className="relative flex items-center justify-center">
+                <MessageCircle size={16} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-2 -right-2.5 min-w-[17px] h-[17px] px-1 rounded-full bg-accent-pink text-white text-[0.6rem] font-extrabold flex items-center justify-center border-2 border-bg-primary shadow-sm animate-pulse">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </div>
+              Open Chat
             </button>
           </div>
         </div>
       )}
 
       {/* QUICK CONNECT TO ROOM CODE */}
-      <div className="bg-bg-secondary/60 border border-border rounded-2xl p-3.5 flex flex-col gap-2">
-        <span className="text-[0.78rem] font-semibold text-text-secondary uppercase tracking-wider">
-          Quick Connect to Room
+      <div className="bg-bg-secondary/60 border border-border/80 rounded-2xl p-4 flex flex-col gap-2.5 shadow-sm">
+        <span className="text-[0.78rem] font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-1.5">
+          <Key size={13} className="text-accent-purple" /> Quick Connect to Room
         </span>
         <div className="flex items-center gap-2">
           <input
             type="text"
-            placeholder="Enter Room Code (e.g. 9X2K7A)"
+            placeholder="Enter room code..."
             value={customRoom}
             onChange={(e) => setCustomRoom(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && handleCustomConnect()}
             maxLength={10}
-            className="flex-1 bg-white/5 border border-border rounded-xl px-3 py-2 text-[0.88rem] font-mono font-semibold text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-purple uppercase"
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[0.85rem] font-mono font-semibold text-text-primary placeholder:text-text-muted/70 placeholder:normal-case focus:outline-none focus:border-accent-purple uppercase tracking-wider min-w-0"
           />
           <button
             type="button"
             disabled={!customRoom.trim()}
-            className={`py-2 px-3.5 rounded-xl font-heading text-[0.82rem] font-bold flex items-center gap-1.5 border-0 transition-all ${
+            className={`py-2 px-3.5 rounded-xl font-heading text-[0.82rem] font-bold flex items-center gap-1.5 border-0 transition-all flex-shrink-0 ${
               customRoom.trim()
-                ? 'bg-accent-cyan text-[#06222c] cursor-pointer shadow-[0_2px_10px_rgba(45,212,191,0.3)]'
-                : 'bg-white/5 text-text-muted cursor-not-allowed opacity-50'
+                ? 'bg-gradient-to-r from-accent-cyan to-accent-purple text-[#06222c] cursor-pointer shadow-[0_2px_12px_rgba(45,212,191,0.35)] active:scale-95'
+                : 'bg-white/5 text-text-muted border border-white/10 opacity-70 cursor-not-allowed'
             }`}
             onClick={(e) => rippleTap(e, handleCustomConnect)}
           >
-            <span>Start Chat</span> <ArrowRight size={14} />
+            <span className="whitespace-nowrap">Join Chat</span> <ArrowRight size={14} />
           </button>
         </div>
       </div>
@@ -372,11 +365,11 @@ export function ConnectPanel({
         </div>
       )}
 
-      {/* RECENT CONNECTED DEVICESS & CHATS LIST */}
-      <div className="flex-1 flex flex-col gap-2">
+      {/* RECENT CONNECTED DEVICES & CHATS LIST */}
+      <div className="flex-1 flex flex-col gap-2.5">
         <div className="flex items-center justify-between">
-          <span className="text-[0.78rem] font-semibold text-text-secondary uppercase tracking-wider">
-            Recent Connected Devices ({recentList.length})
+          <span className="text-[0.78rem] font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-1.5">
+            <Smartphone size={13} className="text-accent-cyan" /> Recent Connected Devices ({recentList.length})
           </span>
           {recentList.length > 0 && (
             <button
@@ -390,10 +383,12 @@ export function ConnectPanel({
         </div>
 
         {recentList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 text-center py-8 text-text-muted bg-bg-secondary/40 border border-border/50 rounded-2xl px-4">
-            <Smartphone size={28} className="opacity-40" />
-            <p className="text-[0.82rem]">
-              No recent connected devices yet. When you connect with someone via QR code, room code, or nearby link, their mobile device name will appear here for instant 1-tap re-chatting!
+          <div className="flex flex-col items-center justify-center gap-2 text-center py-7 text-text-muted bg-bg-secondary/40 border border-white/[0.08] backdrop-blur-xl rounded-2xl px-5 shadow-inner">
+            <div className="w-11 h-11 rounded-2xl bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
+              <Smartphone size={22} className="opacity-80" />
+            </div>
+            <p className="text-[0.82rem] leading-relaxed max-w-[280px]">
+              No recent device connected yet. To connect to devices, use the room code.
             </p>
           </div>
         ) : (

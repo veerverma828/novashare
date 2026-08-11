@@ -1,14 +1,10 @@
 import { useState } from 'react';
-import { Sliders, ShieldCheck, Trash2, Smartphone, Zap, RefreshCw, Volume2, HardDrive, Info, ChevronDown, Download } from 'lucide-react';
-import { RATE_PRESETS } from '../transferUtils';
+import { ShieldCheck, Trash2, RefreshCw, Volume2, HardDrive, Info, Download } from 'lucide-react';
 import { clearHistory, getHistory } from '../history';
 import { rippleTap } from '../uiHelpers';
 import { triggerHaptic } from '../native';
 
 export function SettingsPanel({
-  formatBytes,
-  maxRateKBps,
-  onSelectMaxRate,
   appUpdate,
   onCheckUpdate,
   onStartUpdate,
@@ -38,37 +34,6 @@ export function SettingsPanel({
 
   return (
     <div className="flex-1 flex flex-col gap-5 pb-2 animate-[fadeIn_0.2s_ease-out]">
-      {/* SECTION 1: TRANSFER & SPEED LIMITS */}
-      <div className="bg-[rgba(30,41,59,0.35)] border border-white/[0.08] rounded-2xl p-4 flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-accent-cyan font-heading font-semibold text-[0.92rem]">
-          <Sliders size={18} />
-          <span>Transfer Bandwidth Limit</span>
-        </div>
-        <p className="text-[0.78rem] text-text-muted m-0">
-          Cap outgoing P2P bandwidth to conserve mobile data or network resources.
-        </p>
-
-        <div className="relative w-full mt-1">
-          <select
-            value={maxRateKBps}
-            onChange={(e) => {
-              const val = Number(e.target.value);
-              onSelectMaxRate(val);
-              triggerHaptic();
-            }}
-            className="w-full bg-[rgba(8,12,20,0.6)] border border-white/15 rounded-xl py-3 px-4 text-[0.88rem] font-heading font-medium text-text-primary outline-none appearance-none cursor-pointer transition-all duration-200 focus:border-accent-purple focus:shadow-[0_0_12px_rgba(125,211,255,0.15)] pr-10"
-          >
-            {RATE_PRESETS.map((preset) => (
-              <option key={preset.label} value={preset.kbps} className="bg-[#0f172a] text-text-primary">
-                {preset.label}
-              </option>
-            ))}
-          </select>
-          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-accent-cyan pointer-events-none flex items-center">
-            <ChevronDown size={18} />
-          </div>
-        </div>
-      </div>
 
       {/* SECTION 2: APP PREFERENCES */}
       <div className="bg-[rgba(30,41,59,0.35)] border border-white/[0.08] rounded-2xl p-4 flex flex-col gap-3">
