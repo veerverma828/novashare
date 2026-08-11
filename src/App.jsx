@@ -41,6 +41,7 @@ import {
   Paperclip,
   Send,
   Home,
+  Radio,
   Settings
 } from 'lucide-react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
@@ -116,6 +117,8 @@ import { AppsPanel } from './components/AppsPanel';
 import { HistoryPanel } from './components/HistoryPanel';
 import { TransferRing } from './components/TransferRing';
 import { SettingsPanel } from './components/SettingsPanel';
+import { ConnectPanel } from './components/ConnectPanel';
+import { recordConnection } from './recentConnections';
 
 // Marks a queued File as a text snippet (feature: send text/clipboard
 // content through the same P2P pipeline as real files) rather than a user
@@ -155,7 +158,7 @@ const CLOUD_OPEN_TIMEOUT_MS = 8000;
 function App() {
   // Navigation & Mode States
   const [mode, setMode] = useState('home'); // 'home' | 'p2p-send' | 'p2p-receive'
-  const [mainNavTab, setMainNavTab] = useState('home'); // 'home' | 'settings'
+  const [mainNavTab, setMainNavTab] = useState('home'); // 'home' | 'connect' | 'settings'
   const [homeTab, setHomeTab] = useState('home'); // 'home' | 'apps'
   const homeTabSwipeRef = useRef({ x: 0, y: 0, active: false });
 
@@ -606,7 +609,20 @@ function App() {
     }
   }, []);
   useEffect(() => { homeTabRef.current = homeTab; }, [homeTab]);
-  useEffect(() => { mainNavTabRef.current = mainNavTab; }, [mainNavTab]);
+  useEffect(() => {
+    mainNavTabRef.current = mainNavTab;
+    if (mainNavTab === 'connect') {
+      if (!roomCode && mode === 'home') {
+        handleHostRoomCode();
+      }
+    } else {
+      if (connsRef.current.length === 0 && mode === 'home' && roomCode) {
+        cleanup();
+        setRoomCode('');
+        setTransferState('idle');
+      }
+    }
+  }, [mainNavTab]);
   useEffect(() => { showQrZoomRef.current = showQrZoom; }, [showQrZoom]);
   useEffect(() => { showScannerRef.current = showScanner; }, [showScanner]);
   useEffect(() => { chatPreviewItemRef.current = chatPreviewItem; }, [chatPreviewItem]);
@@ -1327,6 +1343,7 @@ function App() {
     connsRef.current = [...connsRef.current, peerState];
     setConnectedCount(connsRef.current.length);
     setTransferState('transferring');
+    recordConnection({ deviceName: `Receiver (${roomCode})`, roomCode: roomCode, direction: 'sent' });
     showToast(
       connsRef.current.length > 1
         ? `Receiver connected! (${connsRef.current.length} total)`
@@ -1817,6 +1834,7 @@ function App() {
 
     cleanup();
     setTargetPeerId(code);
+    recordConnection({ deviceName: `Sender (${code})`, roomCode: code, direction: 'received' });
     reconnectAttemptRef.current = 0;
     currentFileIndexRef.current = 0;
 
@@ -2062,15 +2080,28 @@ function App() {
       triggerSuccessHaptic();
       showToast('Transfer completed!', 'success');
       clearCheckpoint();
-      addHistoryEntry({
-        direction: 'received',
-        kind: receivedFilesRef.current.some((f) => f.isText) ? 'text' : 'file',
-        files: receivedFilesRef.current.map((f) => ({ name: f.name, size: f.size, verified: f.verified, skipped: f.skipped })),
-        peerLabel: targetPeerId,
-        roomCode: targetPeerId,
-        status: receivedFilesRef.current.some((f) => f.failed) ? 'partial' : 'complete'
-      });
-      setHistoryVersion((v) => v + 1);
+
+      const finalizeHistory = () => {
+        const filesToRecord = receivedFilesRef.current.length > 0
+          ? receivedFilesRef.current.map((f) => ({ name: f.name, size: f.size, verified: f.verified, skipped: f.skipped }))
+          : (incomingFileRef.current ? [{ name: incomingFileRef.current.name, size: incomingFileRef.current.size }] : []);
+
+        addHistoryEntry({
+          direction: 'received',
+          kind: (receivedFilesRef.current.length > 0 ? receivedFilesRef.current : [incomingFileRef.current]).some((f) => f?.isText) ? 'text' : 'file',
+          files: filesToRecord,
+          peerLabel: targetPeerId,
+          roomCode: targetPeerId,
+          status: receivedFilesRef.current.some((f) => f.failed) ? 'partial' : 'complete'
+        });
+        setHistoryVersion((v) => v + 1);
+      };
+
+      if (Capacitor.isNativePlatform() && writeChainRef.current) {
+        writeChainRef.current.then(finalizeHistory).catch(finalizeHistory);
+      } else {
+        finalizeHistory();
+      }
     }
   };
 
@@ -2316,6 +2347,79 @@ function App() {
       showToast(message, 'success');
     }).catch(() => {
       showToast('Failed to copy.', 'error');
+    });
+  };
+
+  const shareRoomCode = async (code) => {
+    if (!code) return;
+    triggerHaptic();
+    const shareText = `Connect to my NovaShare room using code: ${code}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'NovaShare Room Code',
+          text: shareText
+        });
+        showToast('Room code shared!', 'success');
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          copyToClipboard(code, 'Room code copied to clipboard!');
+        }
+      }
+    } else {
+      copyToClipboard(code, 'Room code copied to clipboard!');
+    }
+  };
+
+  const handleHostRoomCode = (customCode = null) => {
+    cleanup();
+    const code = customCode || generateRoomCode();
+    setRoomCode(code);
+    setTransferState('preparing');
+    senderTransportRef.current = 'cloud';
+    setIsPaused(false);
+    isPausedRef.current = false;
+    sendQueueRef.current = selectedFiles || [];
+    sendQueueIndexRef.current = 0;
+    totalQueueBytesRef.current = (selectedFiles || []).reduce((sum, f) => sum + f.size, 0);
+    setSendFileCount((selectedFiles || []).length);
+    setSendFileIndex(0);
+    setConnectedCount(0);
+    transferStartTime.current = Date.now();
+
+    const peer = new Peer(code, {
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
+      debug: import.meta.env.DEV ? 2 : 0,
+      config: ICE_SERVERS
+    });
+
+    peerRef.current = peer;
+
+    clearCloudOpenWatchdog();
+    cloudOpenWatchdogRef.current = setTimeout(() => {
+      cloudOpenWatchdogRef.current = null;
+      degradeToOfflineSend('Could not reach the signaling server.');
+    }, CLOUD_OPEN_TIMEOUT_MS);
+
+    peer.on('open', () => {
+      clearCloudOpenWatchdog();
+      setTransferState('waiting');
+      showToast(`Your Room Code (${code}) is active!`, 'success');
+    });
+
+    peer.on('connection', (conn) => handleIncomingReceiverConnection(conn, code));
+
+    peer.on('error', (err) => {
+      clearCloudOpenWatchdog();
+      if (err.type === 'unavailable-id') {
+        handleHostRoomCode();
+      } else {
+        setErrorMsg(`Room setup error: ${err.message}`);
+        setTransferState('error');
+      }
     });
   };
 
@@ -2766,20 +2870,71 @@ function App() {
 
       {/* TOAST POPUP */}
       {toast && (
-        <div className="fixed bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1.5rem))] right-8 max-[640px]:left-4 max-[640px]:right-4 bg-[rgba(15,23,42,0.9)] backdrop-blur-md border border-accent-purple rounded-[14px] px-6 py-4 flex items-center gap-3 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(125,211,255,0.2)] z-[9999] animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
-          {toast.type === 'success' && <ShieldCheck size={20} className="text-accent-green" />}
-          {toast.type === 'error' && <AlertCircle size={20} className="text-accent-pink" />}
-          {toast.type === 'info' && <Info size={20} className="text-accent-cyan" />}
-          <span>{toast.message}</span>
+        <div className="fixed top-[max(0.75rem,calc(env(safe-area-inset-top)+0.5rem))] left-3 right-3 max-w-[490px] mx-auto bg-[rgba(15,23,42,0.94)] backdrop-blur-xl border border-accent-purple/50 rounded-xl px-3 py-2 flex items-center justify-between gap-2.5 text-text-primary shadow-[0_8px_30px_rgba(0,0,0,0.6),0_0_15px_rgba(168,85,247,0.2)] z-[99999] animate-[slideDown_0.25s_cubic-bezier(0.16,1,0.3,1)]">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {toast.type === 'success' && <ShieldCheck size={16} className="text-accent-green flex-shrink-0" />}
+            {toast.type === 'error' && <AlertCircle size={16} className="text-accent-pink flex-shrink-0" />}
+            {toast.type === 'info' && <Info size={16} className="text-accent-cyan flex-shrink-0" />}
+            <span className="text-[0.82rem] font-medium truncate leading-tight">{toast.message}</span>
+          </div>
+          <button
+            type="button"
+            className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors flex-shrink-0 flex items-center justify-center cursor-pointer border-0 bg-transparent"
+            onClick={() => setToast(null)}
+            title="Dismiss"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
       {/* MAIN LAYOUT CONTAINER */}
       <main className="flex-1 min-h-0 flex flex-col items-center justify-start py-2 pb-14">
         <div
-          className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 min-h-0 flex flex-col justify-start p-6 pb-3 max-[640px]:px-4 max-[640px]:pt-5 max-[640px]:pb-3 max-[640px]:rounded-2xl max-[640px]:m-0 max-[380px]:px-3 max-[380px]:pt-4 max-[380px]:pb-2 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)] overflow-y-auto touch-pan-y`}
+          className={`w-full ${Capacitor.isNativePlatform() ? 'max-w-[490px]' : 'max-w-[490px] md:max-w-[640px] lg:max-w-[760px]'} flex-1 min-h-0 flex flex-col justify-start p-4 max-[640px]:p-3.5 max-[380px]:p-3 md:p-8 lg:p-10 bg-[rgba(15,23,42,0.45)] backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.07),0_0_40px_rgba(125,211,255,0.04)] transition-[border-color,box-shadow,max-width] duration-300 hover:border-[rgba(125,211,255,0.25)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.12),0_0_50px_rgba(125,211,255,0.08)] overflow-y-auto touch-pan-y`}
         >
-          {mainNavTab === 'settings' ? (
+          {mainNavTab === 'connect' ? (
+            <ConnectPanel
+              mode={mode}
+              roomCode={roomCode}
+              targetPeerId={targetPeerId}
+              chatPeerLabel={chatPeerLabel}
+              connectedCount={connectedCount}
+              nearbyPeers={nearbyPeers}
+              wifiDirectPeers={wifiDirectPeers}
+              onOpenChat={() => setShowChat(true)}
+              onReconnectRoom={(code, autoChat = true) => {
+                cleanup();
+                setTargetPeerId(code);
+                setMode('p2p-receive');
+                setMainNavTab('home');
+                setTransferState('preparing');
+                startP2PReceive(code, 'cloud').then(() => {
+                  if (autoChat) setShowChat(true);
+                }).catch(() => {});
+              }}
+              onConnectPeer={(peer) => {
+                handleConnectPeer(peer);
+                setMainNavTab('home');
+              }}
+              onHostRoom={() => handleHostRoomCode()}
+              onCopyRoomCode={(code) => copyToClipboard(code, 'Room code copied to clipboard!')}
+              onShareRoomCode={(code) => shareRoomCode(code)}
+              onShowQr={() => {
+                if (!roomCode) {
+                  handleHostRoomCode();
+                }
+                setShowQrZoom(true);
+              }}
+              formatWhen={(ts) => {
+                const diff = Date.now() - ts;
+                if (diff < 60000) return 'just now';
+                if (diff < 3600000) return `${Math.round(diff / 60000)}m ago`;
+                if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
+                return new Date(ts).toLocaleDateString();
+              }}
+            />
+          ) : mainNavTab === 'settings' ? (
             <div className="flex-1 flex flex-col w-full pb-2">
               <div className="flex items-center justify-between mb-4 flex-shrink-0">
                 <h2 className="text-[1.5rem] font-bold glow-text flex items-center gap-2 m-0 font-heading">
@@ -2804,35 +2959,35 @@ function App() {
           <>
             {mode === 'home' && (
               <div className="flex-1 min-h-0 flex flex-col w-full">
-              <div className="text-center mb-6 max-[640px]:mb-4 flex-shrink-0">
-                <h2 className="text-[1.85rem] max-[640px]:text-2xl max-[380px]:text-[1.3rem] leading-[1.2] mb-2 font-bold glow-text">Secure P2P File Sharing</h2>
-                <p className="text-text-secondary text-[0.925rem] max-[380px]:text-[0.85rem]">Transfer files directly browser-to-browser. Encrypted, private, with zero size limits.</p>
+              <div className="text-center mb-4 max-[640px]:mb-3 flex-shrink-0">
+                <h2 className="text-[1.5rem] max-[640px]:text-[1.35rem] max-[380px]:text-[1.2rem] leading-[1.2] mb-1 font-bold glow-text">Secure P2P File Sharing</h2>
+                <p className="text-text-secondary text-[0.82rem] max-[380px]:text-[0.75rem]">Transfer files directly browser-to-browser. Encrypted & private.</p>
               </div>
 
               {/* TOP TAB SWITCHER: Home / Apps (hidden once a file is queued) */}
               {selectedFiles.length === 0 && (
                 <div
-                  className="flex flex-shrink-0 gap-[0.4rem] bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-[0.3rem] mb-6 max-[640px]:mb-4"
+                  className="flex flex-shrink-0 gap-[0.4rem] bg-[rgba(8,12,20,0.5)] border border-border rounded-xl p-[0.25rem] mb-4 max-[640px]:mb-3"
                   onPointerDown={onCardSwipeStart}
                   onPointerUp={onCardSwipeEnd}
                 >
                   <button
                     type="button"
-                    className={`flex-1 border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'home' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 border-0 font-heading text-[0.82rem] font-semibold py-[0.45rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'home' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
                     onClick={() => setHomeTab('home')}
                   >
                     Home
                   </button>
                   <button
                     type="button"
-                    className={`flex-1 border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'apps' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 border-0 font-heading text-[0.82rem] font-semibold py-[0.45rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 ${homeTab === 'apps' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
                     onClick={() => setHomeTab('apps')}
                   >
                     Apps
                   </button>
                   <button
                     type="button"
-                    className={`flex-1 border-0 font-heading text-[0.85rem] font-semibold py-[0.55rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 flex items-center justify-center gap-1 ${homeTab === 'history' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 border-0 font-heading text-[0.82rem] font-semibold py-[0.45rem] px-3 rounded-[9px] cursor-pointer transition-all duration-200 flex items-center justify-center gap-1 ${homeTab === 'history' ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_10px_rgba(125,211,255,0.3)]' : 'bg-transparent text-text-muted hover:text-text-primary'}`}
                     onClick={() => { setHomeTab('history'); setHistoryVersion((v) => v + 1); setHistoryOpenedAt(Date.now()); }}
                   >
                     <HistoryIcon size={13} /> History
@@ -2870,7 +3025,7 @@ function App() {
               {/* FILE DROP ZONE (IF NO FILES SELECTED) */}
               {selectedFiles.length === 0 ? (
                 <div
-                  className={`group flex-shrink-0 border-2 border-dashed rounded-[18px] px-6 py-10 max-[640px]:py-6 max-[640px]:px-4 max-[380px]:py-6 max-[380px]:px-3 text-center cursor-pointer bg-[rgba(15,23,42,0.25)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden ${dragActive ? 'border-accent-cyan bg-[rgba(125,211,255,0.04)] shadow-[0_0_25px_rgba(125,211,255,0.12)]' : 'border-[rgba(125,211,255,0.25)] hover:border-accent-cyan hover:bg-[rgba(125,211,255,0.04)] hover:shadow-[0_0_25px_rgba(125,211,255,0.12)]'}`}
+                  className={`group flex-shrink-0 border-2 border-dashed rounded-[18px] px-4 py-6 max-[640px]:py-4 max-[640px]:px-3 text-center cursor-pointer bg-[rgba(15,23,42,0.25)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] relative overflow-hidden ${dragActive ? 'border-accent-cyan bg-[rgba(125,211,255,0.04)] shadow-[0_0_25px_rgba(125,211,255,0.12)]' : 'border-[rgba(125,211,255,0.25)] hover:border-accent-cyan hover:bg-[rgba(125,211,255,0.04)] hover:shadow-[0_0_25px_rgba(125,211,255,0.12)]'}`}
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
                   onDragLeave={handleDrag}
@@ -2884,15 +3039,15 @@ function App() {
                     onChange={handleFileSelect}
                     multiple
                   />
-                  <div className="flex flex-col items-center gap-4">
-                    <div className={`w-14 h-14 rounded-[14px] flex items-center justify-center transition-all duration-300 ${dragActive ? 'bg-[rgba(125,211,255,0.15)] text-accent-cyan -translate-y-1' : 'bg-[rgba(125,211,255,0.08)] text-accent-purple group-hover:bg-[rgba(125,211,255,0.15)] group-hover:text-accent-cyan group-hover:-translate-y-1'}`}>
-                      <UploadCloud size={32} />
+                  <div className="flex flex-col items-center gap-2.5">
+                    <div className={`w-11 h-11 rounded-[12px] flex items-center justify-center transition-all duration-300 ${dragActive ? 'bg-[rgba(125,211,255,0.15)] text-accent-cyan -translate-y-1' : 'bg-[rgba(125,211,255,0.08)] text-accent-purple group-hover:bg-[rgba(125,211,255,0.15)] group-hover:text-accent-cyan group-hover:-translate-y-1'}`}>
+                      <UploadCloud size={24} />
                     </div>
                     <div>
-                      <h3 className="text-[1.15rem] max-[380px]:text-base font-medium text-text-primary">Drag & drop your files here</h3>
-                      <p className="text-[0.85rem] text-text-muted">or click to browse files from your device</p>
+                      <h3 className="text-[1.05rem] max-[380px]:text-[0.95rem] font-medium text-text-primary">Drag & drop your files here</h3>
+                      <p className="text-[0.78rem] text-text-muted">or click to browse files from your device</p>
                     </div>
-                    <span className="bg-bg-tertiary border border-[rgba(125,211,255,0.3)] text-accent-purple px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase max-[640px]:px-2 max-[640px]:py-[0.15rem] max-[640px]:text-[0.65rem]">
+                    <span className="bg-bg-tertiary border border-[rgba(125,211,255,0.3)] text-accent-purple px-2.5 py-0.5 rounded-full text-[0.68rem] font-semibold tracking-wide uppercase">
                       No File Size Limits
                     </span>
                   </div>
@@ -2900,17 +3055,17 @@ function App() {
               ) : null}
 
               {selectedFiles.length === 0 && (
-                <div className="flex items-center justify-center gap-4 mt-3 flex-shrink-0">
+                <div className="flex items-center justify-center gap-3 mt-2.5 flex-shrink-0">
                   <button
                     type="button"
-                    className="relative overflow-hidden flex items-center gap-1.5 bg-[rgba(30,41,59,0.4)] border border-border text-text-secondary text-[0.8rem] cursor-pointer py-[0.4rem] px-3 rounded-full transition-all duration-200 hover:bg-[rgba(125,211,255,0.1)] hover:border-[rgba(125,211,255,0.3)] hover:text-accent-cyan"
+                    className="relative overflow-hidden flex items-center gap-1.5 bg-[rgba(30,41,59,0.4)] border border-border text-text-secondary text-[0.78rem] cursor-pointer py-[0.35rem] px-3 rounded-full transition-all duration-200 hover:bg-[rgba(125,211,255,0.1)] hover:border-[rgba(125,211,255,0.3)] hover:text-accent-cyan"
                     onClick={(e) => rippleTap(e, triggerFolderInput)}
                   >
-                    <FolderUp size={14} /> Send a folder
+                    <FolderUp size={13} /> Send a folder
                   </button>
                   <button
                     type="button"
-                    className="relative overflow-hidden flex items-center gap-1.5 bg-[rgba(30,41,59,0.4)] border border-border text-text-secondary text-[0.8rem] cursor-pointer py-[0.4rem] px-3 rounded-full transition-all duration-200 hover:bg-[rgba(125,211,255,0.1)] hover:border-[rgba(125,211,255,0.3)] hover:text-accent-cyan"
+                    className="relative overflow-hidden flex items-center gap-1.5 bg-[rgba(30,41,59,0.4)] border border-border text-text-secondary text-[0.78rem] cursor-pointer py-[0.35rem] px-3 rounded-full transition-all duration-200 hover:bg-[rgba(125,211,255,0.1)] hover:border-[rgba(125,211,255,0.3)] hover:text-accent-cyan"
                     onClick={(e) => rippleTap(e, () => setShowTextModal(true))}
                   >
                     <Type size={14} /> Send text
@@ -3836,10 +3991,10 @@ function App() {
       </main>
 
       {/* BOTTOM NAVIGATION BAR */}
-      <nav className="fixed bottom-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-2rem)] max-w-[340px] bg-[rgba(15,23,42,0.88)] backdrop-blur-2xl border border-white/[0.12] rounded-full p-1.5 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.12)]">
+      <nav className="fixed bottom-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-2rem)] max-w-[390px] bg-[rgba(15,23,42,0.88)] backdrop-blur-2xl border border-white/[0.12] rounded-full p-1.5 flex items-center justify-between shadow-[0_10px_30px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.12)]">
         <button
           type="button"
-          className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
             mainNavTab === 'home'
               ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
               : 'bg-transparent text-text-muted hover:text-text-primary'
@@ -3857,7 +4012,28 @@ function App() {
 
         <button
           type="button"
-          className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer relative ${
+            mainNavTab === 'connect'
+              ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
+              : 'bg-transparent text-text-muted hover:text-text-primary'
+          }`}
+          onClick={(e) => {
+            rippleTap(e, () => {
+              setMainNavTab('connect');
+              triggerHaptic();
+            });
+          }}
+        >
+          <Radio size={18} />
+          <span>Connect</span>
+          {chatUnreadCount > 0 && (
+            <span className="w-2.5 h-2.5 rounded-full bg-accent-pink absolute top-1.5 right-3 border-2 border-bg-primary" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-full font-heading text-[0.85rem] font-semibold transition-all duration-200 border-0 cursor-pointer ${
             mainNavTab === 'settings'
               ? 'bg-accent-purple text-[#06222c] shadow-[0_2px_12px_rgba(125,211,255,0.35)]'
               : 'bg-transparent text-text-muted hover:text-text-primary'
@@ -3915,7 +4091,7 @@ function App() {
       {chatAvailable && !showChat && createPortal(
         <button
           type="button"
-          className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-[1900] w-14 h-14 rounded-full bg-accent-purple text-[#06222c] shadow-[0_10px_24px_-6px_rgba(125,211,255,0.55)] flex items-center justify-center cursor-pointer border-0"
+          className="fixed bottom-[max(5.25rem,calc(env(safe-area-inset-bottom)+4.75rem))] right-5 z-[1900] w-14 h-14 rounded-full bg-accent-purple text-[#06222c] shadow-[0_10px_24px_-6px_rgba(125,211,255,0.55)] flex items-center justify-center cursor-pointer border-0"
           onClick={(e) => rippleTap(e, () => setShowChat(true))}
           title="Open chat"
         >

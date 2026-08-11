@@ -15,9 +15,10 @@ const Hotspot = registerPlugin('Hotspot');
 const LocalSignaling = registerPlugin('LocalSignaling');
 const AppUpdate = registerPlugin('AppUpdate');
 
-// Fires a light haptic tick on real devices; no-op on web.
+// Fires a light haptic tick on real devices; no-op on web or when muted in settings.
 export function triggerHaptic(style = ImpactStyle.Light) {
   if (!Capacitor.isNativePlatform()) return;
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('novashare_haptics') === 'false') return;
   Haptics.impact({ style }).catch(() => {});
 }
 
@@ -25,6 +26,7 @@ export function triggerHaptic(style = ImpactStyle.Light) {
 // completion, distinct from the light tap feedback everywhere else.
 export function triggerSuccessHaptic() {
   if (!Capacitor.isNativePlatform()) return;
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('novashare_haptics') === 'false') return;
   Haptics.notification({ type: NotificationType.Success }).catch(() => {});
 }
 

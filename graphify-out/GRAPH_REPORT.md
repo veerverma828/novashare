@@ -1,16 +1,16 @@
 # Graph Report - novashare  (2026-08-10)
 
 ## Corpus Check
-- 82 files · ~104,813 words
+- 85 files · ~107,354 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 552 nodes · 1049 edges · 45 communities (40 shown, 5 thin omitted)
+- 560 nodes · 1081 edges · 45 communities (40 shown, 5 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 26 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f41f21d4`
+- Built from commit: `3fd4a1fa`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -25,7 +25,7 @@
 - gradlew
 - MainActivity
 - WifiDirectPlugin
-- LocalSignalingServerPlugin
+- JSObject
 - TransferForegroundService
 - dependencies
 - TransferNotificationPlugin
@@ -37,9 +37,9 @@
 - React + Vite
 - rules/graphify.md
 - workflows/graphify.md
-- NotifyDownloadPlugin
+- .folderPickerResult
 - CLAUDE.md
-- AppsPanel.jsx
+- rippleTap
 - localSocketTransport.js
 - AppUpdatePlugin
 - crashLog.js
@@ -50,16 +50,16 @@
 - App.auto-transport.test.jsx
 
 ## God Nodes (most connected - your core abstractions)
-1. `App()` - 73 edges
+1. `App()` - 74 edges
 2. `WifiDirectPlugin` - 32 edges
-3. `rippleTap()` - 16 edges
+3. `rippleTap()` - 18 edges
 4. `WifiDirect` - 15 edges
 5. `HotspotPlugin` - 14 edges
 6. `LocalSignalingServerPlugin` - 14 edges
 7. `NearbyDiscoveryPlugin` - 12 edges
 8. `LocalSignaling` - 12 edges
-9. `AppUpdatePlugin` - 9 edges
-10. `NotifyDownloadPlugin` - 9 edges
+9. `triggerHaptic()` - 11 edges
+10. `AppUpdatePlugin` - 9 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `App()` --references--> `@capacitor/app`  [EXTRACTED]
@@ -111,12 +111,12 @@ Cohesion: 0.29
 Nodes (5): Intent, MainActivity, BridgeActivity, Bundle, Uri
 
 ### Community 9 - "WifiDirectPlugin"
-Cohesion: 0.05
-Nodes (23): FolderPickerPlugin, JSArray, Plugin, PluginCall, IncomingSharePlugin, JSArray, Plugin, PluginCall (+15 more)
+Cohesion: 0.12
+Nodes (7): Plugin, PluginCall, WifiManager, WifiDirectPlugin, BroadcastReceiver, IntentFilter, WifiP2pManager
 
-### Community 10 - "LocalSignalingServerPlugin"
-Cohesion: 0.24
-Nodes (6): Plugin, PluginCall, LocalSignalingServerPlugin, ByteArray, ServerSocket, Socket
+### Community 10 - "JSObject"
+Cohesion: 0.07
+Nodes (20): IncomingSharePlugin, JSArray, Plugin, PluginCall, InstalledAppsPlugin, Plugin, PluginCall, Plugin (+12 more)
 
 ### Community 11 - "TransferForegroundService"
 Cohesion: 0.27
@@ -150,13 +150,13 @@ Nodes (3): computeSecurityCode(), formatDigest(), simpleHashBytes()
 Cohesion: 0.50
 Nodes (3): Expanding the ESLint configuration, React Compiler, React + Vite
 
-### Community 32 - "NotifyDownloadPlugin"
+### Community 32 - ".folderPickerResult"
 Cohesion: 0.27
-Nodes (4): Plugin, PluginCall, NotifyDownloadPlugin, sanitizeRelPath()
+Nodes (6): FolderPickerPlugin, JSArray, Plugin, PluginCall, androidx, DocumentFile
 
-### Community 34 - "AppsPanel.jsx"
-Cohesion: 0.09
-Nodes (28): { FakePeer }, AppIcon(), appIconCache, AppsPanel(), FolderQueueRow(), HighlightMatch(), HistoryPanel(), RoomCodeFlap() (+20 more)
+### Community 34 - "rippleTap"
+Cohesion: 0.08
+Nodes (33): { FakePeer }, AppIcon(), appIconCache, AppsPanel(), ConnectPanel(), FolderQueueRow(), HighlightMatch(), HistoryPanel() (+25 more)
 
 ### Community 35 - "localSocketTransport.js"
 Cohesion: 0.13
@@ -198,10 +198,10 @@ Nodes (5): { FakePeer }, { isOnlineMock, connectivityListeners }, makeFile(), { 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `App()` connect `App.jsx` to `AppsPanel.jsx`, `localSocketTransport.js`, `crashLog.js`, `clipboardSync.js`, `App.native-receive.test.jsx`, `dependencies`, `connectivity.js`, `App.auto-transport.test.jsx`, `App.receiver.test.jsx`, `computeSecurityCode`?**
-  _High betweenness centrality (0.152) - this node is a cross-community bridge._
+- **Why does `App()` connect `App.jsx` to `rippleTap`, `localSocketTransport.js`, `crashLog.js`, `clipboardSync.js`, `App.native-receive.test.jsx`, `dependencies`, `connectivity.js`, `App.auto-transport.test.jsx`, `App.receiver.test.jsx`, `computeSecurityCode`?**
+  _High betweenness centrality (0.153) - this node is a cross-community bridge._
 - **Why does `@capacitor/app` connect `dependencies` to `App.jsx`?**
-  _High betweenness centrality (0.131) - this node is a cross-community bridge._
+  _High betweenness centrality (0.132) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `App()` (e.g. with `sharedEntryToFile()` and `wifiDirectOpenLocationSettings()`) actually correct?**
   _`App()` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 22 inferred relationships involving `JSObject` (e.g. with `.checkForUpdate()` and `.handleOnActivityResult()`) actually correct?**

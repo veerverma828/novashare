@@ -12,7 +12,19 @@ function readAll() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((e) => e && typeof e === 'object')
+      .map((e) => {
+        const filesList = Array.isArray(e.files) ? e.files : [];
+        return {
+          ...e,
+          files: filesList.map((f, i) => ({
+            ...f,
+            name: f?.name || (e.kind === 'text' ? `Text snippet ${i + 1}` : `Shared item ${i + 1}`)
+          }))
+        };
+      });
   } catch {
     return [];
   }
@@ -33,10 +45,23 @@ export function getHistory() {
 // entry: { direction: 'sent'|'received', kind: 'file'|'text'|'apk', files: [{name,size}],
 //          peerLabel, roomCode, status: 'complete'|'failed'|'partial' }
 export function addHistoryEntry(entry) {
+  const rawFiles = Array.isArray(entry.files) ? entry.files : [];
+  const sanitizedFiles = rawFiles.map((f, i) => ({
+    name: f?.name || (entry.kind === 'text' ? `Text snippet ${i + 1}` : `Shared item ${i + 1}`),
+    size: f?.size || 0,
+    verified: f?.verified,
+    skipped: f?.skipped
+  }));
+
   const record = {
     id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     timestamp: Date.now(),
-    ...entry
+    direction: entry.direction || 'sent',
+    kind: entry.kind || 'file',
+    files: sanitizedFiles,
+    peerLabel: entry.peerLabel || '',
+    roomCode: entry.roomCode || '',
+    status: entry.status || 'complete'
   };
   const entries = readAll();
   entries.unshift(record);

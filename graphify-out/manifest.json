@@ -15,7 +15,7 @@
     "semantic_hash": ""
   },
   "android/app/capacitor.build.gradle": {
-    "mtime": 1786363311.7340982,
+    "mtime": 1786370834.104723,
     "ast_hash": "8d3cb669719224f0285d2ad022b7c9d1",
     "semantic_hash": ""
   },
@@ -35,7 +35,7 @@
     "semantic_hash": ""
   },
   "android/capacitor.settings.gradle": {
-    "mtime": 1786363311.7340982,
+    "mtime": 1786370834.104723,
     "ast_hash": "d1376014db940349c3194df388a5cf4f",
     "semantic_hash": ""
   },
@@ -75,8 +75,8 @@
     "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
   },
   "src/App.jsx": {
-    "mtime": 1786363626.1572948,
-    "ast_hash": "88130ee479f079217d18be1504c46970",
+    "mtime": 1786370737.8172357,
+    "ast_hash": "67f0f5ae3aa10d8e27406f2833b9646f",
     "semantic_hash": ""
   },
   "src/main.jsx": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "src/native.js": {
-    "mtime": 1786061039.49259,
-    "ast_hash": "ffd3187fd9a13dee68d434ea8c6c47a3",
+    "mtime": 1786365400.9805355,
+    "ast_hash": "31979be44953ec273eca043b4faa5358",
     "semantic_hash": ""
   },
   "vite.config.js": {
@@ -365,8 +365,8 @@
     "semantic_hash": ""
   },
   "src/history.js": {
-    "mtime": 1785751393.7972288,
-    "ast_hash": "f16db008e97cdb940a0b1dec4ae16f14",
+    "mtime": 1786364650.8310914,
+    "ast_hash": "b27f839179683a77bdd31236038dcdaa",
     "semantic_hash": ""
   },
   "src/security.js": {
@@ -450,13 +450,13 @@
     "semantic_hash": ""
   },
   "src/App.panels.test.jsx": {
-    "mtime": 1786355240.5027466,
-    "ast_hash": "c29c7f9ece908091193dd1cf72436e22",
+    "mtime": 1786369273.9942348,
+    "ast_hash": "228c1c80809573e71b56a78fb3ddabec",
     "semantic_hash": ""
   },
   "src/native.native.test.js": {
-    "mtime": 1785829135.250626,
-    "ast_hash": "a7471ea528932b4143e12e7148976d87",
+    "mtime": 1786365406.3736467,
+    "ast_hash": "0fe6586b9d4157a28348778908f668a0",
     "semantic_hash": ""
   },
   "src/native.web.test.js": {
@@ -605,13 +605,28 @@
     "semantic_hash": ""
   },
   "src/components/SwipeableHistoryRow.jsx": {
-    "mtime": 1786355218.40292,
-    "ast_hash": "27bc0257a1c8709afec4c44b11465be0",
+    "mtime": 1786364653.8761485,
+    "ast_hash": "9d68532609e7caaa46deb113b9a58d9c",
     "semantic_hash": ""
   },
   "src/components/SettingsPanel.jsx": {
     "mtime": 1786362997.566584,
     "ast_hash": "b064514987789c486acbee2cbbf167f8",
+    "semantic_hash": ""
+  },
+  "src/components/ConnectPanel.jsx": {
+    "mtime": 1786369809.311994,
+    "ast_hash": "ccc60051be40eac2f2ecb0a81fb8bd35",
+    "semantic_hash": ""
+  },
+  "src/recentConnections.js": {
+    "mtime": 1786365779.1349416,
+    "ast_hash": "02de4e7cc8c606d24ccfe087821b29d1",
+    "semantic_hash": ""
+  },
+  "src/recentConnections.test.js": {
+    "mtime": 1786365782.0029953,
+    "ast_hash": "0a3fffd064ee952ab54d16765777128f",
     "semantic_hash": ""
   }
 }

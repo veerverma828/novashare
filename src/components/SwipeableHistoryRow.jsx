@@ -39,10 +39,12 @@ export function SwipeableHistoryRow({ entry, formatBytes, formatWhen, onResend, 
   };
 
   const dragProgress = dragX < 0 ? Math.min(1, dragX / REMOVE_THRESHOLD) : 0;
-  const totalSize = entry.files.reduce((sum, f) => sum + (f.size || 0), 0);
-  const label = entry.files.length > 1
-    ? `${entry.files.length} ${entry.kind === 'text' ? 'text snippets' : 'files'}`
-    : (entry.files[0]?.name || 'Unknown');
+  const filesList = Array.isArray(entry.files) ? entry.files : [];
+  const totalSize = filesList.reduce((sum, f) => sum + (f?.size || 0), 0);
+  const label = filesList.length > 1
+    ? `${filesList.length} ${entry.kind === 'text' ? 'text snippets' : 'files'}`
+    : (filesList[0]?.name || (entry.kind === 'text' ? 'Text snippet' : 'Shared item'));
+  const roomInfo = entry.roomCode ? ` · room ${entry.roomCode}` : (entry.peerLabel ? ` · ${entry.peerLabel}` : '');
 
   return (
     <div className="relative overflow-hidden rounded-xl flex-shrink-0 select-none">
@@ -87,7 +89,7 @@ export function SwipeableHistoryRow({ entry, formatBytes, formatWhen, onResend, 
             {label}
           </span>
           <span className="text-[0.72rem] text-text-muted whitespace-nowrap overflow-hidden text-ellipsis">
-            {entry.direction === 'sent' ? 'Sent' : 'Received'} · {formatBytes(totalSize)} · {formatWhen(entry.timestamp)} · room {entry.roomCode}
+            {entry.direction === 'sent' ? 'Sent' : 'Received'} · {formatBytes(totalSize)} · {formatWhen(entry.timestamp)}{roomInfo}
           </span>
         </div>
 

@@ -63,6 +63,14 @@ describe('native.js — native path', () => {
     expect(Haptics.impact).toHaveBeenCalledWith({ style: 'HEAVY' });
   });
 
+  it('triggerHaptic() and triggerSuccessHaptic() respect novashare_haptics = false setting', () => {
+    localStorage.setItem('novashare_haptics', 'false');
+    native.triggerHaptic();
+    native.triggerSuccessHaptic();
+    expect(Haptics.impact).not.toHaveBeenCalled();
+    localStorage.removeItem('novashare_haptics');
+  });
+
   it('triggerHaptic() swallows Haptics.impact rejections', async () => {
     Haptics.impact.mockReturnValueOnce(Promise.reject(new Error('fail')));
     expect(() => native.triggerHaptic()).not.toThrow();

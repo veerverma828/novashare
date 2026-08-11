@@ -33,6 +33,7 @@ vi.mock('./history', () => ({
 
 import { AppsPanel } from './components/AppsPanel';
 import { HistoryPanel } from './components/HistoryPanel';
+import { ConnectPanel } from './components/ConnectPanel';
 import { listInstalledApps, getAppApkFile } from './native';
 import { getHistory, removeHistoryEntry } from './history';
 
@@ -234,5 +235,58 @@ describe('HistoryPanel', () => {
 
     expect(removeHistoryEntry).toHaveBeenCalledWith('entry-123');
     expect(screen.queryByText('discardable.txt')).not.toBeInTheDocument();
+  });
+});
+
+describe('ConnectPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders Your Room Code card when roomCode is provided', () => {
+    render(
+      <ConnectPanel
+        mode="p2p-send"
+        roomCode="9X2K7A"
+        targetPeerId=""
+        connectedCount={0}
+        onOpenChat={vi.fn()}
+        onReconnectRoom={vi.fn()}
+        onConnectPeer={vi.fn()}
+        onHostRoom={vi.fn()}
+        onCopyRoomCode={vi.fn()}
+        onShareRoomCode={vi.fn()}
+        onShowQr={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Your Room Code')).toBeInTheDocument();
+    expect(screen.getByText('Room Ready')).toBeInTheDocument();
+    expect(screen.getByText('Copy Code')).toBeInTheDocument();
+    expect(screen.getByText('Share Code')).toBeInTheDocument();
+    expect(screen.getByText('Show QR')).toBeInTheDocument();
+  });
+
+  it('calls onHostRoom when Generate & Host Room Code button is clicked when not hosted', async () => {
+    const onHostRoom = vi.fn();
+    render(
+      <ConnectPanel
+        mode="home"
+        roomCode=""
+        targetPeerId=""
+        connectedCount={0}
+        onOpenChat={vi.fn()}
+        onReconnectRoom={vi.fn()}
+        onConnectPeer={vi.fn()}
+        onHostRoom={onHostRoom}
+      />
+    );
+
+    expect(screen.getByText('Your Room Code')).toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: /Generate & Host Room Code/i });
+    const user = userEvent.setup();
+    await user.click(btn);
+
+    expect(onHostRoom).toHaveBeenCalledTimes(1);
   });
 });
