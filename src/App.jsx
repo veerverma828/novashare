@@ -42,6 +42,7 @@ import {
   ClipboardCopy,
   MessageCircle,
   Paperclip,
+  Reply,
   Send,
   Home,
   Radio,
@@ -88,7 +89,8 @@ import {
   startFlexibleAppUpdate,
   completeFlexibleAppUpdate,
   onAppUpdateStateChanged,
-  getBatteryInfo
+  getBatteryInfo,
+  onRichContentImage
 } from './native';
 import { addHistoryEntry, clearHistory } from './history';
 import { computeSecurityCode } from './security';
@@ -121,6 +123,8 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { TransferRing } from './components/TransferRing';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ConnectPanel } from './components/ConnectPanel';
+import { ChatReactionPicker } from './components/ChatReactionPicker';
+import { ChatMessageItem } from './components/ChatMessageItem';
 import { recordConnection } from './recentConnections';
 
 // Marks a queued File as a text snippet (feature: send text/clipboard
@@ -342,7 +346,11 @@ function App() {
   // the main batch transfer above — reusing batch-start would reset
   // receivedFilesRef/completedFiles and wipe whatever the main screen is
   // already showing, which a "send one more thing" chat message shouldn't do.
-  const [chatMessages, setChatMessages] = useState([]); // { id, direction, kind: 'file'|'app', name, size, status, progress, ts, url? }
+  const [chatMessages, setChatMessages] = useState([]); // { id, direction, kind: 'file'|'app', name, size, status, progress, ts, url?, replyTo? }
+  const [chatReactions, setChatReactions] = useState({}); // msgId -> { [emoji]: string[] }
+  const [replyingTo, setReplyingTo] = useState(null); // { id, text, name, kind, sender }
+  const [activeReactionPopover, setActiveReactionPopover] = useState(null); // { message, position }
+  const [isDraggingFileOverChat, setIsDraggingFileOverChat] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showChatApps, setShowChatApps] = useState(false);
   const [showChatAttach, setShowChatAttach] = useState(false);
@@ -949,8 +957,16 @@ function App() {
   // Advertise the open room's code on the local network for as long as it's
   // actively waiting for or serving receivers, so AppsPanel-style "just tap
   // it" pairing works without a code/QR round trip on the same Wi-Fi.
+  // Derived outside the effect and used as the dependency directly: keying off
+  // raw transferState instead meant the waiting -> transferring flip (set the
+  // instant a receiver connects) re-ran this effect, and its cleanup tore down
+  // the local room host — closing the socket of the very receiver that just
+  // connected, so the sender's batch-start landed on a dead connection. Both
+  // states are equally "advertising", so this stays true across that flip and
+  // the host is left alone.
+  const advertising = mode === 'p2p-send' && (transferState === 'waiting' || transferState === 'transferring') && !!roomCode;
+
   useEffect(() => {
-    const advertising = mode === 'p2p-send' && (transferState === 'waiting' || transferState === 'transferring') && !!roomCode;
     if (!advertising) {
       stopAdvertisingRoom();
       return;
@@ -966,7 +982,7 @@ function App() {
       stopAdvertisingRoom();
       if (stopLocalHost) stopLocalHost();
     };
-  }, [mode, transferState, roomCode]);
+  }, [advertising, roomCode]);
 
   // Waits for a Wi-Fi Direct group to actually form after connect() is
   // called — Android negotiates group ownership asynchronously, and either
@@ -1480,7 +1496,7 @@ function App() {
     });
 
     conn.on('data', (data) => {
-      if (data.type === 'chat-meta' || data.type === 'chat-done' || (data.type === 'chunk' && data.chatId)) {
+      if (data.type === 'chat-meta' || data.type === 'chat-done' || data.type === 'chat-reaction' || data.type === 'chat-delete' || (data.type === 'chunk' && data.chatId)) {
         handleChatData(data, conn.peer);
         return;
       }
@@ -1498,7 +1514,14 @@ function App() {
         // Persistent clipboard channel (feature) — this can arrive any time
         // the connection is alive, not just mid-batch, since it rides the
         // same conn a completed transfer leaves open.
-        const entry = { text: data.text, direction: 'received', peerLabel: conn.peer, sortTs: Date.now() };
+        const entry = {
+          id: data.id || `clip_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          text: data.text,
+          direction: 'received',
+          peerLabel: conn.peer,
+          sortTs: Date.now(),
+          replyTo: data.replyTo || null
+        };
         setSessionClips((prev) => [...prev, entry]);
         addClip(entry);
         showToast('New clip received', 'info');
@@ -1988,7 +2011,7 @@ function App() {
   // connection and any resumed reconnection, since a resume just continues
   // feeding this same handler mid-batch instead of starting over.
   const handleReceiverData = (data) => {
-    if (data.type === 'chat-meta' || data.type === 'chat-done' || (data.type === 'chunk' && data.chatId)) {
+    if (data.type === 'chat-meta' || data.type === 'chat-done' || data.type === 'chat-reaction' || data.type === 'chat-delete' || (data.type === 'chunk' && data.chatId)) {
       handleChatData(data, targetPeerId);
       return;
     }
@@ -2185,7 +2208,14 @@ function App() {
       // Persistent clipboard channel (feature) — arrives any time the
       // connection to the sender is still open, including well after
       // batch-complete (see the Complete-state clipboard panel).
-      const entry = { text: data.text, direction: 'received', peerLabel: targetPeerId, sortTs: Date.now() };
+      const entry = {
+        id: data.id || `clip_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        text: data.text,
+        direction: 'received',
+        peerLabel: targetPeerId,
+        sortTs: Date.now(),
+        replyTo: data.replyTo || null
+      };
       setSessionClips((prev) => [...prev, entry]);
       addClip(entry);
       showToast('New clip received', 'info');
@@ -2571,9 +2601,6 @@ function App() {
     setClipDraft('');
   };
 
-  // Same broadcast-or-single-target resolution sendClip uses above, shared
-  // by the chat composer's text option so "Chat" and "Quick clipboard" stay
-  // one underlying channel instead of two competing ones.
   const sendChatText = () => {
     const text = chatDraft.trim();
     if (!text) return;
@@ -2582,13 +2609,30 @@ function App() {
       showToast('No longer connected — nothing to send this to.', 'error');
       return;
     }
+    const clipId = `clip_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const replyToData = replyingTo ? {
+      id: replyingTo.id,
+      text: replyingTo.text || null,
+      name: replyingTo.name || null,
+      kind: replyingTo.kind || 'text',
+      sender: replyingTo.direction === 'sent' ? 'me' : (replyingTo.peerLabel || 'peer')
+    } : null;
+
     targets.forEach((conn) => {
-      try { conn.send({ type: 'clip', text }); } catch { /* that peer dropped, others may still get it */ }
+      try { conn.send({ type: 'clip', id: clipId, text, replyTo: replyToData }); } catch { /* that peer dropped, others may still get it */ }
     });
-    const entry = { text, direction: 'sent', peerLabel: mode === 'p2p-send' ? `${targets.length} receiver${targets.length === 1 ? '' : 's'}` : targetPeerId, sortTs: Date.now() };
+    const entry = {
+      id: clipId,
+      text,
+      direction: 'sent',
+      peerLabel: mode === 'p2p-send' ? `${targets.length} receiver${targets.length === 1 ? '' : 's'}` : targetPeerId,
+      sortTs: Date.now(),
+      replyTo: replyToData
+    };
     setSessionClips((prev) => [...prev, entry]);
     addClip(entry);
     setChatDraft('');
+    setReplyingTo(null);
   };
 
   // Named (not inlined in the attach menu's JSX) so the ref click below
@@ -2626,13 +2670,23 @@ function App() {
     }
     const chatId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const url = URL.createObjectURL(file);
+    const replyToData = replyingTo ? {
+      id: replyingTo.id,
+      text: replyingTo.text || null,
+      name: replyingTo.name || null,
+      kind: replyingTo.kind || 'text',
+      sender: replyingTo.direction === 'sent' ? 'me' : (replyingTo.peerLabel || 'peer')
+    } : null;
+
     setChatMessages((prev) => [...prev, {
       id: chatId, direction: 'sent', kind: isApp ? 'app' : 'file',
       name: file.name, size: file.size, status: 'sending', progress: 0, sortTs: Date.now(),
-      file, url, mime: file.type
+      file, url, mime: file.type, replyTo: replyToData
     }]);
+    setReplyingTo(null);
+
     targets.forEach((conn) => {
-      try { conn.send({ type: 'chat-meta', chatId, name: file.name, size: file.size, mime: file.type, isApp }); } catch { /* peer dropped, others may still get it */ }
+      try { conn.send({ type: 'chat-meta', chatId, name: file.name, size: file.size, mime: file.type, isApp, replyTo: replyToData }); } catch { /* peer dropped, others may still get it */ }
     });
     let offset = 0;
     while (offset < file.size) {
@@ -2657,6 +2711,28 @@ function App() {
     updateChatMessage(chatId, { status: 'sent', progress: 1 });
   };
 
+  // Images committed straight from the keyboard (Gboard's GIF/sticker/image
+  // pickers, enabled by RichContentWebView declaring the MIME types the IME
+  // asks about). The IME hands these over as a one-shot commit with no file
+  // picker involved, so route them to whichever path makes sense right now:
+  // send immediately when a peer is live, otherwise drop it into the pre-send
+  // queue so it isn't silently lost when nobody's connected yet.
+  useEffect(() => {
+    return onRichContentImage((file) => {
+      const connected = connsRef.current.length > 0 || !!connRef.current;
+      if (connected) {
+        sendChatAttachment(file);
+        return;
+      }
+      setSelectedFiles((prev) => [...prev, file]);
+      showToast('Image added to the queue', 'success');
+    });
+    // sendChatAttachment closes over refs and setState only, so it stays valid
+    // for the listener's lifetime — re-subscribing on every render would churn
+    // the native listener for nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Shared by both the sender's per-peer data handler and the receiver's
   // handleReceiverData below — chat is bidirectional, either side can send.
   const handleChatData = (data, fromLabel) => {
@@ -2664,7 +2740,8 @@ function App() {
       chatBuffersRef.current.set(data.chatId, { chunks: [], received: 0, meta: data });
       setChatMessages((prev) => [...prev, {
         id: data.chatId, direction: 'received', kind: data.isApp ? 'app' : 'file',
-        name: data.name, size: data.size, status: 'receiving', progress: 0, sortTs: Date.now(), peerLabel: fromLabel
+        name: data.name, size: data.size, status: 'receiving', progress: 0, sortTs: Date.now(), peerLabel: fromLabel,
+        replyTo: data.replyTo || null
       }]);
     } else if (data.type === 'chunk' && data.chatId) {
       const buf = chatBuffersRef.current.get(data.chatId);
@@ -2679,7 +2756,106 @@ function App() {
       const url = URL.createObjectURL(blob);
       chatBuffersRef.current.delete(data.chatId);
       updateChatMessage(data.chatId, { status: 'received', progress: 1, url, file: blob, mime: buf.meta.mime });
+    } else if (data.type === 'chat-reaction') {
+      const { msgId, emoji, action, fromLabel: reactionSender } = data;
+      const reactor = reactionSender || fromLabel || 'peer';
+      setChatReactions((prev) => {
+        const msgReactions = prev[msgId] || {};
+        const existingSenders = msgReactions[emoji] || [];
+        let updatedSenders = [...existingSenders];
+        if (action === 'add') {
+          if (!updatedSenders.includes(reactor)) updatedSenders.push(reactor);
+        } else if (action === 'remove') {
+          updatedSenders = updatedSenders.filter((s) => s !== reactor);
+        } else {
+          if (updatedSenders.includes(reactor)) {
+            updatedSenders = updatedSenders.filter((s) => s !== reactor);
+          } else {
+            updatedSenders.push(reactor);
+          }
+        }
+        return {
+          ...prev,
+          [msgId]: {
+            ...msgReactions,
+            [emoji]: updatedSenders
+          }
+        };
+      });
+    } else if (data.type === 'chat-delete') {
+      const { msgId } = data;
+      setChatMessages((prev) => prev.filter((m) => m.id !== msgId));
+      setSessionClips((prev) => prev.filter((c, i) => (c.id || `clip-${i}-${c.sortTs || 0}`) !== msgId));
+      setChatReactions((prev) => {
+        const copy = { ...prev };
+        delete copy[msgId];
+        return copy;
+      });
     }
+  };
+
+  const handleToggleReaction = (msgId, emoji) => {
+    setChatReactions((prev) => {
+      const msgReactions = prev[msgId] || {};
+      const existingSenders = msgReactions[emoji] || [];
+      const hasMine = existingSenders.includes('me');
+      const updatedSenders = hasMine
+        ? existingSenders.filter((s) => s !== 'me')
+        : [...existingSenders, 'me'];
+      
+      const action = hasMine ? 'remove' : 'add';
+      
+      // Broadcast over P2P data connection if live
+      const targets = connsRef.current.length > 0 ? connsRef.current.map((p) => p.conn) : (connRef.current ? [connRef.current] : []);
+      targets.forEach((conn) => {
+        try {
+          conn.send({
+            type: 'chat-reaction',
+            msgId,
+            emoji,
+            action,
+            fromLabel: mode === 'p2p-send' ? 'Sender' : 'Receiver'
+          });
+        } catch { /* ignore */ }
+      });
+
+      return {
+        ...prev,
+        [msgId]: {
+          ...msgReactions,
+          [emoji]: updatedSenders
+        }
+      };
+    });
+  };
+
+  const handleDeleteChatMessage = (msgId, deleteMode = 'me') => {
+    // Only allow P2P broadcast ('both') if the message was sent by me
+    const targetMsg = unifiedChat.find((m) => m.id === msgId);
+    const isMine = targetMsg ? targetMsg.direction === 'sent' : true;
+    const finalMode = isMine ? deleteMode : 'me';
+
+    if (finalMode === 'both') {
+      const targets = connsRef.current.length > 0 ? connsRef.current.map((p) => p.conn) : (connRef.current ? [connRef.current] : []);
+      targets.forEach((conn) => {
+        try {
+          conn.send({
+            type: 'chat-delete',
+            msgId
+          });
+        } catch { /* ignore */ }
+      });
+    }
+
+    setChatMessages((prev) => prev.filter((m) => m.id !== msgId));
+    setSessionClips((prev) => prev.filter((c, i) => (c.id || `clip-${i}-${c.sortTs || 0}`) !== msgId));
+    setChatReactions((prev) => {
+      const copy = { ...prev };
+      delete copy[msgId];
+      return copy;
+    });
+
+    showToast(finalMode === 'both' ? 'Message deleted for both sides' : 'Message deleted from your side', 'info');
   };
 
   const handleOpenChatAttachment = (m) => {
@@ -2769,7 +2945,13 @@ function App() {
   // only merged here, at render time.
   const unifiedChat = useMemo(() => {
     const clips = sessionClips.map((c, i) => ({
-      id: `clip-${i}`, kind: 'text', direction: c.direction, text: c.text, peerLabel: c.peerLabel, sortTs: c.sortTs || 0
+      id: c.id || `clip-${i}-${c.sortTs || 0}`,
+      kind: 'text',
+      direction: c.direction,
+      text: c.text,
+      peerLabel: c.peerLabel,
+      sortTs: c.sortTs || 0,
+      replyTo: c.replyTo || null
     }));
     return [...clips, ...chatMessages].sort((a, b) => (a.sortTs || 0) - (b.sortTs || 0));
   }, [sessionClips, chatMessages]);
@@ -3102,22 +3284,25 @@ function App() {
               onOpenChat={() => setShowChat(true)}
               unreadCount={chatUnreadCount}
               onReconnectRoom={(code, autoChat = true) => {
-                // Deliberate hand-off to Home with a receive in flight — not an
-                // abandoned invite, so it must survive the leave-Connect teardown.
+                // Receive stays in flight across the leave-Connect teardown (this
+                // is a deliberate reconnect, not an abandoned invite) — but the
+                // user stays on Connect: yanking them to Home mid-connect meant
+                // navigating back here by hand every time.
                 connectTabHostedRef.current = false;
                 cleanup();
                 setTargetPeerId(code);
                 setMode('p2p-receive');
-                setMainNavTab('home');
                 setTransferState('preparing');
                 startP2PReceive(code, 'cloud').then(() => {
                   if (autoChat) setShowChat(true);
                 }).catch(() => {});
               }}
               onConnectPeer={(peer) => {
+                // Stay on Connect — this is where the peer list and its
+                // connection status live, so switching tabs here just hid the
+                // thing the user was watching.
                 connectTabHostedRef.current = false;
                 connectToWifiDirectPeer(peer);
-                setMainNavTab('home');
               }}
               onHostRoom={() => {
                 connectTabHostedRef.current = true;
@@ -4379,7 +4564,35 @@ function App() {
           the pre-send queue. See sendChatAttachment/handleChatData above for
           why this rides its own small protocol instead of the main one. */}
       {showChat && createPortal(
-        <div className="fixed inset-0 bg-bg-primary z-[2000] flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+        <div
+          className="fixed inset-0 bg-bg-primary z-[2000] flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDraggingFileOverChat(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) {
+              setIsDraggingFileOverChat(false);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDraggingFileOverChat(false);
+            const files = Array.from(e.dataTransfer.files || []);
+            files.forEach((f) => sendChatAttachment(f, false));
+          }}
+        >
+          {/* Drag and Drop files overlay */}
+          {isDraggingFileOverChat && (
+            <div className="absolute inset-0 z-[2600] bg-bg-primary/90 backdrop-blur-md border-2 border-dashed border-accent-cyan flex flex-col items-center justify-center gap-3 text-text-primary p-6 animate-[fadeIn_0.15s_ease-out]">
+              <div className="w-16 h-16 rounded-full bg-accent-cyan/20 text-accent-cyan flex items-center justify-center animate-bounce">
+                <UploadCloud size={36} />
+              </div>
+              <div className="font-heading font-bold text-[1.1rem]">Drop files here</div>
+              <div className="text-[0.82rem] text-text-muted">Send files directly to connected peer</div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-shrink-0">
             <button
               className="bg-transparent border-0 text-text-secondary cursor-pointer flex items-center p-1.5 rounded-md hover:bg-white/5 hover:text-text-primary"
@@ -4392,133 +4605,87 @@ function App() {
               <div className="font-heading font-semibold text-[0.95rem] text-text-primary truncate">{chatPeerLabel}</div>
               <div className="text-[0.72rem] text-accent-green flex items-center gap-1.5">
                 <span className="w-[6px] h-[6px] rounded-full bg-accent-green inline-block" />
-                Connected — files, apps or a note, anytime
+                Connected — hold to react, swipe to reply
               </div>
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-2.5">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-3">
             {unifiedChat.length === 0 && (
               <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center text-text-muted text-[0.85rem] px-8">
                 <MessageCircle size={28} className="opacity-50" />
-                Say hi, or use the paperclip to send a file, an app, or a note.
+                Say hi, or hold any message to react, swipe to reply.
               </div>
             )}
-            {unifiedChat.map((m) => {
-              const mine = m.direction === 'sent';
-              if (m.kind === 'text') {
-                return (
-                  <div key={m.id} className={`flex flex-col max-w-[78%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
-                    <div className={`rounded-2xl px-3 py-2 text-[0.85rem] leading-snug ${mine ? 'bg-[rgba(125,211,255,0.14)] border border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border border-border rounded-bl-[6px]'}`}>
-                      {m.text}
-                    </div>
-                  </div>
-                );
-              }
-
-              const fileType = getFileType(m.name);
-              const isImage = fileType === 'image';
-              const isVideo = fileType === 'video';
-              const fileUrl = m.url || (m.file ? URL.createObjectURL(m.file) : null);
-
-              if (isImage || isVideo) {
-                return (
-                  <div key={m.id} className={`flex flex-col max-w-[80%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
-                    <div
-                      className={`group relative overflow-hidden rounded-2xl border cursor-pointer transition-all duration-200 hover:opacity-95 shadow-lg w-[240px] xs:w-[260px] max-w-full ${mine ? 'bg-[rgba(125,211,255,0.14)] border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border-border rounded-bl-[6px]'}`}
-                      onClick={() => handleOpenChatAttachment(m)}
-                      title={isVideo ? 'Click to play video' : 'Click to preview image'}
-                    >
-                      <div className="relative w-full h-[180px] xs:h-[200px] bg-black/40 flex items-center justify-center overflow-hidden">
-                        {fileUrl ? (
-                          isImage ? (
-                            <img
-                              src={fileUrl}
-                              alt={m.name}
-                              className="w-full h-full object-cover block"
-                            />
-                          ) : (
-                            <>
-                              <video
-                                src={fileUrl}
-                                muted
-                                playsInline
-                                preload="metadata"
-                                onLoadedMetadata={(e) => {
-                                  try { e.currentTarget.currentTime = Math.min(0.5, (e.currentTarget.duration || 1) / 4); } catch {}
-                                }}
-                                className="w-full h-full object-cover block opacity-90"
-                              />
-                              {m.status !== 'sending' && m.status !== 'receiving' && (
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                  <div className="w-11 h-11 rounded-full bg-black/55 backdrop-blur-md border border-white/20 text-white flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
-                                    <Play size={20} className="fill-white ml-0.5" />
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          )
-                        ) : (
-                          <div className="flex flex-col items-center gap-1.5 text-text-muted">
-                            {isImage ? <FileImage size={28} className="opacity-60" /> : <FileVideo size={28} className="opacity-60" />}
-                          </div>
-                        )}
-
-                        {(m.status === 'sending' || m.status === 'receiving') && (
-                          <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1 text-white text-[0.75rem] font-semibold z-20">
-                            <RefreshCw size={20} className="animate-spin text-accent-cyan" />
-                            <span>{m.status === 'sending' ? `Sending ${Math.round((m.progress || 0) * 100)}%` : `Receiving ${Math.round((m.progress || 0) * 100)}%`}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="p-2.5 bg-gradient-to-t from-black/90 via-black/50 to-transparent absolute bottom-0 inset-x-0 flex items-center justify-between gap-2 text-white z-10">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          {isVideo ? <FileVideo size={13} className="text-accent-cyan flex-shrink-0" /> : <FileImage size={13} className="text-accent-cyan flex-shrink-0" />}
-                          <span className="text-[0.75rem] font-semibold truncate drop-shadow">{m.name}</span>
-                        </div>
-                        <span className="text-[0.68rem] text-white/80 flex-shrink-0 drop-shadow">{formatBytes(m.size)}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <div key={m.id} className={`flex flex-col max-w-[78%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
-                  <div
-                    className={`flex items-center gap-2.5 rounded-2xl px-3 py-2.5 min-w-[190px] cursor-pointer transition-all duration-150 hover:bg-white/10 ${mine ? 'bg-[rgba(125,211,255,0.14)] border border-[rgba(125,211,255,0.32)] rounded-br-[6px]' : 'bg-bg-secondary border border-border rounded-bl-[6px]'}`}
-                    onClick={() => handleOpenChatAttachment(m)}
-                    title="Click to open attachment"
-                  >
-                    <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 ${mine ? 'bg-[rgba(125,211,255,0.18)] text-accent-purple' : 'bg-white/[0.06] text-text-secondary'}`}>
-                      {m.kind === 'app' ? <Smartphone size={17} /> : <FileIcon size={17} />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[0.8rem] font-semibold text-text-primary truncate">{m.name}</div>
-                      <div className="text-[0.7rem] text-text-muted">
-                        {formatBytes(m.size)} · {m.status === 'sending' ? `sending ${Math.round((m.progress || 0) * 100)}%` : m.status === 'receiving' ? `receiving ${Math.round((m.progress || 0) * 100)}%` : mine ? 'delivered' : 'received'}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="flex-shrink-0 text-[0.72rem] font-semibold text-accent-purple bg-[rgba(125,211,255,0.12)] border border-[rgba(125,211,255,0.3)] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[rgba(125,211,255,0.25)] transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenChatAttachment(m);
-                      }}
-                    >
-                      Open
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            {unifiedChat.map((m) => (
+              <ChatMessageItem
+                key={m.id}
+                message={m}
+                myLabel="me"
+                reactions={chatReactions[m.id] || {}}
+                onReact={(msgId, emoji) => handleToggleReaction(msgId, emoji)}
+                onReply={(msg) => setReplyingTo(msg)}
+                onOpenAttachment={handleOpenChatAttachment}
+                onLongPress={(msg, pos) => setActiveReactionPopover({ message: msg, position: pos })}
+              />
+            ))}
           </div>
+
+          {/* Active Reply Banner */}
+          {replyingTo && (
+            <div className="flex items-center justify-between gap-2 px-3.5 py-2 bg-[#0b1322] border-t border-border border-l-4 border-l-accent-cyan text-[0.8rem] flex-shrink-0 animate-[fadeIn_0.15s_ease-out]">
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="text-[0.7rem] font-semibold text-accent-cyan flex items-center gap-1">
+                  <Reply size={12} /> Replying to {
+                    replyingTo.direction === 'sent'
+                      ? 'yourself'
+                      : (replyingTo.deviceName || (typeof replyingTo.peerLabel === 'string' && (replyingTo.peerLabel.startsWith('nova-') || /^[a-f0-9-]{10,}$/i.test(replyingTo.peerLabel)) ? 'Peer Device' : (replyingTo.peerLabel || 'Peer Device')))
+                  }
+                </span>
+                <span className="text-text-secondary truncate text-[0.78rem]">
+                  {replyingTo.text || replyingTo.name || 'Attachment'}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-text-secondary hover:text-white flex items-center justify-center border-0 cursor-pointer transition-colors"
+                onClick={() => setReplyingTo(null)}
+                title="Cancel reply"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          {/* Reaction Popover & Action Menu */}
+          {activeReactionPopover && (
+            <ChatReactionPicker
+              message={activeReactionPopover.message}
+              reactions={chatReactions[activeReactionPopover.message.id] || {}}
+              myLabel="me"
+              position={activeReactionPopover.position}
+              onReact={(emoji) => handleToggleReaction(activeReactionPopover.message.id, emoji)}
+              onReply={(msg) => setReplyingTo(msg)}
+              onCopy={(text) => copyToClipboard(text, 'Text copied to clipboard!')}
+              onSave={(msg) => handleSaveChatAttachment(msg)}
+              onDelete={(id, mode) => handleDeleteChatMessage(id, mode)}
+              onClose={() => setActiveReactionPopover(null)}
+            />
+          )}
 
           <div className="relative flex items-center gap-2 px-3 py-2.5 border-t border-border flex-shrink-0 bg-bg-secondary">
             {showChatAttach && (
-              <div className="absolute bottom-full left-2 mb-2 bg-bg-secondary border border-border rounded-2xl p-1.5 flex gap-1 shadow-[0_12px_30px_-8px_rgba(0,0,0,0.6)]">
+              <>
+                {/* Full-screen catcher so a tap anywhere else dismisses the
+                    menu. Sits under the menu but above the message list, which
+                    is also why the menu itself needs an explicit z-index: the
+                    attachment cards' own overlays are z-20 and would otherwise
+                    paint their filename/size right over these buttons. */}
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowChatAttach(false)}
+                />
+                <div className="absolute bottom-full left-2 mb-2 z-50 bg-bg-secondary border border-border rounded-2xl p-1.5 flex gap-1 shadow-[0_12px_30px_-8px_rgba(0,0,0,0.6)]">
                 {[
                   { label: 'File', icon: <UploadCloud size={18} />, tint: 'text-accent-purple bg-[rgba(125,211,255,0.14)]', onClick: openChatFilePicker },
                   { label: 'App', icon: <Smartphone size={18} />, tint: 'text-accent-green bg-[rgba(52,211,153,0.14)]', onClick: openChatAppPicker },
@@ -4534,7 +4701,8 @@ function App() {
                     <span className="text-[0.66rem] font-semibold text-text-secondary">{opt.label}</span>
                   </button>
                 ))}
-              </div>
+                </div>
+              </>
             )}
             <button
               type="button"

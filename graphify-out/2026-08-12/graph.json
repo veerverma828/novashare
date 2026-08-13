@@ -219,8 +219,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_folderpickerplugin",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": "folderpickerplugin.kt"
     },
     {
@@ -230,8 +230,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_folderpickerplugin_folderpickerplugin",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": "folderpickerplugin"
     },
     {
@@ -241,8 +241,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_folderpickerplugin_kt_plugin",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": "plugin"
     },
     {
@@ -252,8 +252,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_folderpickerplugin_folderpickerplugin_pickfolder",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": ".pickfolder()"
     },
     {
@@ -263,8 +263,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_folderpickerplugin_kt_plugincall",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": "plugincall"
     },
     {
@@ -274,8 +274,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_folderpickerplugin_folderpickerplugin_folderpickerresult",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": ".folderpickerresult()"
     },
     {
@@ -285,8 +285,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "androidx",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": "androidx"
     },
     {
@@ -296,8 +296,8 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_folderpickerplugin_folderpickerplugin_collect",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": ".collect()"
     },
     {
@@ -307,8 +307,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "documentfile",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": "documentfile"
     },
     {
@@ -318,8 +318,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_folderpickerplugin_kt_jsarray",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 36,
+      "community_name": ".folderPickerResult",
       "norm_label": "jsarray"
     },
     {
@@ -505,8 +505,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "incomingshareplugin.kt"
     },
     {
@@ -516,8 +516,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin_incomingshareplugin",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "incomingshareplugin"
     },
     {
@@ -527,8 +527,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin_kt_plugin",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "plugin"
     },
     {
@@ -538,8 +538,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin_incomingshareplugin_load",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".load()"
     },
     {
@@ -549,8 +549,8 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin_incomingshareplugin_getpendingfiles",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".getpendingfiles()"
     },
     {
@@ -560,8 +560,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin_kt_plugincall",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "plugincall"
     },
     {
@@ -571,8 +571,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin_incomingshareplugin_notifynewfiles",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".notifynewfiles()"
     },
     {
@@ -582,8 +582,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin_incomingshareplugin_drainpendingasjsarray",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".drainpendingasjsarray()"
     },
     {
@@ -593,8 +593,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin_kt_jsarray",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "jsarray"
     },
     {
@@ -604,8 +604,8 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_incomingshareplugin_incomingshareplugin_pathtoentry",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".pathtoentry()"
     },
     {
@@ -615,8 +615,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "jsobject",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "jsobject"
     },
     {
@@ -748,7 +748,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": "localsignalingserverplugin.kt"
     },
     {
@@ -759,7 +759,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": "localsignalingserverplugin"
     },
     {
@@ -770,7 +770,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_kt_plugin",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": "plugin"
     },
     {
@@ -781,7 +781,7 @@
       "_origin": "ast",
       "id": "serversocket",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": "serversocket"
     },
     {
@@ -792,7 +792,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_startserver",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".startserver()"
     },
     {
@@ -803,7 +803,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_kt_plugincall",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": "plugincall"
     },
     {
@@ -814,7 +814,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_connecttoserver",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".connecttoserver()"
     },
     {
@@ -825,7 +825,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_send",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".send()"
     },
     {
@@ -836,7 +836,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_sendbinary",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".sendbinary()"
     },
     {
@@ -847,7 +847,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_writeframe",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".writeframe()"
     },
     {
@@ -858,7 +858,7 @@
       "_origin": "ast",
       "id": "bytearray",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": "bytearray"
     },
     {
@@ -869,7 +869,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_close",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".close()"
     },
     {
@@ -880,7 +880,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_stopserver",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".stopserver()"
     },
     {
@@ -891,7 +891,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_listenonsocket",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".listenonsocket()"
     },
     {
@@ -902,7 +902,7 @@
       "_origin": "ast",
       "id": "socket",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": "socket"
     },
     {
@@ -913,7 +913,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_closeconnection",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".closeconnection()"
     },
     {
@@ -924,7 +924,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_stopserverinternal",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".stopserverinternal()"
     },
     {
@@ -935,7 +935,7 @@
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_localsignalingserverplugin_localsignalingserverplugin_handleondestroy",
       "community": 10,
-      "community_name": "JSObject",
+      "community_name": "LocalSignalingServerPlugin",
       "norm_label": ".handleondestroy()"
     },
     {
@@ -975,7 +975,7 @@
       "label": ".onCreate()",
       "file_type": "code",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L28",
+      "source_location": "L32",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_oncreate",
       "community": 8,
@@ -994,10 +994,21 @@
       "norm_label": "bundle"
     },
     {
+      "label": ".installSplashFailsafe()",
+      "file_type": "code",
+      "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
+      "source_location": "L97",
+      "_origin": "ast",
+      "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_installsplashfailsafe",
+      "community": 8,
+      "community_name": "MainActivity",
+      "norm_label": ".installsplashfailsafe()"
+    },
+    {
       "label": ".setupSplashExitAnimation()",
       "file_type": "code",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L89",
+      "source_location": "L124",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_setupsplashexitanimation",
       "community": 8,
@@ -1008,7 +1019,7 @@
       "label": ".remainingIconAnimationMs()",
       "file_type": "code",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L166",
+      "source_location": "L205",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_remainingiconanimationms",
       "community": 8,
@@ -1030,7 +1041,7 @@
       "label": ".onNewIntent()",
       "file_type": "code",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L175",
+      "source_location": "L214",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_onnewintent",
       "community": 8,
@@ -1052,7 +1063,7 @@
       "label": ".handleIncomingShare()",
       "file_type": "code",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L182",
+      "source_location": "L221",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_handleincomingshare",
       "community": 8,
@@ -1063,7 +1074,7 @@
       "label": ".queryDisplayName()",
       "file_type": "code",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L224",
+      "source_location": "L263",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_querydisplayname",
       "community": 8,
@@ -1253,8 +1264,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "notifydownloadplugin.kt"
     },
     {
@@ -1264,8 +1275,8 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "notifydownloadplugin"
     },
     {
@@ -1275,8 +1286,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_kt_plugin",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "plugin"
     },
     {
@@ -1286,8 +1297,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_sanitizerelpath",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "sanitizerelpath()"
     },
     {
@@ -1297,8 +1308,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_appendchunk",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".appendchunk()"
     },
     {
@@ -1308,8 +1319,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_kt_plugincall",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": "plugincall"
     },
     {
@@ -1319,8 +1330,8 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_finishreceive",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".finishreceive()"
     },
     {
@@ -1330,8 +1341,8 @@
       "source_location": "L169",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_hashfile",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".hashfile()"
     },
     {
@@ -1341,8 +1352,8 @@
       "source_location": "L202",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_checkfreespace",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".checkfreespace()"
     },
     {
@@ -1352,8 +1363,8 @@
       "source_location": "L218",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_getpartialinfo",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".getpartialinfo()"
     },
     {
@@ -1363,8 +1374,8 @@
       "source_location": "L234",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_discardpartial",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".discardpartial()"
     },
     {
@@ -1374,8 +1385,8 @@
       "source_location": "L249",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_notifydownloadplugin_notifydownloadplugin_openfile",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".openfile()"
     },
     {
@@ -1913,8 +1924,8 @@
       "source_location": "L367",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_wifidirectplugin_wifidirectplugin_requestpeersinternal",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".requestpeersinternal()"
     },
     {
@@ -1924,8 +1935,8 @@
       "source_location": "L389",
       "_origin": "ast",
       "id": "android_app_src_main_java_com_veer_novashare_wifidirectplugin_wifidirectplugin_requestconnectioninfointernal",
-      "community": 10,
-      "community_name": "JSObject",
+      "community": 9,
+      "community_name": "WifiDirectPlugin",
       "norm_label": ".requestconnectioninfointernal()"
     },
     {
@@ -3235,7 +3246,7 @@
       "label": "ErrorBoundary",
       "file_type": "code",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L6",
+      "source_location": "L8",
       "_origin": "ast",
       "id": "src_errorboundary_errorboundary",
       "community": 39,
@@ -3246,7 +3257,7 @@
       "label": ".getDerivedStateFromError()",
       "file_type": "code",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L9",
+      "source_location": "L11",
       "_origin": "ast",
       "id": "src_errorboundary_errorboundary_getderivedstatefromerror",
       "community": 39,
@@ -3257,7 +3268,7 @@
       "label": ".componentDidCatch()",
       "file_type": "code",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L13",
+      "source_location": "L15",
       "_origin": "ast",
       "id": "src_errorboundary_errorboundary_componentdidcatch",
       "community": 39,
@@ -3268,7 +3279,7 @@
       "label": ".handleReload()",
       "file_type": "code",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L18",
+      "source_location": "L28",
       "_origin": "ast",
       "id": "src_errorboundary_errorboundary_handlereload",
       "community": 39,
@@ -3279,7 +3290,7 @@
       "label": ".handleShare()",
       "file_type": "code",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L23",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "src_errorboundary_errorboundary_handleshare",
       "community": 39,
@@ -3290,7 +3301,7 @@
       "label": ".render()",
       "file_type": "code",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L27",
+      "source_location": "L37",
       "_origin": "ast",
       "id": "src_errorboundary_errorboundary_render",
       "community": 39,
@@ -5185,8 +5196,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "src_uihelpers_btn_primary",
-      "community": 1,
-      "community_name": "AppsPanel.jsx",
+      "community": 34,
+      "community_name": "rippleTap",
       "norm_label": "btn_primary"
     },
     {
@@ -7223,7 +7234,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L182",
+      "source_location": "L221",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
@@ -7234,7 +7245,18 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L28",
+      "source_location": "L97",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
+      "target": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_installsplashfailsafe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
+      "source_location": "L32",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
@@ -7245,7 +7267,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L175",
+      "source_location": "L214",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
@@ -7256,7 +7278,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L224",
+      "source_location": "L263",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
@@ -7267,7 +7289,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L166",
+      "source_location": "L205",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
@@ -7278,7 +7300,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L89",
+      "source_location": "L124",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity",
@@ -7301,7 +7323,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L50",
+      "source_location": "L56",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_oncreate",
@@ -7313,7 +7335,19 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L44",
+      "source_location": "L51",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_oncreate",
+      "target": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_installsplashfailsafe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
+      "source_location": "L48",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_oncreate",
@@ -7324,7 +7358,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L28",
+      "source_location": "L32",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -7337,7 +7371,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L129",
+      "source_location": "L168",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_setupsplashexitanimation",
@@ -7348,7 +7382,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L166",
+      "source_location": "L205",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -7360,7 +7394,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L175",
+      "source_location": "L214",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -7373,7 +7407,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L179",
+      "source_location": "L218",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_onnewintent",
@@ -7384,7 +7418,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L182",
+      "source_location": "L221",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -7397,7 +7431,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L207",
+      "source_location": "L246",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_app_src_main_java_com_veer_novashare_mainactivity_mainactivity_handleincomingshare",
@@ -7408,7 +7442,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android/app/src/main/java/com/veer/novashare/MainActivity.kt",
-      "source_location": "L224",
+      "source_location": "L263",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -12116,7 +12150,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L3",
+      "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary",
@@ -12128,7 +12162,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L3",
+      "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary",
@@ -12140,7 +12174,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L3",
+      "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary",
@@ -12151,7 +12185,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L6",
+      "source_location": "L8",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary",
@@ -12163,7 +12197,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L4",
+      "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary",
@@ -12175,7 +12209,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L4",
+      "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary",
@@ -12198,7 +12232,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L13",
+      "source_location": "L15",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary_errorboundary",
@@ -12209,7 +12243,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L9",
+      "source_location": "L11",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary_errorboundary",
@@ -12220,7 +12254,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L18",
+      "source_location": "L28",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary_errorboundary",
@@ -12231,7 +12265,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L23",
+      "source_location": "L33",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary_errorboundary",
@@ -12242,7 +12276,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L27",
+      "source_location": "L37",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary_errorboundary",
@@ -12267,7 +12301,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L15",
+      "source_location": "L17",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary_errorboundary_componentdidcatch",
@@ -12279,7 +12313,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L24",
+      "source_location": "L34",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary_errorboundary_handleshare",
@@ -12291,7 +12325,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/ErrorBoundary.jsx",
-      "source_location": "L24",
+      "source_location": "L34",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_errorboundary_errorboundary_handleshare",
@@ -13747,6 +13781,18 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_crashlog_installglobalerrorhandlers",
+      "target": "src_crashlog_recorderror",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/main.jsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_main",
       "target": "src_crashlog_recorderror",
       "confidence_score": 1.0
     },
@@ -16546,5 +16592,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "e07422027ce6def348e37b8232603cc7279d38ea"
+  "built_at_commit": "5de2e8bb80e353e1036ea44a03df02ff3dfa41c1"
 }

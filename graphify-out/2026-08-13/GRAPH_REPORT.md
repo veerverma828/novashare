@@ -1,7 +1,7 @@
 # Graph Report - novashare  (2026-08-13)
 
 ## Corpus Check
-- 71 files · ~85,199 words
+- 71 files · ~85,051 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary

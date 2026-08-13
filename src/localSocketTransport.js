@@ -51,6 +51,13 @@ class LocalSocketChannel {
     this.onclose = null;
     this.onerror = null;
     this._bufferedAmount = 0;
+    // Frames go out strictly one at a time. A chunk is two sends back to back
+    // (JSON header, then binary payload) and neither caller awaits, so without
+    // this chain both bridge calls are in flight at once — the payload can
+    // reach the native side first, leaving the reader to pair a header with
+    // the wrong chunk (see PeerJsCompatDataConnection._handleMessage's
+    // _pendingMeta) or to write two frames into the socket interleaved.
+    this._sendChain = Promise.resolve();
 
     this._offMessage = onLocalSignalingMessage((connId, msg) => {
       if (connId !== connectionId) return;
@@ -77,17 +84,23 @@ class LocalSocketChannel {
   // native plugin's frame type byte already does.
   send(data) {
     if (data instanceof ArrayBuffer) {
-      this._bufferedAmount += data.byteLength;
-      localSignalingSendBinary(this.connectionId, data)
-        .catch((err) => this.onerror?.({ error: err }))
-        .finally(() => { this._bufferedAmount -= data.byteLength; });
+      this._enqueue(() => localSignalingSendBinary(this.connectionId, data), data.byteLength);
     } else {
-      const size = data.length;
-      this._bufferedAmount += size;
-      localSignalingSendRaw(this.connectionId, data)
-        .catch((err) => this.onerror?.({ error: err }))
-        .finally(() => { this._bufferedAmount -= size; });
+      this._enqueue(() => localSignalingSendRaw(this.connectionId, data), data.length);
     }
+  }
+
+  // bufferedAmount counts bytes accepted but not yet handed to the socket,
+  // which is what App.jsx's backpressure check wants — so it goes up on
+  // enqueue, not on dispatch, and comes back down when that frame's native
+  // call settles. The catch keeps one failed frame from stalling the chain
+  // permanently; the connection is torn down via onerror either way.
+  _enqueue(op, size) {
+    this._bufferedAmount += size;
+    this._sendChain = this._sendChain
+      .then(op)
+      .catch((err) => this.onerror?.({ error: err }))
+      .finally(() => { this._bufferedAmount -= size; });
   }
 
   close() {

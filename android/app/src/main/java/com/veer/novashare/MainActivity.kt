@@ -25,6 +25,10 @@ import java.time.Duration
 import java.time.Instant
 
 class MainActivity : BridgeActivity() {
+    /** Set once the system has actually started taking the splash away, so the failsafe below
+     *  knows a healthy hand-off already happened and stays out of the way. */
+    private var splashHandedOff = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(NotifyDownloadPlugin::class.java)
         registerPlugin(InstalledAppsPlugin::class.java)
@@ -36,6 +40,7 @@ class MainActivity : BridgeActivity() {
         registerPlugin(HotspotPlugin::class.java)
         registerPlugin(LocalSignalingServerPlugin::class.java)
         registerPlugin(AppUpdatePlugin::class.java)
+        registerPlugin(RichContentPlugin::class.java)
         super.onCreate(savedInstanceState)
 
         // Must run after super.onCreate() — Capacitor's SplashScreen plugin installs the
@@ -43,6 +48,8 @@ class MainActivity : BridgeActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             setupSplashExitAnimation()
         }
+
+        installSplashFailsafe()
 
         // Cold start via share-sheet: the plugin/webview aren't ready yet, so
         // this just queues into IncomingSharePlugin.pendingPaths — JS drains
@@ -68,6 +75,35 @@ class MainActivity : BridgeActivity() {
     }
 
     /**
+     * Releases the splash if the web layer never asks for it.
+     *
+     * launchAutoHide is off, so the single SplashScreen.hide() in App.jsx is the only thing that
+     * dismisses the splash — and it lives inside a React effect. Every way that effect can fail to
+     * run (the JS bundle 404s on a wrong-base build, a module-scope throw in main.jsx, a render
+     * crash that ErrorBoundary catches before App ever mounts) currently ends with the splash
+     * frozen over an app that is otherwise up, with nothing left to dismiss it — including the
+     * watchdog in setupSplashExitAnimation, which only arms once hide() has already been called.
+     *
+     * The delay is set far beyond any healthy launch — a normal cold start hides at ~900ms, waits
+     * out at most SPLASH_MAX_ICON_HOLD_MS, then flies out over SPLASH_EXIT_DURATION_MS, so the
+     * splash is gone by ~2.3s at the absolute worst. On a working launch this fires long after
+     * that with splashHandedOff already set and does nothing at all: it cannot delay startup,
+     * cannot pre-empt the hand-off, and adds no work to the normal path.
+     *
+     * The hide goes through the same plugin call the app itself makes rather than a second,
+     * divergent native path — Capacitor injects its bridge into index.html independently of our
+     * bundle, so this still reaches the plugin in exactly the cases where our own JS never ran.
+     * A hide() that arrives after the splash is already gone is a no-op inside the plugin.
+     */
+    private fun installSplashFailsafe() {
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (!splashHandedOff && !isFinishing && !isDestroyed) {
+                bridge?.eval("window.Capacitor?.Plugins?.SplashScreen?.hide()", null)
+            }
+        }, SPLASH_FAILSAFE_MS)
+    }
+
+    /**
      * Animates the splash away as it hands off to the app, so the bolt collapses out instead of
      * being cut abruptly.
      *
@@ -89,6 +125,10 @@ class MainActivity : BridgeActivity() {
     @RequiresApi(Build.VERSION_CODES.S)
     private fun setupSplashExitAnimation() {
         splashScreen.setOnExitAnimationListener { splashScreenView ->
+            // Reaching here means hide() landed and the system is handing the splash over, so the
+            // failsafe has nothing left to rescue.
+            splashHandedOff = true
+
             // remove() is reachable from both the animator and the watchdog below, and isn't
             // safe to call twice, so gate it.
             var removed = false
@@ -255,5 +295,12 @@ class MainActivity : BridgeActivity() {
         // above the drawable's own length (900ms) so a normal cold start is never clipped,
         // while a device reporting a nonsense duration still can't strand the splash.
         const val SPLASH_MAX_ICON_HOLD_MS = 1000L
+
+        // How long the splash is allowed to sit before the failsafe assumes the web layer is
+        // never going to hide it. Nothing about the normal hand-off is tuned by this value —
+        // it is deliberately several times the worst healthy start (~2.3s) so that it only ever
+        // fires on a launch that is already broken, where a visible error screen beats a
+        // permanent splash. Slow devices and cold starts stay well inside it.
+        const val SPLASH_FAILSAFE_MS = 8000L
     }
 }

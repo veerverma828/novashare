@@ -1,16 +1,16 @@
 # Graph Report - novashare  (2026-08-11)
 
 ## Corpus Check
-- 67 files · ~80,688 words
+- 67 files · ~81,267 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 500 nodes · 949 edges · 41 communities (36 shown, 5 thin omitted)
+- 501 nodes · 952 edges · 42 communities (37 shown, 5 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 26 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e0742202`
+- Built from commit: `5de2e8bb`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -25,7 +25,7 @@
 - gradlew
 - MainActivity
 - WifiDirectPlugin
-- JSObject
+- LocalSignalingServerPlugin
 - TransferForegroundService
 - dependencies
 - TransferNotificationPlugin
@@ -41,6 +41,7 @@
 - CLAUDE.md
 - rippleTap
 - localSocketTransport.js
+- .folderPickerResult
 - AppUpdatePlugin
 - crashLog.js
 - HotspotPlugin
@@ -74,15 +75,15 @@
 ## Import Cycles
 - None detected.
 
-## Communities (41 total, 5 thin omitted)
+## Communities (42 total, 5 thin omitted)
 
 ### Community 0 - "devDependencies"
 Cohesion: 0.05
 Nodes (37): cross-env, eslint, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals, devDependencies, cross-env (+29 more)
 
 ### Community 1 - "AppsPanel.jsx"
-Cohesion: 0.25
-Nodes (11): AppIcon(), appIconCache, AppsPanel(), HighlightMatch(), clearApkCache(), getAppApkFile(), getAppIcon(), InstalledApps (+3 more)
+Cohesion: 0.28
+Nodes (10): AppIcon(), appIconCache, AppsPanel(), HighlightMatch(), clearApkCache(), getAppApkFile(), getAppIcon(), InstalledApps (+2 more)
 
 ### Community 2 - "gen-icons.mjs"
 Cohesion: 0.40
@@ -105,16 +106,16 @@ Cohesion: 0.83
 Nodes (3): gradlew script, die(), warn()
 
 ### Community 8 - "MainActivity"
-Cohesion: 0.23
+Cohesion: 0.22
 Nodes (6): Intent, MainActivity, BridgeActivity, Bundle, SplashScreenView, Uri
 
 ### Community 9 - "WifiDirectPlugin"
-Cohesion: 0.12
-Nodes (7): Plugin, PluginCall, WifiManager, WifiDirectPlugin, BroadcastReceiver, IntentFilter, WifiP2pManager
-
-### Community 10 - "JSObject"
 Cohesion: 0.07
-Nodes (21): FolderPickerPlugin, JSArray, Plugin, PluginCall, IncomingSharePlugin, JSArray, Plugin, PluginCall (+13 more)
+Nodes (16): IncomingSharePlugin, JSArray, Plugin, PluginCall, Plugin, PluginCall, NotifyDownloadPlugin, sanitizeRelPath() (+8 more)
+
+### Community 10 - "LocalSignalingServerPlugin"
+Cohesion: 0.24
+Nodes (6): Plugin, PluginCall, LocalSignalingServerPlugin, ByteArray, ServerSocket, Socket
 
 ### Community 11 - "TransferForegroundService"
 Cohesion: 0.27
@@ -153,19 +154,23 @@ Cohesion: 0.25
 Nodes (5): InstalledAppsPlugin, Plugin, PluginCall, Bitmap, Drawable
 
 ### Community 34 - "rippleTap"
-Cohesion: 0.19
-Nodes (19): ConnectPanel(), FolderQueueRow(), HistoryPanel(), SettingsPanel(), SwipeableFileRow(), SwipeableHistoryRow(), addHistoryEntry(), clearHistory() (+11 more)
+Cohesion: 0.18
+Nodes (20): ConnectPanel(), FolderQueueRow(), HistoryPanel(), SettingsPanel(), SwipeableFileRow(), SwipeableHistoryRow(), addHistoryEntry(), clearHistory() (+12 more)
 
 ### Community 35 - "localSocketTransport.js"
 Cohesion: 0.14
 Nodes (17): establishLocalSocketConnection(), LOCAL_SIGNALING_PORT, LocalSocketChannel, startLocalSocketRoomHost(), LocalSignaling, localSignalingClose(), localSignalingConnect(), localSignalingSend() (+9 more)
+
+### Community 36 - ".folderPickerResult"
+Cohesion: 0.27
+Nodes (6): FolderPickerPlugin, JSArray, Plugin, PluginCall, androidx, DocumentFile
 
 ### Community 38 - "AppUpdatePlugin"
 Cohesion: 0.20
 Nodes (5): AppUpdatePlugin, Intent, Plugin, PluginCall, AppUpdateManager
 
 ### Community 39 - "crashLog.js"
-Cohesion: 0.20
+Cohesion: 0.21
 Nodes (10): clearCrashLog(), formatCrashLogForShare(), getCrashLog(), installGlobalErrorHandlers(), readEntries(), recordError(), writeEntries(), ErrorBoundary (+2 more)
 
 ### Community 40 - "HotspotPlugin"
@@ -189,7 +194,7 @@ Nodes (7): CACHE_TTL_MS, DEFAULT_PROBE_URL, isOnline(), probe(), PROBE_TIMEOUT_M
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `App()` connect `App.jsx` to `rippleTap`, `localSocketTransport.js`, `crashLog.js`, `clipboardSync.js`, `dependencies`, `connectivity.js`, `receivedIndex.js`, `computeSecurityCode`?**
-  _High betweenness centrality (0.131) - this node is a cross-community bridge._
+  _High betweenness centrality (0.130) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `dependencies` to `devDependencies`?**
   _High betweenness centrality (0.128) - this node is a cross-community bridge._
 - **Why does `@capacitor/app` connect `dependencies` to `App.jsx`?**

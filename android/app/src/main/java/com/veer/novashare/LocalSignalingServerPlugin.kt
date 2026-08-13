@@ -12,6 +12,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 // A dumb byte-pipe between two locally-linked phones (Wi-Fi Direct or
@@ -43,13 +44,26 @@ class LocalSignalingServerPlugin : Plugin() {
         const val FRAME_TYPE_BINARY: Int = 1
     }
 
+    // One socket plus the single output stream every frame for it is written
+    // through. Building a DataOutputStream per write instead would make the
+    // `synchronized` below guard a freshly-allocated object on each call —
+    // i.e. no mutual exclusion — letting two concurrent writeFrame calls
+    // interleave their [type][length][payload] bytes into one corrupt frame.
+    // Concurrent writes are the normal case here, not an edge case: a chunk
+    // goes out as a JSON header frame immediately followed by its binary
+    // frame, both dispatched without awaiting (PeerJsCompatDataConnection.send).
+    private class Conn(val socket: Socket) {
+        val out: DataOutputStream = DataOutputStream(socket.getOutputStream())
+        val writeLock = Any()
+    }
+
     private var serverSocket: ServerSocket? = null
-    private val connections = mutableMapOf<Int, Socket>()
+    private val connections = ConcurrentHashMap<Int, Conn>()
     private val nextConnectionId = AtomicInteger(1)
 
     @PluginMethod
     fun startServer(call: PluginCall) {
-        stopServerInternal()
+        stopAcceptingInternal()
         try {
             val server = ServerSocket()
             server.reuseAddress = true
@@ -61,7 +75,17 @@ class LocalSignalingServerPlugin : Plugin() {
                     while (true) {
                         val socket = server.accept()
                         val id = nextConnectionId.getAndIncrement()
-                        connections[id] = socket
+                        // Opening the output stream can throw if the peer went
+                        // away between accept() and here — drop that one socket
+                        // rather than letting it break out of the accept loop
+                        // and silently stop the room taking new receivers.
+                        val conn = try {
+                            Conn(socket)
+                        } catch (e: Exception) {
+                            try { socket.close() } catch (ignored: Exception) { /* already closed */ }
+                            continue
+                        }
+                        connections[id] = conn
                         val data = JSObject()
                         data.put("connectionId", id)
                         notifyListeners("peerConnected", data)
@@ -115,7 +139,7 @@ class LocalSignalingServerPlugin : Plugin() {
 
             try {
                 val id = nextConnectionId.getAndIncrement()
-                connections[id] = socket
+                connections[id] = Conn(socket)
 
                 val data = JSObject()
                 data.put("connectionId", id)
@@ -166,18 +190,20 @@ class LocalSignalingServerPlugin : Plugin() {
     }
 
     private fun writeFrame(connectionId: Int, type: Int, payload: ByteArray, call: PluginCall) {
-        val socket = connections[connectionId]
-        if (socket == null || socket.isClosed) {
+        val conn = connections[connectionId]
+        if (conn == null || conn.socket.isClosed) {
             call.reject("No open connection with id $connectionId")
             return
         }
         try {
-            val out = DataOutputStream(socket.getOutputStream())
-            synchronized(out) {
-                out.writeByte(type)
-                out.writeInt(payload.size)
-                out.write(payload)
-                out.flush()
+            // Whole frame under one lock, on an object shared by every write to
+            // this connection — a partial frame from an interleaved write would
+            // desync the reader's [type][length][payload] parse for good.
+            synchronized(conn.writeLock) {
+                conn.out.writeByte(type)
+                conn.out.writeInt(payload.size)
+                conn.out.write(payload)
+                conn.out.flush()
             }
             call.resolve()
         } catch (e: Exception) {
@@ -196,7 +222,7 @@ class LocalSignalingServerPlugin : Plugin() {
 
     @PluginMethod
     fun stopServer(call: PluginCall) {
-        stopServerInternal()
+        stopAcceptingInternal()
         call.resolve()
     }
 
@@ -233,23 +259,33 @@ class LocalSignalingServerPlugin : Plugin() {
     }
 
     private fun closeConnection(connectionId: Int) {
-        val socket = connections.remove(connectionId) ?: return
-        try { socket.close() } catch (e: Exception) { /* already closed */ }
+        val conn = connections.remove(connectionId) ?: return
+        try { conn.socket.close() } catch (e: Exception) { /* already closed */ }
         val data = JSObject()
         data.put("connectionId", connectionId)
         notifyListeners("peerDisconnected", data)
     }
 
-    private fun stopServerInternal() {
+    // Stops accepting NEW connections; established sockets deliberately survive.
+    // Tearing them down here made restarting the room host lethal to a transfer
+    // already in flight — the sender's next frame would fail with "No open
+    // connection with id N" and the receiver would sit at 0% forever. Closing a
+    // single connection is already explicit (close()/LocalSocketChannel.close()),
+    // so this has no reason to take the rest of them with it.
+    private fun stopAcceptingInternal() {
         serverSocket?.let {
             try { it.close() } catch (e: Exception) { /* already closed */ }
         }
         serverSocket = null
+    }
+
+    private fun closeAllConnections() {
         connections.keys.toList().forEach { closeConnection(it) }
     }
 
     override fun handleOnDestroy() {
-        stopServerInternal()
+        stopAcceptingInternal()
+        closeAllConnections()
         super.handleOnDestroy()
     }
 }

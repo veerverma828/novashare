@@ -1,4 +1,6 @@
 import { Component } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { SplashScreen } from '@capacitor/splash-screen';
 import { AlertTriangle, RefreshCw, Share2 } from 'lucide-react';
 import { recordError, formatCrashLogForShare } from './crashLog.js';
 import { shareText } from './native.js';
@@ -13,6 +15,14 @@ export class ErrorBoundary extends Component {
   componentDidCatch(error, info) {
     console.error('Unhandled render error:', error, info.componentStack);
     recordError('ErrorBoundary', error);
+
+    // The only SplashScreen.hide() in the app is an effect inside App — the very tree that
+    // just failed — and launchAutoHide is off, so a crash before that effect ran leaves the
+    // native splash sitting on top of this screen with no way out. Releasing it here is what
+    // makes the error (and its Reload button) reachable at all.
+    if (Capacitor.isNativePlatform()) {
+      SplashScreen.hide({ fadeDuration: 200 }).catch(() => {});
+    }
   }
 
   handleReload = () => {

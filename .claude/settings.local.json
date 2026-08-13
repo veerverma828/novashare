@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls ~/.claude/commands/ /home/Projects/novashare/.claude/commands/ 2>&1 | head -50; echo \"---plugins---\"; ls ~/.claude/plugins/ 2>&1 | head -20)",
+      "Bash(graphify query *)"
+    ]
+  }
+}

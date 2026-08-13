@@ -14,6 +14,7 @@ const WifiDirect = registerPlugin('WifiDirect');
 const Hotspot = registerPlugin('Hotspot');
 const LocalSignaling = registerPlugin('LocalSignaling');
 const AppUpdate = registerPlugin('AppUpdate');
+const RichContent = registerPlugin('RichContent');
 
 // Fires a light haptic tick on real devices; no-op on web or when muted in settings.
 export function triggerHaptic(style = ImpactStyle.Light) {
@@ -386,6 +387,25 @@ export async function localSignalingSendBinary(connectionId, arrayBuffer) {
 export async function localSignalingClose(connectionId) {
   if (!Capacitor.isNativePlatform()) return;
   await LocalSignaling.close({ connectionId }).catch(() => {});
+}
+
+// --- Keyboard rich content (Gboard GIF/sticker/image insertion) ---
+// Fires with a File whenever the IME commits an image into a focused input.
+// It arrives base64-encoded because Capacitor bridge payloads are JSON, then
+// gets rebuilt into a real File so callers can hand it to the same send paths
+// a file-picker selection uses.
+export function onRichContentImage(callback) {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  let handle;
+  RichContent.addListener('imageCommitted', (data) => {
+    try {
+      const buf = base64ToArrayBuffer(data.data);
+      callback(new File([buf], data.name || 'image', { type: data.mime || 'image/*' }));
+    } catch {
+      // Undecodable payload — drop it rather than surfacing a broken attachment.
+    }
+  }).then((h) => { handle = h; });
+  return () => handle?.remove();
 }
 
 // Fires with (connectionId, parsedMessage) as signaling frames arrive.
