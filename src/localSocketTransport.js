@@ -117,7 +117,7 @@ class LocalSocketChannel {
 // fallback (both sides know up front they're negotiating exactly one link).
 // isGroupOwner starts the socket server and waits for the inbound
 // connection + hello; the other side dials in and sends the hello itself.
-export async function establishLocalSocketConnection({ isGroupOwner, groupOwnerAddress, roomCode, deviceName }, timeoutMs = 30000) {
+export async function establishLocalSocketConnection({ isGroupOwner, groupOwnerAddress, roomCode, deviceName, deviceId }, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     let settled = false;
     let offMessage = () => {};
@@ -139,20 +139,20 @@ export async function establishLocalSocketConnection({ isGroupOwner, groupOwnerA
       reject(err);
     };
 
-    const finish = (connectionId, resolvedRoomCode, resolvedDeviceName) => {
+    const finish = (connectionId, resolvedRoomCode, resolvedDeviceName, resolvedDeviceId) => {
       if (settled) return;
       settled = true;
       cleanup();
       const channel = new LocalSocketChannel(connectionId);
       const peerId = groupOwnerAddress || 'wifi-direct-peer';
-      resolve({ conn: new PeerJsCompatDataConnection(channel, peerId), roomCode: resolvedRoomCode, deviceName: resolvedDeviceName });
+      resolve({ conn: new PeerJsCompatDataConnection(channel, peerId), roomCode: resolvedRoomCode, deviceName: resolvedDeviceName, deviceId: resolvedDeviceId });
     };
 
     if (isGroupOwner) {
       offMessage = onLocalSignalingMessage((connId, msg) => {
         if (msg.type !== HELLO) return;
         localSignalingSend(connId, { type: HELLO_ACK, roomCode });
-        finish(connId, msg.roomCode || roomCode, msg.deviceName || deviceName);
+        finish(connId, msg.roomCode || roomCode, msg.deviceName || deviceName, msg.deviceId || null);
       });
       localSignalingStartServer().catch(fail);
     } else {
@@ -161,9 +161,9 @@ export async function establishLocalSocketConnection({ isGroupOwner, groupOwnerA
           const connId = await localSignalingConnect(groupOwnerAddress, LOCAL_SIGNALING_PORT);
           offMessage = onLocalSignalingMessage((incomingConnId, msg) => {
             if (incomingConnId !== connId || msg.type !== HELLO_ACK) return;
-            finish(connId, msg.roomCode || roomCode, deviceName);
+            finish(connId, msg.roomCode || roomCode, deviceName, deviceId);
           });
-          await localSignalingSend(connId, { type: HELLO, roomCode, deviceName });
+          await localSignalingSend(connId, { type: HELLO, roomCode, deviceName, deviceId });
         } catch (err) {
           fail(err);
         }
@@ -182,7 +182,7 @@ export function startLocalSocketRoomHost(code, onConnection) {
     if (msg.type !== HELLO) return;
     localSignalingSend(connId, { type: HELLO_ACK, roomCode: code });
     const channel = new LocalSocketChannel(connId);
-    onConnection(new PeerJsCompatDataConnection(channel, `lan-${connId}`), code);
+    onConnection(new PeerJsCompatDataConnection(channel, `lan-${connId}`), code, msg.deviceName, msg.deviceId);
   });
 
   localSignalingStartServer().catch(() => {

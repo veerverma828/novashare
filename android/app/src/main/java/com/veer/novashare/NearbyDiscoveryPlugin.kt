@@ -30,6 +30,7 @@ class NearbyDiscoveryPlugin : Plugin() {
         private const val SERVICE_TYPE = "_novashare._tcp."
         private const val TXT_ROOM = "room"
         private const val TXT_NAME = "name"
+        private const val TXT_DEVICE_ID = "did"
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -50,21 +51,21 @@ class NearbyDiscoveryPlugin : Plugin() {
     // ---------------------------------------------------------------
     @PluginMethod
     fun startAdvertising(call: PluginCall) {
-        val roomCode = call.getString("roomCode")
+        val roomCode = call.getString("roomCode") ?: ""
         val deviceName = call.getString("deviceName") ?: Build.MODEL ?: "NovaShare device"
-        if (roomCode == null) {
-            call.reject("roomCode is required")
-            return
-        }
+        // Carried through to the discovering side so it can recognize (and
+        // filter out) its own advertisement — see resolveService below.
+        val deviceId = call.getString("deviceId")
 
         stopAdvertisingInternal()
 
         val serviceInfo = NsdServiceInfo().apply {
-            serviceName = "NovaShare-${roomCode}"
+            serviceName = "NovaShare-${if (roomCode.isNotBlank()) roomCode else (deviceId ?: "idle")}"
             serviceType = SERVICE_TYPE
             port = 7913 // Not actually dialed — PeerJS handles the real connection.
             setAttribute(TXT_ROOM, roomCode)
             setAttribute(TXT_NAME, deviceName)
+            if (deviceId != null) setAttribute(TXT_DEVICE_ID, deviceId)
         }
 
         val listener = object : NsdManager.RegistrationListener {
@@ -154,13 +155,15 @@ class NearbyDiscoveryPlugin : Plugin() {
 
             override fun onServiceResolved(resolved: NsdServiceInfo) {
                 val attrs = resolved.attributes
-                val roomCode = attrs[TXT_ROOM]?.let { String(it) } ?: return
+                val roomCode = attrs[TXT_ROOM]?.let { String(it) } ?: ""
                 val deviceName = attrs[TXT_NAME]?.let { String(it) } ?: "Nearby device"
+                val deviceId = attrs[TXT_DEVICE_ID]?.let { String(it) }
                 val host: InetAddress? = resolved.host
 
                 val data = JSObject()
                 data.put("roomCode", roomCode)
                 data.put("deviceName", deviceName)
+                if (deviceId != null) data.put("deviceId", deviceId)
                 data.put("host", host?.hostAddress ?: "")
                 knownPeers[resolved.serviceName] = data
 

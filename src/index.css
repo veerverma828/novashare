@@ -33,6 +33,7 @@
 
 html {
   height: 100%;
+  background-color: var(--color-bg-primary);
 }
 
 ::-webkit-scrollbar {
@@ -96,6 +97,22 @@ html {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+/* Native app shell: avoid the accidental-text-selection long-press feel of a
+   webview — but keep normal text selection working inside actual inputs. */
+.native-app body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.native-app input,
+.native-app textarea,
+.native-app [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .native-app #root {

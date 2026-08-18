@@ -1,16 +1,16 @@
 # Graph Report - novashare  (2026-08-18)
 
 ## Corpus Check
-- 71 files · ~85,191 words
+- 71 files · ~86,866 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 525 nodes · 998 edges · 43 communities (38 shown, 5 thin omitted)
+- 527 nodes · 1004 edges · 43 communities (38 shown, 5 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 27 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `5e03023e`
+- Built from commit: `10920e75`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -50,7 +50,7 @@
 - connectivity.js
 
 ## God Nodes (most connected - your core abstractions)
-1. `App()` - 71 edges
+1. `App()` - 73 edges
 2. `WifiDirectPlugin` - 32 edges
 3. `rippleTap()` - 18 edges
 4. `LocalSignalingServerPlugin` - 16 edges
@@ -100,7 +100,7 @@ Nodes (8): Changes to This Policy, Children's Privacy, Contact, Data Retention, 
 
 ### Community 5 - "App.jsx"
 Cohesion: 0.07
-Nodes (74): App(), HOME_TAB_ORDER, ICE_SERVERS, NotifyDownload, sentFilesMemory, getAudioContext(), playCompletionChime(), ChatMessageItem() (+66 more)
+Nodes (78): App(), HOME_TAB_ORDER, ICE_SERVERS, NotifyDownload, sentFilesMemory, getAudioContext(), playCompletionChime(), ChatMessageItem() (+70 more)
 
 ### Community 7 - "gradlew"
 Cohesion: 0.83
@@ -155,8 +155,8 @@ Cohesion: 0.25
 Nodes (5): InstalledAppsPlugin, Plugin, PluginCall, Bitmap, Drawable
 
 ### Community 34 - "rippleTap"
-Cohesion: 0.14
-Nodes (23): ChatReactionPicker(), QUICK_EMOJIS, ConnectPanel(), FileThumbnail(), ICON_BY_TYPE, FolderQueueRow(), HistoryPanel(), SettingsPanel() (+15 more)
+Cohesion: 0.17
+Nodes (21): ChatReactionPicker(), QUICK_EMOJIS, ConnectPanel(), FolderQueueRow(), HistoryPanel(), SettingsPanel(), SwipeableFileRow(), SwipeableHistoryRow() (+13 more)
 
 ### Community 35 - "localSocketTransport.js"
 Cohesion: 0.13
@@ -199,7 +199,7 @@ Nodes (7): CACHE_TTL_MS, DEFAULT_PROBE_URL, isOnline(), probe(), PROBE_TIMEOUT_M
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `App()` connect `App.jsx` to `rippleTap`, `localSocketTransport.js`, `crashLog.js`, `clipboardSync.js`, `dependencies`, `connectivity.js`, `receivedIndex.js`, `computeSecurityCode`?**
-  _High betweenness centrality (0.123) - this node is a cross-community bridge._
+  _High betweenness centrality (0.124) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `dependencies` to `devDependencies`?**
   _High betweenness centrality (0.121) - this node is a cross-community bridge._
 - **Why does `@capacitor/app` connect `dependencies` to `App.jsx`?**

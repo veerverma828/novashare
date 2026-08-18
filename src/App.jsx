@@ -90,7 +90,9 @@ import {
   completeFlexibleAppUpdate,
   onAppUpdateStateChanged,
   getBatteryInfo,
-  onRichContentImage
+  onRichContentImage,
+  getAppVersion,
+  getOrCreateDeviceId
 } from './native';
 import { addHistoryEntry, clearHistory } from './history';
 import { computeSecurityCode } from './security';
@@ -234,6 +236,15 @@ function App() {
   // "Add more" picker state (queue view: append files or apps to the queue)
   const [showAddApps, setShowAddApps] = useState(false);
   const [showAddMoreMenu, setShowAddMoreMenu] = useState(false);
+
+  // Receiver-side "Accept these files?" prompt (feature: mutual-consent
+  // transfer) — set when a sender's batch-start arrives, cleared once the
+  // user answers. { deviceName, totalFiles, totalBytes } | null.
+  const [incomingBatchRequest, setIncomingBatchRequest] = useState(null);
+
+  // "Leave this connection?" confirm, shown before tearing down an active
+  // connection instead of disconnecting immediately.
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   // Nearby (LAN) device discovery — list of { roomCode, deviceName, host }
   // found via NsdManager on native builds; always empty on web.
@@ -507,6 +518,17 @@ function App() {
   const [appUpdate, setAppUpdate] = useState(null);
   const appUpdateDismissedRef = useRef(false);
 
+  // Stable per-install identity, computed once and reused for the app's
+  // lifetime (e.g. to filter this device out of its own nearby broadcast).
+  const [deviceId] = useState(() => getOrCreateDeviceId());
+
+  // Real installed version/build for the Settings "About" row — null until
+  // the native call resolves, in which case the row falls back to a static label.
+  const [appVersionInfo, setAppVersionInfo] = useState(null);
+  useEffect(() => {
+    getAppVersion().then(setAppVersionInfo);
+  }, []);
+
   const runUpdateCheck = () => {
     checkForAppUpdate().then(({ updateAvailable, flexibleAllowed, downloadedPending }) => {
       if (downloadedPending) {
@@ -757,7 +779,7 @@ function App() {
         return;
       }
       if (modeRef.current !== 'home') {
-        resetToHome();
+        requestLeaveConnection();
         return;
       }
       if (homeTabRef.current !== 'home') {
@@ -846,6 +868,11 @@ function App() {
     }
     startNearbyDiscovery();
     const offFound = onNearbyPeerFound((peer) => {
+      // Guards against a known NSD quirk on some Android versions where a
+      // device's own advertised service can echo back into its own
+      // discovery results — harmless today since advertising/browsing are
+      // mutually exclusive modes, but cheap insurance if that ever changes.
+      if (peer.deviceId && peer.deviceId === deviceId) return;
       setNearbyPeers((prev) => {
         const next = prev.filter((p) => p.roomCode !== peer.roomCode);
         return [...next, peer];
@@ -971,7 +998,7 @@ function App() {
       stopAdvertisingRoom();
       return;
     }
-    startAdvertisingRoom(roomCode, getDeviceLabel());
+    startAdvertisingRoom(roomCode, getDeviceLabel(), deviceId);
     // Only host a direct local-LAN listener for cloud sends — a Wi-Fi Direct
     // send (transportMode 'local') already owns the same native
     // LocalSignaling server for its own handshake, and starting it a second
@@ -1209,6 +1236,9 @@ function App() {
     }
     connsRef.current.forEach((p) => { try { p.conn.close(); } catch { /* ignore */ } });
     connsRef.current = [];
+    pendingConnectRequests.forEach((r) => { try { r.conn.close(); } catch { /* ignore */ } });
+    setPendingConnectRequests([]);
+    approvedDeviceIdsRef.current = new Set();
     if (peerRef.current) {
       try { peerRef.current.destroy(); } catch { /* ignore */ }
       peerRef.current = null;
@@ -1275,12 +1305,26 @@ function App() {
     setShowAddMoreMenu(false);
     setShowTextModal(false);
     setTextDraft('');
+    setIncomingBatchRequest(null);
+    setShowLeaveConfirm(false);
 
     chatBuffersRef.current.clear();
 
     // Clear URL search params without page reload
     window.history.pushState({}, document.title, window.location.pathname);
   }
+
+  // Leaving/backing out while a connection is actually live (waiting for or
+  // mid-transfer) confirms first — "Leave this connection?" — instead of
+  // tearing it down immediately; any other state (idle, error, complete)
+  // has nothing active to lose, so it just goes straight home as before.
+  const requestLeaveConnection = () => {
+    if (transferStateRef.current === 'waiting' || transferStateRef.current === 'transferring') {
+      setShowLeaveConfirm(true);
+    } else {
+      resetToHome();
+    }
+  };
 
   // Toggle pause/resume of an in-progress send (sender-side control) —
   // broadcasts to every connected receiver, not just one.
@@ -1372,7 +1416,7 @@ function App() {
     if (Math.abs(deltaX) < SWIPE_TAB_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
 
     if (mode !== 'home') {
-      if (deltaX > 0) { rippleTap(e, resetToHome); }
+      if (deltaX > 0) { rippleTap(e, requestLeaveConnection); }
       return;
     }
 
@@ -1437,21 +1481,22 @@ function App() {
   // ----------------------------------------------------
   const MAX_RECEIVERS = 8;
 
+  // Peers approved earlier this session (keyed by their persisted deviceId)
+  // skip re-prompting on reconnect — a network drop mid-transfer shouldn't
+  // require the sender to sit there and re-approve the same device.
+  const approvedDeviceIdsRef = useRef(new Set());
+
+  // Queued "Allow this device?" prompts (feature: mutual-consent connect) —
+  // one entry per receiver waiting on the room owner's decision, so several
+  // near-simultaneous connection attempts stack instead of racing each other.
+  const [pendingConnectRequests, setPendingConnectRequests] = useState([]);
+
   // Shared by both transports: wires up a single receiver's connection
   // (PeerJS DataConnection on the cloud path, PeerJsCompatDataConnection on
   // the offline Wi-Fi Direct path — API-compatible, so this logic doesn't
-  // need to know which one it got) into the broadcast peer list.
-  const handleIncomingReceiverConnection = (conn, code) => {
-    // Broadcast mode: the room stays open to more receivers up to a cap,
-    // rather than rejecting everyone after the first connects. (Wi-Fi Direct
-    // sessions only ever have one incoming connection in practice, but the
-    // same cap applies harmlessly.)
-    if (connsRef.current.length >= MAX_RECEIVERS) {
-      try { conn.send({ type: 'room-full' }); } catch { /* ignore */ }
-      conn.close();
-      return;
-    }
-
+  // need to know which one it got) into the broadcast peer list. Only called
+  // once the connection has been approved (see handleIncomingReceiverConnection).
+  const finalizeIncomingReceiverConnection = (conn, code) => {
     const peerState = {
       conn,
       id: conn.peer,
@@ -1464,7 +1509,11 @@ function App() {
       // Set by a 'skip-duplicate' reply (feature: duplicate-file skip) —
       // streamChunksForPeer's sendNext() checks this and abandons the
       // current file mid-stream instead of sending bytes nobody wants.
-      skipCurrentFile: false
+      skipCurrentFile: false,
+      // Set when this receiver declines the "Accept these files?" prompt —
+      // suppresses the generic "disconnected before finishing" toast when
+      // the resulting close() lands, since a decline already showed its own.
+      declined: false
     };
     connsRef.current = [...connsRef.current, peerState];
     setConnectedCount(connsRef.current.length);
@@ -1488,10 +1537,12 @@ function App() {
       // Give a reconnecting receiver a brief window to send a 'resume'
       // message before defaulting to a fresh batch-start — a plain new
       // connection just falls through once the timer fires.
+      // Waits for the receiver's 'batch-response' (feature: mutual-consent
+      // transfer) before streaming anything — see the 'batch-response'
+      // branch below, which is what actually kicks off sendNextQueuedFileForPeer.
       peerState.openTimer = setTimeout(() => {
         if (peerState.resumed) return;
-        conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length, totalBytes: totalQueueBytesRef.current });
-        sendNextQueuedFileForPeer(peerState);
+        conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length, totalBytes: totalQueueBytesRef.current, deviceName: getDeviceLabel() });
       }, 150);
     });
 
@@ -1525,6 +1576,17 @@ function App() {
         setSessionClips((prev) => [...prev, entry]);
         addClip(entry);
         showToast('New clip received', 'info');
+        return;
+      }
+      if (data.type === 'batch-response') {
+        // Receiver's answer to the "Accept these files?" prompt (feature:
+        // mutual-consent transfer) — nothing streams before this arrives.
+        if (data.accepted) {
+          sendNextQueuedFileForPeer(peerState);
+        } else {
+          peerState.declined = true;
+          showToast('The other device declined the request. Nothing was transferred.', 'info');
+        }
         return;
       }
       if (data.type === 'skip-duplicate') {
@@ -1578,7 +1640,7 @@ function App() {
 
     conn.on('close', () => {
       const finishedQueue = peerState.queueIndex >= sendQueueRef.current.length;
-      if (!finishedQueue) {
+      if (!finishedQueue && !peerState.declined) {
         showToast('A receiver disconnected before finishing.', 'error');
       }
       dropPeer();
@@ -1588,6 +1650,50 @@ function App() {
       showToast('Connection error with a receiver: ' + err.message, 'error');
       dropPeer();
     });
+  };
+
+  // Gate for a brand-new incoming connection (feature: mutual-consent
+  // connect) — a receiver isn't trusted just for dialing in; the room owner
+  // has to Allow it first. Reconnects from an already-approved device
+  // (tracked by persisted deviceId) skip straight through instead of
+  // interrupting an in-progress transfer to re-ask.
+  const handleIncomingReceiverConnection = (conn, code, deviceName, deviceId) => {
+    // Broadcast mode: the room stays open to more receivers up to a cap,
+    // rather than rejecting everyone after the first connects. (Wi-Fi Direct
+    // sessions only ever have one incoming connection in practice, but the
+    // same cap applies harmlessly.)
+    if (connsRef.current.length >= MAX_RECEIVERS) {
+      try { conn.send({ type: 'room-full' }); } catch { /* ignore */ }
+      conn.close();
+      return;
+    }
+
+    if (deviceId && approvedDeviceIdsRef.current.has(deviceId)) {
+      finalizeIncomingReceiverConnection(conn, code);
+      return;
+    }
+
+    const request = { conn, code, peerId: conn.peer, deviceId: deviceId || null, deviceName: deviceName || 'A nearby device' };
+    setPendingConnectRequests((prev) => [...prev, request]);
+
+    // If the connecting device backs out (or the link drops) before the
+    // owner responds, drop it from the queue rather than leaving a stale
+    // "Allow this device?" prompt for a peer that's already gone.
+    const dismiss = () => setPendingConnectRequests((prev) => prev.filter((r) => r !== request));
+    conn.on('close', dismiss);
+    conn.on('error', dismiss);
+  };
+
+  const respondToConnectRequest = (request, allow) => {
+    setPendingConnectRequests((prev) => prev.filter((r) => r !== request));
+    if (allow) {
+      if (request.deviceId) approvedDeviceIdsRef.current.add(request.deviceId);
+      finalizeIncomingReceiverConnection(request.conn, request.code);
+    } else {
+      try { request.conn.send({ type: 'connect-declined' }); } catch { /* ignore */ }
+      request.conn.close();
+      showToast('Request declined — nothing was sent.', 'info');
+    }
   };
 
   // Local-LAN fallback for the "Nearby on this Wi-Fi" list (feature #2):
@@ -1667,14 +1773,15 @@ function App() {
         isGroupOwner: groupInfo.isGroupOwner,
         groupOwnerAddress: groupInfo.groupOwnerAddress,
         roomCode: code,
-        deviceName: getDeviceLabel()
+        deviceName: getDeviceLabel(),
+        deviceId
       })
-        .then(({ conn, roomCode: agreedCode }) => {
+        .then(({ conn, roomCode: agreedCode, deviceName: peerDeviceName, deviceId: peerDeviceId }) => {
           setRoomCode(agreedCode);
           setMode('p2p-send');
           setTransferState('waiting');
           showToast(groupInfo?.kind === 'hotspot' ? 'Hotspot link ready!' : 'Offline Wi-Fi Direct link ready!', 'success');
-          handleIncomingReceiverConnection(conn, agreedCode);
+          handleIncomingReceiverConnection(conn, agreedCode, peerDeviceName, peerDeviceId);
         })
         .catch((err) => {
           showToast('Offline connection failed: ' + err.message, 'error');
@@ -1732,7 +1839,7 @@ function App() {
         showToast('Direct P2P Room Ready!', 'success');
       });
 
-      peer.on('connection', (conn) => handleIncomingReceiverConnection(conn, code));
+      peer.on('connection', (conn) => handleIncomingReceiverConnection(conn, code, conn.metadata?.deviceName, conn.metadata?.deviceId));
 
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
@@ -2018,13 +2125,25 @@ function App() {
     if (data.type === 'batch-start') {
       receivedFilesRef.current = [];
       setCompletedFiles([]);
+      // Mutual-consent transfer: don't start receiving until the user taps
+      // Accept — acceptIncomingBatch()/declineIncomingBatch() (below) reply
+      // with 'batch-response', which is what the sender is actually waiting
+      // on before it streams anything.
+      setIncomingBatchRequest({
+        deviceName: data.deviceName || 'The other device',
+        totalFiles: data.totalFiles || 1,
+        totalBytes: data.totalBytes || 0
+      });
       // Disk-space pre-check: reject the whole batch upfront with a clear
       // reason instead of letting appendChunk/finishReceive fail partway
       // through on a real ENOSPC. 10MB safety margin for filesystem overhead.
+      // Runs independently of the accept/decline prompt above — either gate
+      // failing is enough to stop the batch.
       if (Capacitor.isNativePlatform() && data.totalBytes) {
         NotifyDownload.checkFreeSpace().then(({ freeBytes }) => {
           const margin = 10 * 1024 * 1024;
           if (freeBytes < data.totalBytes + margin) {
+            setIncomingBatchRequest(null);
             setTransferState('error');
             setErrorMsg(`Not enough storage space — need ${formatBytes(data.totalBytes)}, only ${formatBytes(freeBytes)} free.`);
             try { connRef.current?.send({ type: 'abort', reason: 'insufficient-space' }); } catch { /* ignore */ }
@@ -2081,6 +2200,11 @@ function App() {
     } else if (data.type === 'room-full') {
       setTransferState('error');
       setErrorMsg('This room already has the maximum number of receivers.');
+    } else if (data.type === 'connect-declined') {
+      // Sender-side "Allow this device?" prompt was denied (feature:
+      // mutual-consent connect).
+      setTransferState('error');
+      setErrorMsg('The other device declined the request. Nothing was transferred.');
     } else if (data.type === 'chunk') {
       // The sender may not have reacted to our 'skip-duplicate' reply yet —
       // discard anything that still arrives for this file rather than
@@ -2255,6 +2379,22 @@ function App() {
     }
   };
 
+  // Answers to the "Accept these files?" prompt (feature: mutual-consent
+  // transfer) — the sender is holding off streaming until one of these sends
+  // a 'batch-response' back (see the sender-side 'batch-response' handling
+  // in finalizeIncomingReceiverConnection above).
+  const acceptIncomingBatch = () => {
+    setIncomingBatchRequest(null);
+    try { connRef.current?.send({ type: 'batch-response', accepted: true }); } catch { /* ignore */ }
+  };
+
+  const declineIncomingBatch = () => {
+    setIncomingBatchRequest(null);
+    try { connRef.current?.send({ type: 'batch-response', accepted: false }); } catch { /* ignore */ }
+    showToast('You declined this transfer. Nothing was received.', 'info');
+    resetToHome();
+  };
+
   // A connection drop only warrants an auto-reconnect if it happened
   // mid-transfer (the PeerJS "lost connection to server" case); a failure
   // before that — bad code, sender never showed up — is a real error.
@@ -2415,7 +2555,7 @@ function App() {
 
       computeSecurityCode(code, peer.id).then(setMySecurityCode);
 
-      const conn = peer.connect(code, { reliable: true });
+      const conn = peer.connect(code, { reliable: true, metadata: { deviceName: getDeviceLabel(), deviceId } });
       wireReceiverConnection(conn, code, isResume);
     });
 
@@ -2566,7 +2706,7 @@ function App() {
       }
     });
 
-    peer.on('connection', (conn) => handleIncomingReceiverConnection(conn, code));
+    peer.on('connection', (conn) => handleIncomingReceiverConnection(conn, code, conn.metadata?.deviceName, conn.metadata?.deviceId));
 
     peer.on('error', (err) => {
       clearCloudOpenWatchdog();
@@ -3332,6 +3472,7 @@ function App() {
               </div>
               <SettingsPanel
                 formatBytes={formatBytes}
+                appVersionInfo={appVersionInfo}
                 appUpdate={appUpdate}
                 onCheckUpdate={handleManualCheckUpdate}
                 onStartUpdate={handleStartUpdate}
@@ -3918,7 +4059,7 @@ function App() {
               <div className="w-full flex items-center gap-3 mb-1 flex-wrap">
                 <button
                   className="relative overflow-hidden flex items-center justify-center gap-1 bg-transparent border border-border text-text-primary font-heading font-medium py-[0.4rem] px-3 rounded-lg text-[0.8rem] cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={(e) => rippleTap(e, resetToHome)}
+                  onClick={(e) => rippleTap(e, requestLeaveConnection)}
                 >
                   <ArrowLeft size={14} /> Back
                 </button>
@@ -4198,7 +4339,7 @@ function App() {
               <div className="w-full flex items-center gap-3 mb-2 flex-wrap">
                 <button
                   className="relative overflow-hidden flex items-center justify-center gap-1 bg-transparent border border-border text-text-primary font-heading font-medium py-[0.4rem] px-3 rounded-lg text-[0.8rem] cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={(e) => rippleTap(e, resetToHome)}
+                  onClick={(e) => rippleTap(e, requestLeaveConnection)}
                 >
                   <ArrowLeft size={14} /> Leave
                 </button>
@@ -4529,6 +4670,129 @@ function App() {
               {roomCode.split('').map((ch, i) => (
                 <span key={i} className="font-heading text-[1.15rem] font-bold tracking-[0.02em] text-accent-cyan bg-white/5 border border-border rounded-lg w-8 h-[38px] flex items-center justify-center">{ch}</span>
               ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ALLOW THIS DEVICE? MODAL (feature: mutual-consent connect) —
+          sender-side gate on a new incoming connection, before it's ever
+          trusted with the queued files. Queued so several near-simultaneous
+          connection attempts don't race each other. */}
+      {pendingConnectRequests.length > 0 && createPortal(
+        <div className="fixed inset-0 bg-[rgba(4,6,12,0.88)] backdrop-blur-sm flex items-center justify-center z-[2450] p-5 animate-[fadeIn_0.15s_ease-out]">
+          <div className="bg-bg-secondary border border-border rounded-[20px] p-5 w-full max-w-[340px] flex flex-col gap-3 shadow-[0_16px_36px_rgba(0,0,0,0.6)]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-accent-cyan/15 text-accent-cyan flex items-center justify-center flex-shrink-0">
+                <ShieldQuestion size={18} />
+              </div>
+              <span className="font-heading font-semibold text-[1rem] text-text-primary">Allow this device?</span>
+            </div>
+            <p className="text-[0.84rem] text-text-secondary leading-snug m-0">
+              <span className="font-semibold text-text-primary">{pendingConnectRequests[0].deviceName}</span> wants to receive{' '}
+              {selectedFiles.length === 1 ? 'your file' : `your ${selectedFiles.length} files`}. Only allow this if you recognise it.
+            </p>
+            {pendingConnectRequests.length > 1 && (
+              <p className="text-[0.72rem] text-text-muted m-0">
+                {pendingConnectRequests.length - 1} more request{pendingConnectRequests.length - 1 === 1 ? '' : 's'} waiting.
+              </p>
+            )}
+            <div className="flex flex-col gap-2 mt-1">
+              <button
+                type="button"
+                className="relative overflow-hidden flex items-center justify-center gap-2 bg-accent-purple text-[#06222c] border-0 font-heading text-[0.95rem] font-semibold py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 hover:-translate-y-px hover:brightness-110"
+                onClick={(e) => rippleTap(e, () => respondToConnectRequest(pendingConnectRequests[0], true))}
+              >
+                Allow &amp; send
+              </button>
+              <button
+                type="button"
+                className="relative overflow-hidden flex items-center justify-center gap-2 bg-accent-pink/15 border border-accent-pink text-accent-pink font-heading text-[0.9rem] font-semibold py-[0.7rem] px-4 rounded-xl cursor-pointer transition-all duration-200 hover:bg-accent-pink/25"
+                onClick={(e) => rippleTap(e, () => respondToConnectRequest(pendingConnectRequests[0], false))}
+              >
+                Deny
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ACCEPT THESE FILES? MODAL (feature: mutual-consent transfer) —
+          receiver-side gate on a batch a sender wants to stream, before any
+          bytes actually move. */}
+      {incomingBatchRequest && createPortal(
+        <div className="fixed inset-0 bg-[rgba(4,6,12,0.88)] backdrop-blur-sm flex items-center justify-center z-[2450] p-5 animate-[fadeIn_0.15s_ease-out]">
+          <div className="bg-bg-secondary border border-border rounded-[20px] p-5 w-full max-w-[340px] flex flex-col gap-3 shadow-[0_16px_36px_rgba(0,0,0,0.6)]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-accent-cyan/15 text-accent-cyan flex items-center justify-center flex-shrink-0">
+                <ShieldQuestion size={18} />
+              </div>
+              <span className="font-heading font-semibold text-[1rem] text-text-primary">Accept these files?</span>
+            </div>
+            <p className="text-[0.84rem] text-text-secondary leading-snug m-0">
+              <span className="font-semibold text-text-primary">{incomingBatchRequest.deviceName}</span> wants to send you{' '}
+              {incomingBatchRequest.totalFiles === 1 ? 'a file' : `${incomingBatchRequest.totalFiles} files`}
+              {incomingBatchRequest.totalBytes ? ` (${formatBytes(incomingBatchRequest.totalBytes)})` : ''}. Only accept if you recognise it.
+            </p>
+            <div className="flex flex-col gap-2 mt-1">
+              <button
+                type="button"
+                className="relative overflow-hidden flex items-center justify-center gap-2 bg-accent-purple text-[#06222c] border-0 font-heading text-[0.95rem] font-semibold py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 hover:-translate-y-px hover:brightness-110"
+                onClick={(e) => rippleTap(e, acceptIncomingBatch)}
+              >
+                Accept &amp; receive
+              </button>
+              <button
+                type="button"
+                className="relative overflow-hidden flex items-center justify-center gap-2 bg-accent-pink/15 border border-accent-pink text-accent-pink font-heading text-[0.9rem] font-semibold py-[0.7rem] px-4 rounded-xl cursor-pointer transition-all duration-200 hover:bg-accent-pink/25"
+                onClick={(e) => rippleTap(e, declineIncomingBatch)}
+              >
+                Decline
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* LEAVE THIS CONNECTION? MODAL — confirms before tearing down an
+          active connection (Leave/Back buttons, back-gesture, hardware
+          back button all route through requestLeaveConnection). */}
+      {showLeaveConfirm && createPortal(
+        <div
+          className="fixed inset-0 bg-[rgba(4,6,12,0.85)] backdrop-blur-sm flex items-center justify-center z-[2400] p-5 animate-[fadeIn_0.15s_ease-out]"
+          onClick={() => setShowLeaveConfirm(false)}
+        >
+          <div
+            className="bg-bg-secondary border border-border rounded-[20px] p-5 w-full max-w-[340px] flex flex-col gap-3 shadow-[0_16px_36px_rgba(0,0,0,0.6)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-accent-pink/15 text-accent-pink flex items-center justify-center flex-shrink-0">
+                <AlertCircle size={18} />
+              </div>
+              <span className="font-heading font-semibold text-[1rem] text-text-primary">Leave this connection?</span>
+            </div>
+            <p className="text-[0.84rem] text-text-secondary leading-snug m-0">
+              You&apos;re still connected. Leaving will break the connection and end this session.
+            </p>
+            <div className="flex flex-col gap-2 mt-1">
+              <button
+                type="button"
+                className="relative overflow-hidden flex items-center justify-center gap-2 bg-accent-pink/15 border border-accent-pink text-accent-pink font-heading text-[0.9rem] font-semibold py-[0.7rem] px-4 rounded-xl cursor-pointer transition-all duration-200 hover:bg-accent-pink/25"
+                onClick={(e) => rippleTap(e, () => { setShowLeaveConfirm(false); resetToHome(); })}
+              >
+                Yes, disconnect
+              </button>
+              <button
+                type="button"
+                className="relative overflow-hidden flex items-center justify-center gap-2 bg-transparent border border-border text-text-primary font-heading text-[0.95rem] font-medium py-[0.8rem] px-5 rounded-xl cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:border-text-secondary"
+                onClick={(e) => rippleTap(e, () => setShowLeaveConfirm(false))}
+              >
+                Stay connected
+              </button>
             </div>
           </div>
         </div>,

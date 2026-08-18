@@ -3,6 +3,7 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { Share } from '@capacitor/share';
 import { Device } from '@capacitor/device';
+import { App } from '@capacitor/app';
 import { arrayBufferToBase64, base64ToArrayBuffer } from './transferUtils';
 
 const InstalledApps = registerPlugin('InstalledApps');
@@ -132,9 +133,9 @@ export async function stopTransferNotification() {
 // receivers can find and join it with no code entry / QR scan. Discover: a
 // receiver browses for those broadcasts. Both are no-ops on web/desktop —
 // callers should treat an empty peer list there as expected, not an error.
-export async function startAdvertisingRoom(roomCode, deviceName) {
+export async function startAdvertisingRoom(roomCode, deviceName, deviceId) {
   if (!Capacitor.isNativePlatform()) return;
-  await NearbyDiscovery.startAdvertising({ roomCode, deviceName }).catch(() => {});
+  await NearbyDiscovery.startAdvertising({ roomCode, deviceName, deviceId }).catch(() => {});
 }
 
 export async function stopAdvertisingRoom() {
@@ -491,6 +492,33 @@ export async function getBatteryInfo() {
     return { batteryLevel: typeof batteryLevel === 'number' ? batteryLevel : null, isCharging: !!isCharging };
   } catch {
     return { batteryLevel: null, isCharging: false };
+  }
+}
+
+// Real installed version/build, for the Settings "About" row — falls back to
+// nulls (caller keeps its hardcoded display string) rather than guessing.
+export async function getAppVersion() {
+  if (!Capacitor.isNativePlatform()) return { version: null, build: null };
+  try {
+    const { version, build } = await App.getInfo();
+    return { version: version || null, build: build || null };
+  } catch {
+    return { version: null, build: null };
+  }
+}
+
+// Stable per-install device ID, generated once and reused — lets a peer be
+// recognized as "the same device" across sessions (e.g. filtering yourself
+// out of your own nearby-device broadcast) instead of looking new every launch.
+export function getOrCreateDeviceId() {
+  try {
+    const existing = localStorage.getItem('novashare-device-id');
+    if (existing) return existing;
+    const id = `nd_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    localStorage.setItem('novashare-device-id', id);
+    return id;
+  } catch {
+    return `nd_${Math.random().toString(36).slice(2, 10)}`;
   }
 }
 

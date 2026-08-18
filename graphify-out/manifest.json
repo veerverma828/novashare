@@ -75,8 +75,8 @@
     "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
   },
   "src/App.jsx": {
-    "mtime": 1787034951.987944,
-    "ast_hash": "2ff216892f513776b001425a59866cdd",
+    "mtime": 1787044969.7310772,
+    "ast_hash": "a156261e01c8d76b742918dbfe896fb1",
     "semantic_hash": ""
   },
   "src/main.jsx": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "src/native.js": {
-    "mtime": 1787034832.1947024,
-    "ast_hash": "a901e06636f7bc7ff148ea0afdb5d47d",
+    "mtime": 1787044913.5115218,
+    "ast_hash": "de2096b2e21403da04802b9a49cace43",
     "semantic_hash": ""
   },
   "vite.config.js": {
@@ -355,8 +355,8 @@
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/NearbyDiscoveryPlugin.kt": {
-    "mtime": 1785751393.7669137,
-    "ast_hash": "6beb80888d6131c13ef2a6e2917bf2db",
+    "mtime": 1787045007.2148693,
+    "ast_hash": "d7ad7de02d76b971b4477067946c1581",
     "semantic_hash": ""
   },
   "src/history.js": {
@@ -495,8 +495,8 @@
     "semantic_hash": ""
   },
   "src/localSocketTransport.js": {
-    "mtime": 1787034832.1947024,
-    "ast_hash": "eec810f6b7408553867fa58408e750fc",
+    "mtime": 1787044508.5264444,
+    "ast_hash": "11d9912171a7995bed20268624eac92d",
     "semantic_hash": ""
   },
   "src/connectivity.js": {
@@ -510,8 +510,8 @@
     "semantic_hash": ""
   },
   "src/components/SettingsPanel.jsx": {
-    "mtime": 1786433114.1552553,
-    "ast_hash": "8d63dd31c165271cb4ef14497a2a5a74",
+    "mtime": 1787044295.1266203,
+    "ast_hash": "b2b21361ede0a28915c660009aa6eec5",
     "semantic_hash": ""
   },
   "src/components/ConnectPanel.jsx": {

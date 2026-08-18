@@ -5,6 +5,7 @@ import { rippleTap } from '../uiHelpers';
 import { triggerHaptic } from '../native';
 
 export function SettingsPanel({
+  appVersionInfo,
   appUpdate,
   onCheckUpdate,
   onStartUpdate,
@@ -90,7 +91,9 @@ export function SettingsPanel({
 
         <div className="flex items-center justify-between text-[0.82rem] text-text-secondary">
           <span>App Version</span>
-          <span className="font-mono text-accent-cyan bg-accent-cyan/10 px-2 py-0.5 rounded-md border border-accent-cyan/20">v1.2</span>
+          <span className="font-mono text-accent-cyan bg-accent-cyan/10 px-2 py-0.5 rounded-md border border-accent-cyan/20">
+            {appVersionInfo?.version ? `v${appVersionInfo.version}${appVersionInfo.build ? ` (${appVersionInfo.build})` : ''}` : 'v1.2'}
+          </span>
         </div>
 
         <div className="flex items-center justify-between text-[0.82rem] text-text-secondary">
