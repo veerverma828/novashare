@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Reply, FileImage, FileVideo, Play, RefreshCw, Smartphone, File as FileIcon } from 'lucide-react';
 import { triggerHaptic } from '../native';
 import { formatBytes, getFileType } from '../transferUtils';
@@ -127,7 +127,7 @@ export function ChatMessageItem({
   };
 
   const dragProgress = Math.min(1, dragX / SWIPE_THRESHOLD);
-  const reactionsList = Object.entries(reactions).filter(([_, senders]) => Array.isArray(senders) && senders.length > 0);
+  const reactionsList = Object.entries(reactions).filter(([, senders]) => Array.isArray(senders) && senders.length > 0);
 
   // Render quoted reply preview box inside the message bubble
   const renderQuotedReply = () => {
@@ -276,7 +276,7 @@ export function ChatMessageItem({
                       playsInline
                       preload="metadata"
                       onLoadedMetadata={(e) => {
-                        try { e.currentTarget.currentTime = Math.min(0.5, (e.currentTarget.duration || 1) / 4); } catch {}
+                        try { e.currentTarget.currentTime = Math.min(0.5, (e.currentTarget.duration || 1) / 4); } catch { /* ignore video seek error */ }
                       }}
                       className="w-full h-full object-cover block opacity-90"
                     />

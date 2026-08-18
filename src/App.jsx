@@ -2829,6 +2829,24 @@ function App() {
     });
   };
 
+  // One merged, time-ordered timeline for the Chat overlay — text clips
+  // (sessionClips, the pre-existing "Quick clipboard" data) interleaved with
+  // file/app attachments (chatMessages, new). Kept as two separate pieces of
+  // state (so nothing about the existing clipboard panel had to change) and
+  // only merged here, at render time.
+  const unifiedChat = useMemo(() => {
+    const clips = sessionClips.map((c, i) => ({
+      id: c.id || `clip-${i}-${c.sortTs || 0}`,
+      kind: 'text',
+      direction: c.direction,
+      text: c.text,
+      peerLabel: c.peerLabel,
+      sortTs: c.sortTs || 0,
+      replyTo: c.replyTo || null
+    }));
+    return [...clips, ...chatMessages].sort((a, b) => (a.sortTs || 0) - (b.sortTs || 0));
+  }, [sessionClips, chatMessages]);
+
   const handleDeleteChatMessage = (msgId, deleteMode = 'me') => {
     // Only allow P2P broadcast ('both') if the message was sent by me
     const targetMsg = unifiedChat.find((m) => m.id === msgId);
@@ -2937,24 +2955,6 @@ function App() {
       showToast(`Could not save file: ${err.message || 'Unknown error'}`, 'error');
     }
   };
-
-  // One merged, time-ordered timeline for the Chat overlay — text clips
-  // (sessionClips, the pre-existing "Quick clipboard" data) interleaved with
-  // file/app attachments (chatMessages, new). Kept as two separate pieces of
-  // state (so nothing about the existing clipboard panel had to change) and
-  // only merged here, at render time.
-  const unifiedChat = useMemo(() => {
-    const clips = sessionClips.map((c, i) => ({
-      id: c.id || `clip-${i}-${c.sortTs || 0}`,
-      kind: 'text',
-      direction: c.direction,
-      text: c.text,
-      peerLabel: c.peerLabel,
-      sortTs: c.sortTs || 0,
-      replyTo: c.replyTo || null
-    }));
-    return [...clips, ...chatMessages].sort((a, b) => (a.sortTs || 0) - (b.sortTs || 0));
-  }, [sessionClips, chatMessages]);
 
   useEffect(() => {
     if (showChat) {
@@ -3126,11 +3126,9 @@ function App() {
   // receive on the receiver side (the conn stays open past 'complete').
   const chatAvailable = (mode === 'p2p-send' && connectedCount > 0) || (mode === 'p2p-receive' && (transferState === 'transferring' || transferState === 'complete'));
   const chatPeerLabel = mode === 'p2p-send' ? `${connectedCount} receiver${connectedCount === 1 ? '' : 's'}` : (targetPeerId || 'sender');
-  const chatUnreadCount = useMemo(() => {
-    return unifiedChat.filter(
-      (m) => m.direction === 'received' && (m.sortTs || 0) > lastReadChatTs
-    ).length;
-  }, [unifiedChat, lastReadChatTs]);
+  const chatUnreadCount = unifiedChat.filter(
+    (m) => m.direction === 'received' && (m.sortTs || 0) > lastReadChatTs
+  ).length;
 
   return (
     <>

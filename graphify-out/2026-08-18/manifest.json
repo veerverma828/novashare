@@ -15,7 +15,7 @@
     "semantic_hash": ""
   },
   "android/app/capacitor.build.gradle": {
-    "mtime": 1786464683.5894225,
+    "mtime": 1786463120.3227305,
     "ast_hash": "e5a59f640c8a1e15b8e48b589736a540",
     "semantic_hash": ""
   },
@@ -35,7 +35,7 @@
     "semantic_hash": ""
   },
   "android/capacitor.settings.gradle": {
-    "mtime": 1786464683.588423,
+    "mtime": 1786463120.32173,
     "ast_hash": "20c4334d11f2326f96bb1a55ba81d3e1",
     "semantic_hash": ""
   },
@@ -75,8 +75,8 @@
     "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
   },
   "src/App.jsx": {
-    "mtime": 1787034951.987944,
-    "ast_hash": "2ff216892f513776b001425a59866cdd",
+    "mtime": 1786462406.731092,
+    "ast_hash": "13701758bb71e646dfdb418a0a7647be",
     "semantic_hash": ""
   },
   "src/main.jsx": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "src/native.js": {
-    "mtime": 1787034832.1947024,
-    "ast_hash": "a901e06636f7bc7ff148ea0afdb5d47d",
+    "mtime": 1786365400.9805355,
+    "ast_hash": "31979be44953ec273eca043b4faa5358",
     "semantic_hash": ""
   },
   "vite.config.js": {
@@ -295,8 +295,8 @@
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/MainActivity.kt": {
-    "mtime": 1787034832.1717062,
-    "ast_hash": "a9b8b7d64f0f7fefdda2b726f2001f4f",
+    "mtime": 1786463069.2407322,
+    "ast_hash": "e55063ecabc7f63dd7f0572fa78a6c6e",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.kt": {
@@ -385,8 +385,8 @@
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/LocalSignalingServerPlugin.kt": {
-    "mtime": 1787034832.1717062,
-    "ast_hash": "2484f4d0e4edbd2900f381a7f928fec8",
+    "mtime": 1786061039.48559,
+    "ast_hash": "cdd48a175c980f3fbe834a12e1bcab7f",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/WifiDirectPlugin.kt": {
@@ -495,8 +495,8 @@
     "semantic_hash": ""
   },
   "src/localSocketTransport.js": {
-    "mtime": 1787034832.1947024,
-    "ast_hash": "eec810f6b7408553867fa58408e750fc",
+    "mtime": 1786431307.2423372,
+    "ast_hash": "b72f2aa723cd497197cb4f90c8369418",
     "semantic_hash": ""
   },
   "src/connectivity.js": {
@@ -525,28 +525,8 @@
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
-    "mtime": 1787034832.1707063,
+    "mtime": 1786462755.9810903,
     "ast_hash": "e28d4e59550ecdccf111188596c656b8",
-    "semantic_hash": ""
-  },
-  "android/app/src/main/java/com/veer/novashare/RichContentPlugin.kt": {
-    "mtime": 1787034832.1717062,
-    "ast_hash": "6c89ee25c6dabbce876a5c62732ac980",
-    "semantic_hash": ""
-  },
-  "android/app/src/main/java/com/veer/novashare/RichContentWebView.kt": {
-    "mtime": 1787034832.1717062,
-    "ast_hash": "13aa63a9ccc96f4013f98321f1752866",
-    "semantic_hash": ""
-  },
-  "src/components/ChatMessageItem.jsx": {
-    "mtime": 1787034904.4617898,
-    "ast_hash": "dbe416e9eb9026a9469ef2cc82f1645a",
-    "semantic_hash": ""
-  },
-  "src/components/ChatReactionPicker.jsx": {
-    "mtime": 1787034911.7555861,
-    "ast_hash": "9aa9676ae9c9b4be7bceaff56fa69125",
     "semantic_hash": ""
   }
 }

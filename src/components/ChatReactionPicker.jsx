@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Reply, Copy, Download, Trash2, User, Users, ChevronLeft } from 'lucide-react';
-import { rippleTap } from '../uiHelpers';
 import { triggerHaptic } from '../native';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👏'];
@@ -46,7 +45,7 @@ export function ChatReactionPicker({
   // Check which emojis I have already reacted with
   const myReactions = new Set(
     Object.entries(reactions)
-      .filter(([_, senders]) => Array.isArray(senders) && senders.includes(myLabel))
+      .filter(([, senders]) => Array.isArray(senders) && senders.includes(myLabel))
       .map(([emoji]) => emoji)
   );
 
