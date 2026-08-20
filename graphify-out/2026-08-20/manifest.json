@@ -15,7 +15,7 @@
     "semantic_hash": ""
   },
   "android/app/capacitor.build.gradle": {
-    "mtime": 1786464683.5894225,
+    "mtime": 1787047525.1272683,
     "ast_hash": "e5a59f640c8a1e15b8e48b589736a540",
     "semantic_hash": ""
   },
@@ -35,7 +35,7 @@
     "semantic_hash": ""
   },
   "android/capacitor.settings.gradle": {
-    "mtime": 1786464683.588423,
+    "mtime": 1787047525.1252685,
     "ast_hash": "20c4334d11f2326f96bb1a55ba81d3e1",
     "semantic_hash": ""
   },
@@ -75,8 +75,8 @@
     "semantic_hash": "68f3b40a49a7b6f3258a647ed54ac319"
   },
   "src/App.jsx": {
-    "mtime": 1787044969.7310772,
-    "ast_hash": "a156261e01c8d76b742918dbfe896fb1",
+    "mtime": 1787224324.7594187,
+    "ast_hash": "f46ecc4979ced7ceba427e20f540f992",
     "semantic_hash": ""
   },
   "src/main.jsx": {
@@ -400,8 +400,8 @@
     "semantic_hash": ""
   },
   "src/transferUtils.js": {
-    "mtime": 1786061039.49259,
-    "ast_hash": "484715090910f646208171d7eaf3d2ff",
+    "mtime": 1787224328.1961102,
+    "ast_hash": "24db0c193914eb54deb4bc533890e389",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/AppUpdatePlugin.kt": {

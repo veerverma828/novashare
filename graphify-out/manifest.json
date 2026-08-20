@@ -10,12 +10,12 @@
     "semantic_hash": ""
   },
   "android/app/build.gradle": {
-    "mtime": 1785851573.64245,
-    "ast_hash": "ed7ab83ddcfc69e978ea4a39b1c42d8b",
+    "mtime": 1787225064.0094237,
+    "ast_hash": "4635f6afd67e86187e675d1809678215",
     "semantic_hash": ""
   },
   "android/app/capacitor.build.gradle": {
-    "mtime": 1787047525.1272683,
+    "mtime": 1787225075.034361,
     "ast_hash": "e5a59f640c8a1e15b8e48b589736a540",
     "semantic_hash": ""
   },
@@ -35,7 +35,7 @@
     "semantic_hash": ""
   },
   "android/capacitor.settings.gradle": {
-    "mtime": 1787047525.1252685,
+    "mtime": 1787225075.0341945,
     "ast_hash": "20c4334d11f2326f96bb1a55ba81d3e1",
     "semantic_hash": ""
   },
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "src/native.js": {
-    "mtime": 1787044913.5115218,
-    "ast_hash": "de2096b2e21403da04802b9a49cace43",
+    "mtime": 1787225049.1870513,
+    "ast_hash": "c73806b1216b30219e19f8043007f802",
     "semantic_hash": ""
   },
   "vite.config.js": {
@@ -295,8 +295,8 @@
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/MainActivity.kt": {
-    "mtime": 1787034832.1717062,
-    "ast_hash": "a9b8b7d64f0f7fefdda2b726f2001f4f",
+    "mtime": 1787225038.8943026,
+    "ast_hash": "9c6dd635032ac365055e22ee90148009",
     "semantic_hash": ""
   },
   "android/app/src/main/java/com/veer/novashare/NotifyDownloadPlugin.kt": {
