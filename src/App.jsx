@@ -1526,7 +1526,7 @@ function App() {
       'info'
     );
 
-    conn.on('open', () => {
+    const onOpen = () => {
       // Verified-handshake code (feature #4): derived from the room code
       // + this receiver's peer id, so both sides land on the same value
       // without exchanging anything extra over the wire.
@@ -1544,7 +1544,13 @@ function App() {
         if (peerState.resumed) return;
         conn.send({ type: 'batch-start', totalFiles: sendQueueRef.current.length, totalBytes: totalQueueBytesRef.current, deviceName: getDeviceLabel() });
       }, 150);
-    });
+    };
+
+    if (conn.open) {
+      onOpen();
+    } else {
+      conn.on('open', onOpen);
+    }
 
     conn.on('data', (data) => {
       if (data.type === 'chat-meta' || data.type === 'chat-done' || data.type === 'chat-reaction' || data.type === 'chat-delete' || (data.type === 'chunk' && data.chatId)) {
@@ -2432,7 +2438,7 @@ function App() {
   const wireReceiverConnection = (conn, code, isResume) => {
     connRef.current = conn;
 
-    conn.on('open', () => {
+    const onOpen = () => {
       setTransferState('transferring');
       reconnectAttemptRef.current = 0;
 
@@ -2447,7 +2453,13 @@ function App() {
         receivedFilesRef.current = [];
         setCompletedFiles([]);
       }
-    });
+    };
+
+    if (conn.open) {
+      onOpen();
+    } else {
+      conn.on('open', onOpen);
+    }
 
     conn.on('data', handleReceiverData);
     conn.on('close', () => handleReceiverDrop(code));

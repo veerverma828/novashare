@@ -43,9 +43,17 @@ export function base64ToArrayBuffer(base64) {
 // treat a null hash as "skip verification" rather than failing the transfer.
 export async function computeFileHash(file) {
   if (!window.crypto?.subtle) return null;
-  const buffer = await file.arrayBuffer();
-  const digest = await window.crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  // If the file is very large (>50MB), reading the whole file into an ArrayBuffer
+  // can exhaust RAM or block the event loop on mobile WebViews, delaying transfer start.
+  // We safely skip hash pre-computation for large files (receiver verifies what it can).
+  if (file.size && file.size > 50 * 1024 * 1024) return null;
+  try {
+    const buffer = await file.arrayBuffer();
+    const digest = await window.crypto.subtle.digest('SHA-256', buffer);
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return null;
+  }
 }
 
 // Runs `worker` over `items` with at most `limit` in flight at once,
